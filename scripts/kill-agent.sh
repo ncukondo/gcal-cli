@@ -1,43 +1,68 @@
-#!/bin/bash
-# Gracefully terminate an agent in a tmux pane
-# Usage: ./scripts/kill-agent.sh <pane-id> [--keep-pane]
-
+#!/usr/bin/env bash
 set -euo pipefail
 
-pane_id="${1:?Usage: kill-agent.sh <pane-id> [--keep-pane]}"
-keep_pane="${2:-}"
+# Kill a Claude Code agent running in a tmux pane.
+#
+# Usage: kill-agent.sh <pane-id> [--keep-pane]
+# Example: kill-agent.sh %9
+# Example: kill-agent.sh %9 --keep-pane
+#
+# What it does:
+#   1. Sends SIGINT (Ctrl+C) to interrupt any running operation
+#   2. Sends /exit to quit Claude Code
+#   3. Confirms exit with 'y'
+#   4. Verifies Claude has exited
+#   5. Kills the pane (unless --keep-pane is specified)
+#
+# Worktree is always preserved.
 
-# Send Ctrl+C
-tmux send-keys -t "$pane_id" C-c
+PANE_ID="${1:?Usage: kill-agent.sh <pane-id> [--keep-pane]}"
+KEEP_PANE=false
+if [ "${2:-}" = "--keep-pane" ]; then
+  KEEP_PANE=true
+fi
+
+# Check pane exists
+if ! tmux has-session -t "$PANE_ID" 2>/dev/null; then
+  echo "[kill-agent] Pane $PANE_ID does not exist, nothing to do."
+  exit 0
+fi
+
+echo "[kill-agent] Stopping Claude in pane $PANE_ID..."
+
+# Step 1: Ctrl+C to interrupt any running operation
+tmux send-keys -t "$PANE_ID" C-c
 sleep 1
 
-# Send Escape
-tmux send-keys -t "$pane_id" Escape
+# Step 2: Send Escape (in case of a prompt/menu), then /exit
+tmux send-keys -t "$PANE_ID" Escape
+sleep 0.5
+tmux send-keys -t "$PANE_ID" '/exit'
 sleep 1
-
-# Send /exit
-tmux send-keys -t "$pane_id" "/exit" && sleep 1 && tmux send-keys -t "$pane_id" Enter
+tmux send-keys -t "$PANE_ID" Enter
 sleep 2
 
-# Confirm exit
-tmux send-keys -t "$pane_id" "y" && sleep 1 && tmux send-keys -t "$pane_id" Enter
+# Step 3: Confirm exit with 'y'
+tmux send-keys -t "$PANE_ID" 'y'
+sleep 0.5
+tmux send-keys -t "$PANE_ID" Enter
 sleep 2
 
-# Verify exit
-output=$(tmux capture-pane -t "$pane_id" -p 2>/dev/null || true)
-if echo "$output" | grep -qE '(\$|❯|%)'; then
-  echo "Agent exited successfully"
-else
-  echo "Agent may still be running, sending SIGTERM..."
-  # Get child processes and terminate
-  pane_pid=$(tmux display-message -t "$pane_id" -p '#{pane_pid}')
-  if [ -n "$pane_pid" ]; then
-    pkill -TERM -P "$pane_pid" 2>/dev/null || true
+# Step 4: Verify Claude has exited by checking pane_current_command
+PANE_CMD=$(tmux display-message -t "$PANE_ID" -p '#{pane_current_command}' 2>/dev/null || echo "unknown")
+if [ "$PANE_CMD" = "claude" ]; then
+  echo "[kill-agent] WARNING: Claude may still be running (command: $PANE_CMD). Sending SIGTERM..."
+  PANE_PID=$(tmux display-message -t "$PANE_ID" -p '#{pane_pid}' 2>/dev/null || echo "")
+  if [ -n "$PANE_PID" ]; then
+    pkill -TERM -P "$PANE_PID" 2>/dev/null || true
+    sleep 2
   fi
 fi
 
-# Kill pane unless --keep-pane
-if [ "$keep_pane" != "--keep-pane" ]; then
-  tmux kill-pane -t "$pane_id" 2>/dev/null || true
-  echo "Pane $pane_id killed"
+# Step 5: Kill pane or keep it
+if [ "$KEEP_PANE" = true ]; then
+  echo "[kill-agent] Claude stopped. Pane $PANE_ID kept (bash prompt)."
+else
+  tmux kill-pane -t "$PANE_ID" 2>/dev/null || true
+  echo "[kill-agent] Pane $PANE_ID killed."
 fi

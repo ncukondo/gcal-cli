@@ -1,47 +1,75 @@
-#!/bin/bash
-# Check agent state via state file or tmux capture
-# Usage: ./scripts/check-agent-state.sh <pane-id>
+#!/usr/bin/env bash
+set -euo pipefail
 
-pane_id="${1:?Usage: check-agent-state.sh <pane-id>}"
-STATE_DIR="/tmp/claude-agent-states"
+# Check the state of a Claude Code agent running in a tmux pane.
+#
+# Usage: check-agent-state.sh <pane-id>
+# Output: "trust", "permission", "idle", "working", or "starting"
+#
+# Detection methods (in priority order):
+#   1. Hooks-based state file (/tmp/claude-agent-states/<pane-id>)
+#   2. tmux capture-pane fallback
 
-# Method 1: hooks-based state file (priority)
-state_file="${STATE_DIR}/${pane_id}"
-if [ -f "$state_file" ]; then
-  cat "$state_file"
+PANE="${1:?Usage: check-agent-state.sh <pane-id>}"
+WORKER_STATE_DIR="/tmp/claude-agent-states"
+STATE_FILE="$WORKER_STATE_DIR/$PANE"
+
+IS_STARTING=false
+
+# --- Method 1: Hooks-based state file (highest priority) ---
+if [[ -f "$STATE_FILE" ]]; then
+  FILE_MTIME=$(stat -c %Y "$STATE_FILE" 2>/dev/null || echo 0)
+  NOW=$(date +%s)
+  AGE=$((NOW - FILE_MTIME))
+
+  if [[ $AGE -lt 120 ]]; then
+    STATE=$(cat "$STATE_FILE" 2>/dev/null || echo "")
+    if [[ -n "$STATE" ]]; then
+      if [[ "$STATE" == "starting" ]]; then
+        IS_STARTING=true
+        # Fall through to tmux detection
+      elif [[ "$STATE" == "permission" ]]; then
+        echo "trust"
+        exit 0
+      else
+        echo "$STATE"
+        exit 0
+      fi
+    fi
+  fi
+fi
+
+# --- Method 2: tmux capture-pane fallback ---
+if ! tmux has-session -t "$PANE" 2>/dev/null; then
+  echo "error: pane not found"
+  exit 1
+fi
+
+CONTENT=$(tmux capture-pane -t "$PANE" -p -S -50 2>/dev/null)
+
+# Trust prompt detection
+if echo "$CONTENT" | grep -q 'folder' && \
+   echo "$CONTENT" | grep -q 'confirm'; then
+  echo "trust"
   exit 0
 fi
 
-# Method 2: tmux capture-pane fallback
-output=$(tmux capture-pane -t "$pane_id" -p 2>/dev/null || echo "")
+# Idle detection: has input prompt "❯" without spinner on prompt line
+if echo "$CONTENT" | grep -q '❯'; then
+  PROMPT_LINE=$(echo "$CONTENT" | grep '❯' | tail -1)
 
-if [ -z "$output" ]; then
-  echo "unknown"
+  if echo "$PROMPT_LINE" | grep -qE '(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)'; then
+    echo "working"
+  else
+    echo "idle"
+  fi
   exit 0
 fi
 
-# Check for shell prompt (agent exited)
-if echo "$output" | tail -3 | grep -qE '(\$\s*$|❯\s*$|%\s*$)'; then
-  echo "exited"
+# No prompt found
+if [[ "$IS_STARTING" == "true" ]]; then
+  echo "starting"
   exit 0
 fi
 
-# Check for trust prompt
-if echo "$output" | grep -qi 'trust'; then
-  echo "trust-prompt"
-  exit 0
-fi
-
-# Check for Claude prompt (idle)
-if echo "$output" | tail -3 | grep -qE '(>\s*$|claude)'; then
-  echo "idle"
-  exit 0
-fi
-
-# Check for spinner (working)
-if echo "$output" | tail -3 | grep -qE '(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|\.{3})'; then
-  echo "working"
-  exit 0
-fi
-
-echo "unknown"
+echo "working"

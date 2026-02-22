@@ -1,91 +1,192 @@
-#!/bin/bash
-# Merge a PR with full cleanup
-# Usage: ./scripts/merge-pr.sh <pr-number> [--squash|--merge|--rebase] [--dry-run]
-
+#!/usr/bin/env bash
 set -euo pipefail
 
+# Merge a PR and clean up worktree/branch safely.
+#
+# Usage: merge-pr.sh <pr-number> [options]
+#
+# Options:
+#   --squash       Use squash merge (default)
+#   --merge        Use merge commit
+#   --rebase       Use rebase merge
+#   --no-task      Skip task file management
+#   --dry-run      Show what would be done without doing it
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="/workspaces/gcal-cli"
 WORKTREE_BASE="/workspaces/gcal-cli--worktrees"
 
-pr_number="${1:?Usage: merge-pr.sh <pr-number> [--squash|--merge|--rebase] [--dry-run]}"
-shift
+PR_NUM="${1:?Usage: merge-pr.sh <pr-number> [options]}"
+MERGE_METHOD="--squash"
+SKIP_TASK=false
+DRY_RUN=false
 
-merge_method="--squash"
-dry_run=false
-
-for arg in "$@"; do
-  case "$arg" in
-    --squash|--merge|--rebase) merge_method="$arg" ;;
-    --dry-run) dry_run=true ;;
+shift || true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --squash)  MERGE_METHOD="--squash"; shift ;;
+    --merge)   MERGE_METHOD="--merge"; shift ;;
+    --rebase)  MERGE_METHOD="--rebase"; shift ;;
+    --no-task) SKIP_TASK=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-cd "$PROJECT_DIR"
+log() { echo "[merge-pr] $*"; }
+err() { echo "[merge-pr] ERROR: $*" >&2; }
+run() {
+  if [ "$DRY_RUN" = true ]; then
+    echo "[dry-run] $*"
+  else
+    "$@"
+  fi
+}
 
 # Get PR info
-branch=$(gh pr view "$pr_number" --json headRefName --jq '.headRefName')
-echo "PR #${pr_number} branch: $branch"
+log "Fetching PR #$PR_NUM info..."
+PR_JSON=$(gh pr view "$PR_NUM" --json headRefName,state,mergeable 2>/dev/null) || {
+  err "Failed to fetch PR #$PR_NUM"
+  exit 1
+}
 
-if $dry_run; then
-  echo "[DRY RUN] Would merge PR #${pr_number} (${merge_method})"
-  echo "[DRY RUN] Would clean up worktree and branch"
-  exit 0
+BRANCH=$(echo "$PR_JSON" | jq -r '.headRefName')
+STATE=$(echo "$PR_JSON" | jq -r '.state')
+MERGEABLE=$(echo "$PR_JSON" | jq -r '.mergeable')
+
+log "Branch: $BRANCH"
+log "State: $STATE"
+log "Mergeable: $MERGEABLE"
+
+if [ "$STATE" = "MERGED" ]; then
+  log "PR already merged. Proceeding to cleanup..."
+elif [ "$STATE" = "CLOSED" ]; then
+  err "PR is closed (not merged). Cannot proceed."
+  exit 1
+elif [ "$STATE" = "OPEN" ]; then
+  # Check CI status
+  log "Checking CI status..."
+  CI_STATUS=$(gh pr checks "$PR_NUM" --json state --jq 'all(.state == "SUCCESS" or .state == "SKIPPED")' 2>/dev/null || echo "false")
+
+  if [ "$CI_STATUS" != "true" ]; then
+    log "Waiting for CI to complete..."
+    for i in {1..60}; do
+      sleep 10
+      CI_STATUS=$(gh pr checks "$PR_NUM" --json state --jq 'all(.state == "SUCCESS" or .state == "SKIPPED")' 2>/dev/null || echo "false")
+      if [ "$CI_STATUS" = "true" ]; then
+        log "CI passed!"
+        break
+      fi
+      echo -ne "\r[merge-pr] Waiting for CI... ($((i * 10))s)    "
+    done
+    echo ""
+
+    if [ "$CI_STATUS" != "true" ]; then
+      err "CI did not pass within timeout"
+      exit 1
+    fi
+  fi
+
+  # Merge the PR
+  log "Merging PR #$PR_NUM with $MERGE_METHOD..."
+  run gh pr merge "$PR_NUM" "$MERGE_METHOD" || {
+    err "Failed to merge PR. Check if it's approved and CI passes."
+    exit 1
+  }
+  log "PR merged successfully!"
+else
+  err "Unknown PR state: $STATE"
+  exit 1
 fi
 
-# Wait for CI (up to 10 minutes)
-echo "Waiting for CI..."
-for i in $(seq 1 60); do
-  ci_status=$("$SCRIPT_DIR/check-task-completion.sh" pr-creation "$pr_number" 2>/dev/null || echo "pending")
-  case "$ci_status" in
-    completed) echo "CI passed"; break ;;
-    failed) echo "ERROR: CI failed"; exit 1 ;;
-    *) sleep 10 ;;
-  esac
-done
+# Ensure we're not in the worktree directory
+CURRENT_DIR=$(pwd)
+BRANCH_DIR=$(echo "$BRANCH" | sed 's|^task/||' | tr '/' '-')
+WORKTREE_PATH="$WORKTREE_BASE/$BRANCH_DIR"
 
-# Merge
-echo "Merging PR #${pr_number} (${merge_method})..."
-gh pr merge "$pr_number" "$merge_method" --delete-branch
+if [[ "$CURRENT_DIR" == "$WORKTREE_PATH"* ]]; then
+  log "Currently in worktree directory. Switching to repo root..."
+  cd "$REPO_ROOT"
+fi
 
-# Switch to main if in worktree
-git checkout main 2>/dev/null || true
-git pull origin main
+# Switch to main and pull
+log "Updating main branch..."
+run git checkout main 2>/dev/null || true
+run git pull --ff-only origin main || {
+  run git pull origin main
+}
 
-# Find and clean up worktree
-for wt in "$WORKTREE_BASE"/*; do
-  [ -d "$wt" ] || continue
-  wt_branch=$(cd "$wt" && git branch --show-current 2>/dev/null || true)
-  if [ "$wt_branch" = "$branch" ]; then
-    echo "Cleaning up worktree: $wt"
+# Remove worktree if exists
+if [ -d "$WORKTREE_PATH" ]; then
+  log "Removing worktree: $WORKTREE_PATH"
 
-    # Kill agent if running
-    for pane_id in $(tmux list-panes -t main -F '#{pane_id}' 2>/dev/null); do
-      pane_dir=$(tmux display-message -t "$pane_id" -p '#{pane_current_path}' 2>/dev/null || true)
-      if [ "$pane_dir" = "$wt" ]; then
-        "$SCRIPT_DIR/kill-agent.sh" "$pane_id" 2>/dev/null || true
-      fi
-    done
+  # Kill any Claude agents running in this worktree
+  PANE_ID=$(tmux list-panes -a -F "#{pane_id} #{pane_current_path}" 2>/dev/null | \
+    grep " ${WORKTREE_PATH}$" | head -1 | cut -d' ' -f1 || true)
 
-    git worktree remove "$wt" --force 2>/dev/null || true
+  if [ -n "$PANE_ID" ]; then
+    log "Killing agent in pane $PANE_ID..."
+    "$SCRIPT_DIR/kill-agent.sh" "$PANE_ID" 2>/dev/null || true
   fi
-done
+
+  run git worktree remove "$WORKTREE_PATH" 2>/dev/null || \
+    run git worktree remove "$WORKTREE_PATH" --force 2>/dev/null || {
+      log "Worktree removal failed, trying manual cleanup..."
+      rm -rf "$WORKTREE_PATH" 2>/dev/null || true
+      run git worktree prune
+    }
+
+  log "Worktree removed."
+else
+  log "No worktree found at $WORKTREE_PATH"
+fi
 
 # Prune worktrees
-git worktree prune
+run git worktree prune
 
 # Delete local branch
-git branch -d "$branch" 2>/dev/null || true
+log "Deleting local branch: $BRANCH"
+if git branch --list "$BRANCH" | grep -q "$BRANCH"; then
+  run git branch -D "$BRANCH" 2>/dev/null || {
+    log "Branch deletion with -D failed, trying -d..."
+    run git branch -d "$BRANCH" 2>/dev/null || true
+  }
+  log "Local branch deleted."
+else
+  log "Local branch already deleted."
+fi
 
-# Move task file to completed
-for task_file in spec/tasks/*.md; do
-  [ -f "$task_file" ] || continue
-  [[ "$task_file" == *"ROADMAP"* ]] && continue
-  [[ "$task_file" == *"_template"* ]] && continue
-  if grep -q "$branch" "$task_file" 2>/dev/null; then
-    mv "$task_file" spec/tasks/completed/
-    echo "Moved $task_file to completed/"
+# Verify remote branch is gone
+if git ls-remote --heads origin "$BRANCH" 2>/dev/null | grep -q "$BRANCH"; then
+  log "Remote branch still exists. Deleting..."
+  run git push origin --delete "$BRANCH" 2>/dev/null || true
+fi
+
+# Task file management
+if [ "$SKIP_TASK" = false ]; then
+  log "Looking for task file..."
+
+  TASK_FILE=$(find spec/tasks -maxdepth 1 \( -name "*${BRANCH_DIR}*" -o -name "*$(echo "$BRANCH" | sed 's/task\///')*" \) 2>/dev/null | head -1 || true)
+
+  if [ -n "$TASK_FILE" ] && [ -f "$TASK_FILE" ]; then
+    TASK_BASENAME=$(basename "$TASK_FILE")
+    log "Found task file: $TASK_FILE"
+    log "Moving to completed..."
+
+    mkdir -p spec/tasks/completed
+    run mv "$TASK_FILE" "spec/tasks/completed/$TASK_BASENAME"
+
+    echo "[merge-pr] Task file moved. Please update ROADMAP.md status if needed."
+  else
+    log "No matching task file found in spec/tasks/"
   fi
-done
+fi
 
-echo "PR #${pr_number} merged and cleaned up successfully"
+log ""
+log "=== Merge Complete ==="
+log "PR:      #$PR_NUM"
+log "Branch:  $BRANCH (deleted)"
+log "Worktree: $WORKTREE_PATH (removed)"
+log ""
+log "Remaining worktrees:"
+git worktree list

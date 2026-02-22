@@ -1,25 +1,23 @@
-#!/bin/bash
-# Set agent role in a worktree's CLAUDE.md
-# Usage: ./scripts/set-role.sh <worktree-path> <role>
-
+#!/usr/bin/env bash
 set -euo pipefail
 
-worktree_path="${1:?Usage: set-role.sh <worktree-path> <role>}"
-role="${2:?Usage: set-role.sh <worktree-path> <role>}"
+# Set the agent role marker in a worktree's CLAUDE.md.
+#
+# Usage: set-role.sh <worktree-dir> <role>
+# Example: set-role.sh /path/to/worktree implement
 
-claude_md="${worktree_path}/CLAUDE.md"
+WORKTREE_DIR="${1:?Usage: set-role.sh <worktree-dir> <role>}"
+ROLE="${2:?Usage: set-role.sh <worktree-dir> <role>}"
+CLAUDE_MD="$WORKTREE_DIR/CLAUDE.md"
 
-if [ ! -f "$claude_md" ]; then
-  echo "ERROR: CLAUDE.md not found at $claude_md"
+if [ ! -f "$CLAUDE_MD" ]; then
+  echo "[set-role] ERROR: CLAUDE.md not found at $CLAUDE_MD"
   exit 1
 fi
 
-# Replace or append role marker
-if grep -q '<!-- role:' "$claude_md"; then
-  sed -i "s/<!-- role: .* -->/<!-- role: $role -->/" "$claude_md"
-else
-  echo "" >> "$claude_md"
-  echo "<!-- role: $role -->" >> "$claude_md"
-fi
+# Remove existing role marker if present
+sed -i '/^<!-- role: .* -->$/d' "$CLAUDE_MD"
 
-echo "Role set to '$role' in $claude_md"
+# Append new role marker
+echo "<!-- role: $ROLE -->" >> "$CLAUDE_MD"
+echo "[set-role] Set role to '$ROLE' in $CLAUDE_MD"
