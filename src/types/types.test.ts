@@ -172,3 +172,114 @@ describe("Transparency", () => {
     }
   });
 });
+
+describe("negative type tests (@ts-expect-error)", () => {
+  it("CalendarEvent rejects missing required fields", () => {
+    // @ts-expect-error — missing required fields
+    isType<CalendarEvent>({ id: "evt_1", title: "Test" });
+    expect(true).toBe(true);
+  });
+
+  it("CalendarEvent rejects wrong field types", () => {
+    isType<CalendarEvent>({
+      id: "evt_1",
+      title: "Test",
+      description: null,
+      start: "2026-02-22T09:00:00Z",
+      end: "2026-02-22T09:30:00Z",
+      // @ts-expect-error — all_day must be boolean, not string
+      all_day: "yes",
+      calendar_id: "primary",
+      calendar_name: "Work",
+      html_link: "https://example.com",
+      status: "confirmed",
+      transparency: "opaque",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-02-20T12:00:00Z",
+    });
+    expect(true).toBe(true);
+  });
+
+  it("CalendarEvent rejects invalid status", () => {
+    isType<CalendarEvent>({
+      id: "evt_1",
+      title: "Test",
+      description: null,
+      start: "2026-02-22T09:00:00Z",
+      end: "2026-02-22T09:30:00Z",
+      all_day: false,
+      calendar_id: "primary",
+      calendar_name: "Work",
+      html_link: "https://example.com",
+      // @ts-expect-error — "maybe" is not a valid EventStatus
+      status: "maybe",
+      transparency: "opaque",
+      created: "2026-01-01T00:00:00Z",
+      updated: "2026-02-20T12:00:00Z",
+    });
+    expect(true).toBe(true);
+  });
+
+  it("Calendar rejects missing required fields", () => {
+    // @ts-expect-error — missing name, description, primary, enabled
+    isType<Calendar>({ id: "cal_1" });
+    expect(true).toBe(true);
+  });
+
+  it("Calendar rejects wrong field types", () => {
+    isType<Calendar>({
+      id: "cal_1",
+      name: "Work",
+      description: null,
+      // @ts-expect-error — primary must be boolean, not string
+      primary: "yes",
+      enabled: true,
+    });
+    expect(true).toBe(true);
+  });
+
+  it("ErrorCode rejects invalid codes", () => {
+    // @ts-expect-error — "UNKNOWN" is not a valid ErrorCode
+    isType<ErrorCode>("UNKNOWN");
+    expect(true).toBe(true);
+  });
+
+  it("SuccessResponse rejects success: false", () => {
+    // @ts-expect-error — success must be true
+    isType<SuccessResponse<string>>({ success: false, data: "hello" });
+    expect(true).toBe(true);
+  });
+
+  it("ErrorResponse rejects success: true", () => {
+    isType<ErrorResponse>({
+      // @ts-expect-error — success must be false
+      success: true,
+      error: { code: "API_ERROR", message: "fail" },
+    });
+    expect(true).toBe(true);
+  });
+
+  it("ErrorResponse rejects invalid error code", () => {
+    isType<ErrorResponse>({
+      success: false,
+      error: {
+        // @ts-expect-error — "UNKNOWN" is not a valid ErrorCode
+        code: "UNKNOWN",
+        message: "fail",
+      },
+    });
+    expect(true).toBe(true);
+  });
+
+  it("EventStatus rejects invalid values", () => {
+    // @ts-expect-error — "maybe" is not a valid EventStatus
+    isType<EventStatus>("maybe");
+    expect(true).toBe(true);
+  });
+
+  it("Transparency rejects invalid values", () => {
+    // @ts-expect-error — "semi" is not a valid Transparency
+    isType<Transparency>("semi");
+    expect(true).toBe(true);
+  });
+});
