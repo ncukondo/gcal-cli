@@ -1,0 +1,33 @@
+{
+  "name": "gcal-cli",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ZainChen.json",
+        "oxc.oxc-vscode",
+        "vitest.explorer"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "oxc.oxc-vscode",
+        "[typescript]": {
+          "editor.defaultFormatter": "oxc.oxc-vscode"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "oxc.oxc-vscode"
+        }
+      }
+    }
+  },
+  "postCreateCommand": "sudo chown vscode:vscode /workspaces",
+  "postStartCommand": "tmux has-session -t main 2>/dev/null || tmux new-session -d -s main",
+  "remoteUser": "vscode"
+}
