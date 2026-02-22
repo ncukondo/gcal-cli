@@ -1,0 +1,36 @@
+{
+  "name": "@ncukondo/gcal-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "gcal": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "build:bin": "bun build src/index.ts --compile --outfile gcal",
+    "test": "vitest",
+    "test:unit": "vitest run src",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "vitest run tests/e2e",
+    "test:all": "vitest run",
+    "lint": "oxlint src tests",
+    "format": "oxfmt src tests",
+    "format:check": "oxfmt --check src tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "date-fns": "^3.0.0",
+    "date-fns-tz": "^3.0.0",
+    "googleapis": "^130.0.0",
+    "smol-toml": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0",
+    "oxlint": "latest",
+    "oxfmt": "latest"
+  }
+}
