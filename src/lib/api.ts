@@ -1,4 +1,40 @@
-import type { Calendar, CalendarEvent, EventStatus, Transparency } from "../types/index.ts";
+import type { Calendar, CalendarEvent, ErrorCode, EventStatus, Transparency } from "../types/index.ts";
+
+export class ApiError extends Error {
+  constructor(
+    public readonly code: ErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+// Abstraction over the Google Calendar API client for testability
+export interface GoogleCalendarApi {
+  calendarList: {
+    list: (params?: { pageToken?: string }) => Promise<{
+      data: { items?: GoogleCalendar[]; nextPageToken?: string };
+    }>;
+  };
+  events: {
+    list: (params: {
+      calendarId: string;
+      pageToken?: string;
+      timeMin?: string;
+      timeMax?: string;
+      q?: string;
+      singleEvents?: boolean;
+      orderBy?: string;
+    }) => Promise<{
+      data: { items?: GoogleEvent[]; nextPageToken?: string };
+    }>;
+    get: (params: {
+      calendarId: string;
+      eventId: string;
+    }) => Promise<{ data: GoogleEvent }>;
+  };
+}
 
 // Google API response types (partial, only fields we use)
 export interface GoogleEvent {
@@ -55,4 +91,22 @@ export function normalizeCalendar(calendar: GoogleCalendar): Calendar {
     primary: calendar.primary ?? false,
     enabled: true,
   };
+}
+
+export async function listCalendars(api: GoogleCalendarApi): Promise<Calendar[]> {
+  const calendars: Calendar[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const response = await api.calendarList.list(
+      pageToken ? { pageToken } : undefined,
+    );
+    const items = response.data.items ?? [];
+    for (const item of items) {
+      calendars.push(normalizeCalendar(item));
+    }
+    pageToken = response.data.nextPageToken;
+  } while (pageToken);
+
+  return calendars;
 }

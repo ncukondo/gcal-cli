@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { normalizeEvent, normalizeCalendar } from "./api.ts";
+import { describe, it, expect, vi } from "vitest";
+import { normalizeEvent, normalizeCalendar, listCalendars, type GoogleCalendarApi } from "./api.ts";
 
 describe("normalizeEvent", () => {
   it("handles all-day events (date field)", () => {
@@ -122,5 +122,70 @@ describe("normalizeCalendar", () => {
       primary: false,
       enabled: true,
     });
+  });
+});
+
+function createMockApi(responses: Record<string, unknown>): GoogleCalendarApi {
+  return {
+    calendarList: {
+      list: vi.fn().mockImplementation(async (params?: { pageToken?: string }) => {
+        const key = params?.pageToken ?? "default";
+        return { data: responses[key] ?? responses["default"] };
+      }),
+    },
+    events: {
+      list: vi.fn().mockImplementation(async (params: { calendarId: string; pageToken?: string }) => {
+        const key = params.pageToken ?? "default";
+        return { data: responses[key] ?? responses["default"] };
+      }),
+      get: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string }) => {
+        const key = params.eventId;
+        const response = responses[key];
+        if (!response) {
+          const error = new Error("Not Found") as Error & { code: number };
+          error.code = 404;
+          throw error;
+        }
+        return { data: response };
+      }),
+    },
+  };
+}
+
+describe("listCalendars", () => {
+  it("returns normalized Calendar[] from Google API response", async () => {
+    const api = createMockApi({
+      default: {
+        items: [
+          { id: "cal1", summary: "Primary", description: "Main", primary: true },
+          { id: "cal2", summary: "Work", description: null, primary: false },
+        ],
+      },
+    });
+
+    const result = await listCalendars(api);
+
+    expect(result).toEqual([
+      { id: "cal1", name: "Primary", description: "Main", primary: true, enabled: true },
+      { id: "cal2", name: "Work", description: null, primary: false, enabled: true },
+    ]);
+  });
+
+  it("handles pagination (nextPageToken)", async () => {
+    const api = createMockApi({
+      default: {
+        items: [{ id: "cal1", summary: "First" }],
+        nextPageToken: "page2",
+      },
+      page2: {
+        items: [{ id: "cal2", summary: "Second" }],
+      },
+    });
+
+    const result = await listCalendars(api);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("cal1");
+    expect(result[1]!.id).toBe("cal2");
   });
 });
