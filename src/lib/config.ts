@@ -60,11 +60,6 @@ export function parseConfig(toml: string): AppConfig {
   return config;
 }
 
-const DEFAULT_CONFIG: AppConfig = {
-  default_format: "text",
-  calendars: [],
-};
-
 export async function loadConfig(fs: FsAdapter): Promise<AppConfig> {
   const configPath = await findConfigPath(fs);
   if (!configPath) {
