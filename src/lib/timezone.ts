@@ -31,10 +31,7 @@ const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const OFFSET_RE = /(?:[+-]\d{2}:\d{2}|Z)$/;
 
 // Expects a pre-validated timezone; callers should use resolveTimezone first.
-export function parseDateTimeInZone(
-  dateStr: string,
-  timezone: string,
-): Date {
+export function parseDateTimeInZone(dateStr: string, timezone: string): Date {
   // If the string already contains a timezone offset, parse directly
   if (OFFSET_RE.test(dateStr)) {
     const date = new Date(dateStr);

@@ -3,21 +3,21 @@ import type { CalendarEvent } from "../types/index.ts";
 export type TransparencyOption = "busy" | "free" | undefined;
 
 export function filterByTransparency(
-	events: CalendarEvent[],
-	option: TransparencyOption,
+  events: CalendarEvent[],
+  option: TransparencyOption,
 ): CalendarEvent[] {
-	if (option === "busy") {
-		return events.filter((e) => e.transparency === "opaque");
-	}
-	if (option === "free") {
-		return events.filter((e) => e.transparency === "transparent");
-	}
-	return events;
+  if (option === "busy") {
+    return events.filter((e) => e.transparency === "opaque");
+  }
+  if (option === "free") {
+    return events.filter((e) => e.transparency === "transparent");
+  }
+  return events;
 }
 
 export interface StatusFilterOptions {
-	confirmed?: boolean;
-	includeTentative?: boolean;
+  confirmed?: boolean;
+  includeTentative?: boolean;
 }
 
 /**
@@ -28,25 +28,22 @@ export interface StatusFilterOptions {
  * - `includeTentative: true`: returns confirmed + tentative events.
  */
 export function filterByStatus(
-	events: CalendarEvent[],
-	options: StatusFilterOptions,
+  events: CalendarEvent[],
+  options: StatusFilterOptions,
 ): CalendarEvent[] {
-	return events.filter((e) => {
-		if (e.status === "cancelled") return false;
-		if (options.confirmed) return e.status === "confirmed";
-		if (options.includeTentative) return true;
-		return e.status === "confirmed";
-	});
+  return events.filter((e) => {
+    if (e.status === "cancelled") return false;
+    if (options.confirmed) return e.status === "confirmed";
+    if (options.includeTentative) return true;
+    return e.status === "confirmed";
+  });
 }
 
 export interface FilterOptions extends StatusFilterOptions {
-	transparency?: TransparencyOption;
+  transparency?: TransparencyOption;
 }
 
-export function applyFilters(
-	events: CalendarEvent[],
-	options: FilterOptions,
-): CalendarEvent[] {
-	const afterTransparency = filterByTransparency(events, options.transparency);
-	return filterByStatus(afterTransparency, options);
+export function applyFilters(events: CalendarEvent[], options: FilterOptions): CalendarEvent[] {
+  const afterTransparency = filterByTransparency(events, options.transparency);
+  return filterByStatus(afterTransparency, options);
 }

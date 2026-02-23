@@ -1,15 +1,9 @@
 import { describe, it, expect } from "vitest";
-import {
-  resolveTimezone,
-  formatDateTimeInZone,
-  parseDateTimeInZone,
-} from "./timezone";
+import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "./timezone";
 
 describe("resolveTimezone", () => {
   it("returns CLI timezone when provided", () => {
-    expect(resolveTimezone("America/New_York", "Asia/Tokyo")).toBe(
-      "America/New_York",
-    );
+    expect(resolveTimezone("America/New_York", "Asia/Tokyo")).toBe("America/New_York");
   });
 
   it("falls back to config timezone when CLI is undefined", () => {
@@ -34,24 +28,18 @@ describe("formatDateTimeInZone", () => {
   it("converts a Date to ISO 8601 string with offset in given timezone", () => {
     // 2026-01-24T01:00:00.000Z (UTC) = 2026-01-24T10:00:00+09:00 (Asia/Tokyo)
     const date = new Date("2026-01-24T01:00:00.000Z");
-    expect(formatDateTimeInZone(date, "Asia/Tokyo")).toBe(
-      "2026-01-24T10:00:00+09:00",
-    );
+    expect(formatDateTimeInZone(date, "Asia/Tokyo")).toBe("2026-01-24T10:00:00+09:00");
   });
 
   it("handles negative UTC offsets", () => {
     // 2026-01-24T15:00:00.000Z (UTC) = 2026-01-24T10:00:00-05:00 (America/New_York, EST)
     const date = new Date("2026-01-24T15:00:00.000Z");
-    expect(formatDateTimeInZone(date, "America/New_York")).toBe(
-      "2026-01-24T10:00:00-05:00",
-    );
+    expect(formatDateTimeInZone(date, "America/New_York")).toBe("2026-01-24T10:00:00-05:00");
   });
 
   it("handles UTC timezone", () => {
     const date = new Date("2026-01-24T10:00:00.000Z");
-    expect(formatDateTimeInZone(date, "UTC")).toBe(
-      "2026-01-24T10:00:00+00:00",
-    );
+    expect(formatDateTimeInZone(date, "UTC")).toBe("2026-01-24T10:00:00+00:00");
   });
 });
 
