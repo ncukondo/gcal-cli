@@ -1,39 +1,12 @@
-import type {
-  Calendar,
-  CalendarEvent,
-  ErrorCode,
-  OutputFormat,
-} from "../types/index.ts";
+import type { Calendar, CalendarEvent, ErrorCode } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
-
-export function formatSuccess(data: unknown, format: OutputFormat): string {
-  if (format === "json") {
-    return JSON.stringify(data, null, 2);
-  }
-  return String(data);
-}
-
-export function formatError(
-  code: number,
-  message: string,
-  format: OutputFormat,
-): string {
-  if (format === "json") {
-    return JSON.stringify({ error: { code, message } }, null, 2);
-  }
-  return `Error: ${message}`;
-}
 
 export function formatJsonSuccess(data: unknown): string {
   return JSON.stringify({ success: true, data }, null, 2);
 }
 
 export function formatJsonError(code: ErrorCode, message: string): string {
-  return JSON.stringify(
-    { success: false, error: { code, message } },
-    null,
-    2,
-  );
+  return JSON.stringify({ success: false, error: { code, message } }, null, 2);
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -85,8 +58,12 @@ export function formatEventListText(events: CalendarEvent[]): string {
     lines.push(`${dateKey} (${getDayOfWeek(dateKey)})`);
     for (const event of groupEvents) {
       const time = formatTimeRange(event);
-      const tag = transparencyTag(event);
-      lines.push(`  ${time}   ${event.title} (${event.calendar_name}) ${tag}`);
+      if (event.all_day) {
+        lines.push(`  ${time}   ${event.title} (${event.calendar_name})`);
+      } else {
+        const tag = transparencyTag(event);
+        lines.push(`  ${time}   ${event.title} (${event.calendar_name}) ${tag}`);
+      }
     }
   }
 
@@ -95,16 +72,16 @@ export function formatEventListText(events: CalendarEvent[]): string {
 
 function formatSearchEventLine(event: CalendarEvent): string {
   const date = getDateKey(event);
+  if (event.all_day) {
+    return `${date} [All Day]     ${event.title} (${event.calendar_name})`;
+  }
   const startTime = event.start.slice(11, 16);
   const endTime = event.end.slice(11, 16);
   const tag = transparencyTag(event);
   return `${date} ${startTime}-${endTime}  ${event.title} (${event.calendar_name}) ${tag}`;
 }
 
-export function formatSearchResultText(
-  query: string,
-  events: CalendarEvent[],
-): string {
+export function formatSearchResultText(query: string, events: CalendarEvent[]): string {
   const count = events.length;
   const plural = count === 1 ? "event" : "events";
   const header = `Found ${count} ${plural} matching "${query}":`;
@@ -123,7 +100,12 @@ const CALENDAR_ID_COL = 18;
 
 function truncateId(id: string): string {
   if (id.length <= CALENDAR_ID_MAX) return id;
-  return id.slice(0, CALENDAR_ID_MAX - 3) + "...";
+  const base = id.slice(0, CALENDAR_ID_MAX - 3);
+  const lastDot = base.lastIndexOf(".");
+  if (lastDot > 0) {
+    return base.slice(0, lastDot) + "...";
+  }
+  return base + "...";
 }
 
 export function formatCalendarListText(calendars: Calendar[]): string {
@@ -159,12 +141,7 @@ export function formatEventDetailText(event: CalendarEvent): string {
 
   lines.push(detailLine("Calendar", event.calendar_name));
   lines.push(detailLine("Status", event.status));
-  lines.push(
-    detailLine(
-      "Availability",
-      event.transparency === "transparent" ? "free" : "busy",
-    ),
-  );
+  lines.push(detailLine("Availability", event.transparency === "transparent" ? "free" : "busy"));
 
   if (event.description !== null) {
     lines.push(detailLine("Description", event.description));

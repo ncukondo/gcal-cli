@@ -3,8 +3,6 @@ import type { Calendar, CalendarEvent } from "../types/index.ts";
 import {
   formatJsonSuccess,
   formatJsonError,
-  formatError,
-  formatSuccess,
   formatEventListText,
   formatSearchResultText,
   formatCalendarListText,
@@ -30,32 +28,6 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     ...overrides,
   };
 }
-
-describe("formatSuccess", () => {
-  it("returns JSON string for json format", () => {
-    const result = formatSuccess({ key: "value" }, "json");
-    expect(JSON.parse(result)).toEqual({ key: "value" });
-  });
-
-  it("returns string representation for text format", () => {
-    const result = formatSuccess("hello", "text");
-    expect(result).toBe("hello");
-  });
-});
-
-describe("formatError", () => {
-  it("returns JSON error for json format", () => {
-    const result = formatError(1, "something failed", "json");
-    expect(JSON.parse(result)).toEqual({
-      error: { code: 1, message: "something failed" },
-    });
-  });
-
-  it("returns text error for text format", () => {
-    const result = formatError(1, "something failed", "text");
-    expect(result).toBe("Error: something failed");
-  });
-});
 
 describe("formatJsonSuccess", () => {
   it("wraps data in success envelope", () => {
@@ -142,27 +114,36 @@ describe("formatEventListText", () => {
   });
 
   it("shows calendar name in parentheses", () => {
-    const events = [
-      makeEvent({ calendar_name: "Work Calendar" }),
-    ];
+    const events = [makeEvent({ calendar_name: "Work Calendar" })];
     const result = formatEventListText(events);
     expect(result).toContain("(Work Calendar)");
   });
 
-  it("shows transparency tag for non-opaque events", () => {
-    const events = [
-      makeEvent({ transparency: "transparent", title: "Focus Time" }),
-    ];
+  it("shows [free] tag for transparent timed events", () => {
+    const events = [makeEvent({ transparency: "transparent", title: "Focus Time" })];
     const result = formatEventListText(events);
     expect(result).toContain("[free]");
   });
 
-  it("shows [busy] tag for opaque events", () => {
-    const events = [
-      makeEvent({ transparency: "opaque", title: "Meeting" }),
-    ];
+  it("shows [busy] tag for opaque timed events", () => {
+    const events = [makeEvent({ transparency: "opaque", title: "Meeting" })];
     const result = formatEventListText(events);
     expect(result).toContain("[busy]");
+  });
+
+  it("does not show transparency tag for all-day events", () => {
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-01-24",
+        end: "2026-01-25",
+        title: "Holiday",
+        transparency: "opaque",
+      }),
+    ];
+    const result = formatEventListText(events);
+    expect(result).not.toContain("[busy]");
+    expect(result).not.toContain("[free]");
   });
 
   it("returns empty string for empty event list", () => {
@@ -206,12 +187,12 @@ describe("formatEventListText", () => {
     const result = formatEventListText(events);
     const expected = [
       "2026-01-24 (Sat)",
-      "  [All Day]     Company Holiday (Main Calendar) [busy]",
+      "  [All Day]     Company Holiday (Main Calendar)",
       "  10:00-11:00   Team Meeting (Main Calendar) [busy]",
       "  14:00-15:00   Focus Time (Work Calendar) [free]",
       "",
       "2026-01-25 (Sun)",
-      "  [All Day]     Vacation (Main Calendar) [busy]",
+      "  [All Day]     Vacation (Main Calendar)",
     ].join("\n");
     expect(result).toBe(expected);
   });
@@ -251,9 +232,7 @@ describe("formatSearchResultText", () => {
       }),
     ];
     const result = formatSearchResultText("meeting", events);
-    expect(result).toContain(
-      "2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]",
-    );
+    expect(result).toContain("2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]");
   });
 
   it("matches spec output format", () => {
@@ -281,6 +260,20 @@ describe("formatSearchResultText", () => {
       "2026-01-28 09:00-10:00  Project Meeting (Main Calendar) [busy]",
     ].join("\n");
     expect(result).toBe(expected);
+  });
+
+  it("formats all-day events without time range", () => {
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-01-24",
+        end: "2026-01-25",
+        title: "Company Holiday",
+        calendar_name: "Main Calendar",
+      }),
+    ];
+    const result = formatSearchResultText("holiday", events);
+    expect(result).toContain("2026-01-24 [All Day]     Company Holiday (Main Calendar)");
   });
 
   it("returns no-results message for empty list", () => {
@@ -321,7 +314,7 @@ describe("formatCalendarListText", () => {
 
   it("shows [ ] for disabled calendars", () => {
     const result = formatCalendarListText(calendars);
-    expect(result).toContain("[ ] work@group.");
+    expect(result).toContain("[ ] work@group...");
   });
 
   it("truncates long calendar IDs with ellipsis", () => {
@@ -340,7 +333,7 @@ describe("formatCalendarListText", () => {
       "Calendars:",
       "  [x] primary           Main Calendar",
       "  [x] family@group...   Family",
-      "  [ ] work@group.c...   Work Main (disabled)",
+      "  [ ] work@group...     Work Main (disabled)",
     ].join("\n");
     expect(result).toBe(expected);
   });
