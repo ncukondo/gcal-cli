@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { normalizeEvent, normalizeCalendar, listCalendars, type GoogleCalendarApi } from "./api.ts";
+import {
+  normalizeEvent,
+  normalizeCalendar,
+  listCalendars,
+  listEvents,
+  type GoogleCalendarApi,
+} from "./api.ts";
 
 describe("normalizeEvent", () => {
   it("handles all-day events (date field)", () => {
@@ -187,5 +193,134 @@ describe("listCalendars", () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("cal1");
     expect(result[1]!.id).toBe("cal2");
+  });
+});
+
+describe("listEvents", () => {
+  it("returns normalized CalendarEvent[] from Google API response", async () => {
+    const api = createMockApi({
+      default: {
+        items: [
+          {
+            id: "evt1",
+            summary: "Lunch",
+            start: { dateTime: "2024-03-15T12:00:00+09:00" },
+            end: { dateTime: "2024-03-15T13:00:00+09:00" },
+            status: "confirmed",
+          },
+        ],
+      },
+    });
+
+    const result = await listEvents(api, "cal1", "My Cal");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("evt1");
+    expect(result[0]!.title).toBe("Lunch");
+    expect(result[0]!.calendar_id).toBe("cal1");
+    expect(result[0]!.calendar_name).toBe("My Cal");
+  });
+
+  it("handles all-day events (date vs dateTime fields)", async () => {
+    const api = createMockApi({
+      default: {
+        items: [
+          {
+            id: "evt1",
+            summary: "Holiday",
+            start: { date: "2024-03-15" },
+            end: { date: "2024-03-16" },
+          },
+        ],
+      },
+    });
+
+    const result = await listEvents(api, "cal1", "Cal");
+
+    expect(result[0]!.all_day).toBe(true);
+    expect(result[0]!.start).toBe("2024-03-15");
+  });
+
+  it("handles timed events with timezone offset", async () => {
+    const api = createMockApi({
+      default: {
+        items: [
+          {
+            id: "evt1",
+            summary: "Call",
+            start: { dateTime: "2024-03-15T15:00:00-05:00" },
+            end: { dateTime: "2024-03-15T16:00:00-05:00" },
+          },
+        ],
+      },
+    });
+
+    const result = await listEvents(api, "cal1", "Cal");
+
+    expect(result[0]!.all_day).toBe(false);
+    expect(result[0]!.start).toBe("2024-03-15T15:00:00-05:00");
+  });
+
+  it("supports timeMin/timeMax parameters", async () => {
+    const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: listFn,
+        get: vi.fn(),
+      },
+    };
+
+    await listEvents(api, "cal1", "Cal", {
+      timeMin: "2024-03-01T00:00:00Z",
+      timeMax: "2024-03-31T23:59:59Z",
+    });
+
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        calendarId: "cal1",
+        timeMin: "2024-03-01T00:00:00Z",
+        timeMax: "2024-03-31T23:59:59Z",
+        singleEvents: true,
+        orderBy: "startTime",
+      }),
+    );
+  });
+
+  it("supports q (search query) parameter", async () => {
+    const listFn = vi.fn().mockResolvedValue({ data: { items: [] } });
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: listFn,
+        get: vi.fn(),
+      },
+    };
+
+    await listEvents(api, "cal1", "Cal", { q: "meeting" });
+
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        q: "meeting",
+      }),
+    );
+  });
+
+  it("handles pagination", async () => {
+    const api = createMockApi({
+      default: {
+        items: [{ id: "evt1", summary: "First", start: { date: "2024-03-15" }, end: { date: "2024-03-16" } }],
+        nextPageToken: "page2",
+      },
+      page2: {
+        items: [{ id: "evt2", summary: "Second", start: { date: "2024-03-16" }, end: { date: "2024-03-17" } }],
+      },
+    });
+
+    const result = await listEvents(api, "cal1", "Cal");
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("evt1");
+    expect(result[1]!.id).toBe("evt2");
   });
 });

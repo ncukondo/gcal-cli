@@ -110,3 +110,48 @@ export async function listCalendars(api: GoogleCalendarApi): Promise<Calendar[]>
 
   return calendars;
 }
+
+export interface ListEventsOptions {
+  timeMin?: string;
+  timeMax?: string;
+  q?: string;
+}
+
+export async function listEvents(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  calendarName: string,
+  options?: ListEventsOptions,
+): Promise<CalendarEvent[]> {
+  const events: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params: {
+      calendarId: string;
+      pageToken?: string;
+      timeMin?: string;
+      timeMax?: string;
+      q?: string;
+      singleEvents: boolean;
+      orderBy: string;
+    } = {
+      calendarId,
+      singleEvents: true,
+      orderBy: "startTime",
+      ...options,
+    };
+    if (pageToken) {
+      params.pageToken = pageToken;
+    }
+
+    const response = await api.events.list(params);
+    const items = response.data.items ?? [];
+    for (const item of items) {
+      events.push(normalizeEvent(item, calendarId, calendarName));
+    }
+    pageToken = response.data.nextPageToken;
+  } while (pageToken);
+
+  return events;
+}
