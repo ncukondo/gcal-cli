@@ -15,7 +15,9 @@ show_status() {
       pane_id=$(basename "$state_file")
 
       # Check if pane still exists
-      if ! tmux has-session -t "$pane_id" 2>/dev/null; then
+      SESSION_NAME="${TMUX_SESSION:-main}"
+      PANE_EXISTS=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_id}' 2>/dev/null | grep -Fx "$pane_id" || true)
+      if [ -z "$PANE_EXISTS" ]; then
         rm -f "$state_file"
         continue
       fi

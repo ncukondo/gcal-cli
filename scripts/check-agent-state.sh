@@ -40,7 +40,9 @@ if [[ -f "$STATE_FILE" ]]; then
 fi
 
 # --- Method 2: tmux capture-pane fallback ---
-if ! tmux has-session -t "$PANE" 2>/dev/null; then
+SESSION_NAME="${TMUX_SESSION:-main}"
+PANE_EXISTS=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_id}' 2>/dev/null | grep -Fx "$PANE" || true)
+if [ -z "$PANE_EXISTS" ]; then
   echo "error: pane not found"
   exit 1
 fi

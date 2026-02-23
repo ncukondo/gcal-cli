@@ -121,7 +121,8 @@ if [ -d "$WORKTREE_PATH" ]; then
   log "Removing worktree: $WORKTREE_PATH"
 
   # Kill any Claude agents running in this worktree
-  PANE_ID=$(tmux list-panes -a -F "#{pane_id} #{pane_current_path}" 2>/dev/null | \
+  SESSION_NAME="${TMUX_SESSION:-main}"
+  PANE_ID=$(tmux list-panes -t "$SESSION_NAME" -F "#{pane_id} #{pane_current_path}" 2>/dev/null | \
     grep " ${WORKTREE_PATH}$" | head -1 | cut -d' ' -f1 || true)
 
   if [ -n "$PANE_ID" ]; then

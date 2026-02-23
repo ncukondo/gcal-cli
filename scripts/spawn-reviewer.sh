@@ -65,9 +65,11 @@ WORKTREE_DIR="$WORKTREE_BASE/$BRANCH_DIR"
 if [ -d "$WORKTREE_DIR" ]; then
   CLAUDE_MD="$WORKTREE_DIR/CLAUDE.md"
   if [ -f "$CLAUDE_MD" ] && grep -q '<!-- role: review -->' "$CLAUDE_MD" 2>/dev/null; then
-    EXISTING_PANE=$(tmux list-panes -a -F "#{pane_id} #{pane_current_path}" 2>/dev/null | \
+    SESSION_NAME="${TMUX_SESSION:-main}"
+    EXISTING_PANE=$(tmux list-panes -t "$SESSION_NAME" -F "#{pane_id} #{pane_current_path}" 2>/dev/null | \
       grep " ${WORKTREE_DIR}$" | head -1 | cut -d' ' -f1 || true)
-    if [ -n "$EXISTING_PANE" ] && tmux has-session -t "$EXISTING_PANE" 2>/dev/null; then
+    PANE_EXISTS=$(tmux list-panes -t "$SESSION_NAME" -F '#{pane_id}' 2>/dev/null | grep -Fx "$EXISTING_PANE" || true)
+    if [ -n "$EXISTING_PANE" ] && [ -n "$PANE_EXISTS" ]; then
       echo "[spawn-reviewer] WARNING: Review agent already running for branch $BRANCH in pane $EXISTING_PANE. Skipping."
       exit 0
     fi

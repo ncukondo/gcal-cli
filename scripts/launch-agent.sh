@@ -26,14 +26,15 @@ if [ ! -d "$WORKTREE_DIR" ]; then
   exit 1
 fi
 
-if [ -z "${TMUX:-}" ]; then
-  echo "[$SCRIPT_NAME] ERROR: Not in a tmux session. Run: tmux new-session -s main"
+SESSION_NAME="${TMUX_SESSION:-main}"
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+  echo "[$SCRIPT_NAME] ERROR: tmux session '$SESSION_NAME' not found. Run: tmux new-session -s $SESSION_NAME"
   exit 1
 fi
 
 # --- Pane limit check ---
 MAX_PANES="${MAX_PANES:-5}"
-CURRENT_PANES=$(tmux list-panes 2>/dev/null | wc -l)
+CURRENT_PANES=$(tmux list-panes -t "$SESSION_NAME" 2>/dev/null | wc -l)
 if [ "$CURRENT_PANES" -ge "$MAX_PANES" ]; then
   echo "[$SCRIPT_NAME] ERROR: Pane limit reached ($CURRENT_PANES/$MAX_PANES). Kill an agent first."
   exit 1
@@ -48,7 +49,7 @@ mkdir -p "$WORKER_STATE_DIR"
 
 # --- 2. Split pane ---
 echo "[$SCRIPT_NAME] Splitting tmux pane..."
-PANE_ID=$(tmux split-window -h -d -c "$WORKTREE_DIR" -P -F '#{pane_id}')
+PANE_ID=$(tmux split-window -t "$SESSION_NAME" -h -d -c "$WORKTREE_DIR" -P -F '#{pane_id}')
 echo "[$SCRIPT_NAME] Agent pane: $PANE_ID"
 
 # --- 2b. Write settings with hooks (now that we have PANE_ID) ---
