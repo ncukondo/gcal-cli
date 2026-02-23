@@ -8,6 +8,13 @@ describe("registerCommands", () => {
     expect(() => registerCommands(program)).not.toThrow();
   });
 
+  it("registers the calendars command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const calendarsCmd = program.commands.find((c) => c.name() === "calendars");
+    expect(calendarsCmd).toBeDefined();
+  });
+
   it("registers the list command", () => {
     const program = new Command();
     registerCommands(program);
