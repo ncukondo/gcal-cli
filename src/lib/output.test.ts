@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CalendarEvent } from "../types/index.ts";
+import type { Calendar, CalendarEvent } from "../types/index.ts";
 import {
   formatJsonSuccess,
   formatJsonError,
@@ -7,6 +7,7 @@ import {
   formatSuccess,
   formatEventListText,
   formatSearchResultText,
+  formatCalendarListText,
 } from "./output.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -283,5 +284,62 @@ describe("formatSearchResultText", () => {
   it("returns no-results message for empty list", () => {
     const result = formatSearchResultText("nonexistent", []);
     expect(result).toContain('Found 0 events matching "nonexistent"');
+  });
+});
+
+describe("formatCalendarListText", () => {
+  const calendars: Calendar[] = [
+    {
+      id: "primary",
+      name: "Main Calendar",
+      description: null,
+      primary: true,
+      enabled: true,
+    },
+    {
+      id: "family@group.calendar.google.com",
+      name: "Family",
+      description: null,
+      primary: false,
+      enabled: true,
+    },
+    {
+      id: "work@group.calendar.google.com",
+      name: "Work Main",
+      description: null,
+      primary: false,
+      enabled: false,
+    },
+  ];
+
+  it("shows [x] for enabled calendars", () => {
+    const result = formatCalendarListText(calendars);
+    expect(result).toContain("[x] primary");
+  });
+
+  it("shows [ ] for disabled calendars", () => {
+    const result = formatCalendarListText(calendars);
+    expect(result).toContain("[ ] work@group.");
+  });
+
+  it("truncates long calendar IDs with ellipsis", () => {
+    const result = formatCalendarListText(calendars);
+    expect(result).toContain("family@group...");
+  });
+
+  it("shows (disabled) suffix for disabled calendars", () => {
+    const result = formatCalendarListText(calendars);
+    expect(result).toContain("(disabled)");
+  });
+
+  it("matches spec output format", () => {
+    const result = formatCalendarListText(calendars);
+    const expected = [
+      "Calendars:",
+      "  [x] primary           Main Calendar",
+      "  [x] family@group...   Family",
+      "  [ ] work@group.c...   Work Main (disabled)",
+    ].join("\n");
+    expect(result).toBe(expected);
   });
 });

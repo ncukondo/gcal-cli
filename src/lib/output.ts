@@ -1,4 +1,5 @@
 import type {
+  Calendar,
   CalendarEvent,
   ErrorCode,
   OutputFormat,
@@ -112,6 +113,25 @@ export function formatSearchResultText(
   const lines = [header, ""];
   for (const event of events) {
     lines.push(formatSearchEventLine(event));
+  }
+  return lines.join("\n");
+}
+
+const CALENDAR_ID_MAX = 15;
+const CALENDAR_ID_COL = 18;
+
+function truncateId(id: string): string {
+  if (id.length <= CALENDAR_ID_MAX) return id;
+  return id.slice(0, CALENDAR_ID_MAX - 3) + "...";
+}
+
+export function formatCalendarListText(calendars: Calendar[]): string {
+  const lines = ["Calendars:"];
+  for (const cal of calendars) {
+    const checkbox = cal.enabled ? "[x]" : "[ ]";
+    const id = truncateId(cal.id).padEnd(CALENDAR_ID_COL);
+    const suffix = cal.enabled ? "" : " (disabled)";
+    lines.push(`  ${checkbox} ${id}${cal.name}${suffix}`);
   }
   return lines.join("\n");
 }
