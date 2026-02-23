@@ -1,3 +1,4 @@
+import { google } from "googleapis";
 import type { ErrorCode } from "../types/index.ts";
 
 export interface AuthFsAdapter {
@@ -134,4 +135,43 @@ export async function refreshAccessToken(
     token_type: data.token_type,
     expiry_date: Date.now() + data.expires_in * 1000,
   };
+}
+
+type OAuth2Client = InstanceType<(typeof google.auth)["OAuth2"]>;
+
+export async function getAuthenticatedClient(
+  fs: AuthFsAdapter,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<OAuth2Client> {
+  const credentials = getClientCredentials(fs);
+  const tokens = loadTokens(fs);
+
+  if (!tokens) {
+    throw new AuthError(
+      "AUTH_REQUIRED",
+      "No stored tokens found. Run `gcal auth` to authenticate.",
+    );
+  }
+
+  let currentTokens = tokens;
+
+  if (isTokenExpired(tokens.expiry_date)) {
+    currentTokens = await refreshAccessToken(credentials, tokens, fetchFn);
+    saveTokens(fs, currentTokens);
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    credentials.clientId,
+    credentials.clientSecret,
+    credentials.redirectUri,
+  );
+
+  oauth2Client.setCredentials({
+    access_token: currentTokens.access_token,
+    refresh_token: currentTokens.refresh_token,
+    token_type: currentTokens.token_type,
+    expiry_date: currentTokens.expiry_date,
+  });
+
+  return oauth2Client;
 }

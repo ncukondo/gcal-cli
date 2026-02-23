@@ -5,6 +5,7 @@ import {
   saveTokens,
   isTokenExpired,
   refreshAccessToken,
+  getAuthenticatedClient,
   AuthError,
 } from "./auth.ts";
 import type { AuthFsAdapter, TokenData, ClientCredentials } from "./auth.ts";
@@ -288,5 +289,134 @@ describe("refreshAccessToken", () => {
     } catch (e) {
       expect((e as AuthError).code).toBe("AUTH_EXPIRED");
     }
+  });
+});
+
+describe("getAuthenticatedClient", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns OAuth2 client with valid token", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const validTokens = makeTokenData({
+      access_token: "valid-access-token",
+      expiry_date: Date.now() + 3600_000,
+    });
+    const clientSecretJson = JSON.stringify({
+      installed: {
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/client_secret.json" ||
+        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      readFileSync: (path: string) => {
+        if (
+          path === "/home/testuser/.config/gcal-cli/client_secret.json"
+        ) {
+          return clientSecretJson;
+        }
+        if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
+          return JSON.stringify(validTokens);
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+
+    const client = await getAuthenticatedClient(fs);
+    expect(client).toBeDefined();
+    expect(client.credentials.access_token).toBe("valid-access-token");
+  });
+
+  it("auto-refreshes expired token", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const expiredTokens = makeTokenData({
+      access_token: "expired-access-token",
+      expiry_date: Date.now() - 60_000,
+    });
+    const clientSecretJson = JSON.stringify({
+      installed: {
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+
+    let savedData = "";
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/client_secret.json" ||
+        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      readFileSync: (path: string) => {
+        if (
+          path === "/home/testuser/.config/gcal-cli/client_secret.json"
+        ) {
+          return clientSecretJson;
+        }
+        if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
+          return JSON.stringify(expiredTokens);
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+      writeFileSync: (_path: string, data: string) => {
+        savedData = data;
+      },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "refreshed-access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+    });
+
+    const client = await getAuthenticatedClient(
+      fs,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+    expect(client.credentials.access_token).toBe("refreshed-access-token");
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(savedData).toBeTruthy();
+    expect(JSON.parse(savedData).access_token).toBe(
+      "refreshed-access-token",
+    );
+  });
+
+  it("throws AUTH_REQUIRED when no tokens exist", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const clientSecretJson = JSON.stringify({
+      installed: {
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/client_secret.json",
+      readFileSync: (path: string) => {
+        if (
+          path === "/home/testuser/.config/gcal-cli/client_secret.json"
+        ) {
+          return clientSecretJson;
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+
+    await expect(getAuthenticatedClient(fs)).rejects.toThrow(AuthError);
   });
 });
