@@ -14,31 +14,31 @@ Current `src/index.ts` is a skeleton with no commands registered.
 
 ## Implementation Steps
 
-- [ ] Write test: CLI parses global `--format` / `-f` option (text/json)
-- [ ] Write test: CLI parses global `--calendar` / `-c` option (repeatable)
-- [ ] Write test: CLI parses global `--timezone` / `--tz` option
-- [ ] Write test: CLI parses global `--quiet` / `-q` option
-- [ ] Write test: unknown command prints help and exits with code 3
-- [ ] Implement global options in commander program setup
-- [ ] Write test: top-level error handler outputs structured error (text and JSON)
-- [ ] Write test: top-level error handler uses correct exit codes
-- [ ] Implement top-level error handling wrapper
-- [ ] Create `src/commands/index.ts` that registers all available commands
-- [ ] Wire command registration into `src/index.ts`
-- [ ] Verify `bun run test:unit` and `bun run lint` pass
+- [x] Write test: CLI parses global `--format` / `-f` option (text/json)
+- [x] Write test: CLI parses global `--calendar` / `-c` option (repeatable)
+- [x] Write test: CLI parses global `--timezone` / `--tz` option
+- [x] Write test: CLI parses global `--quiet` / `-q` option
+- [x] Write test: unknown command prints help and exits with code 3
+- [x] Implement global options in commander program setup
+- [x] Write test: top-level error handler outputs structured error (text and JSON)
+- [x] Write test: top-level error handler uses correct exit codes
+- [x] Implement top-level error handling wrapper
+- [x] Create `src/commands/index.ts` that registers all available commands
+- [x] Wire command registration into `src/index.ts`
+- [x] Verify `bun run test:unit` and `bun run lint` pass
 
 ## E2E Test
 
-- [ ] `gcal --help` displays help text with all global options
-- [ ] `gcal unknowncommand` exits with code 3
+- [x] `gcal --help` displays help text with all global options
+- [x] `gcal unknowncommand` exits with code 3
 
 ## Acceptance Criteria
 
-- [ ] Global options `--format`, `--calendar`, `--timezone`, `--quiet` are parsed correctly
-- [ ] `--calendar` can be specified multiple times
-- [ ] Unknown commands produce help text and exit code 3
-- [ ] Top-level errors are caught and formatted via output module
-- [ ] Exit codes follow spec: 0 success, 1 general, 2 auth, 3 argument
-- [ ] All commands can be registered via `src/commands/index.ts`
-- [ ] All unit tests pass
-- [ ] `bun run lint` passes
+- [x] Global options `--format`, `--calendar`, `--timezone`, `--quiet` are parsed correctly
+- [x] `--calendar` can be specified multiple times
+- [x] Unknown commands produce help text and exit code 3
+- [x] Top-level errors are caught and formatted via output module
+- [x] Exit codes follow spec: 0 success, 1 general, 2 auth, 3 argument
+- [x] All commands can be registered via `src/commands/index.ts`
+- [x] All unit tests pass
+- [x] `bun run lint` passes

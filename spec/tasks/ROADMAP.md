@@ -6,18 +6,18 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 3: CLI Framework & API
+### Phase 3–4: API Write + Read Commands (parallelizable)
+
+> 009b and 010–013 have no mutual dependencies — all can start in parallel.
+> Phase 5 (014–016) depends on 009b completion.
 
 10. [009b-api-write](./009b-api-write.md) — Google Calendar API wrapper: write operations (create, update, delete)
+11. [010-calendars-command](./010-calendars-command.md) — `gcal calendars` command (deps: 008, 009a, 003)
+12. [011-list-command](./011-list-command.md) — `gcal list` command (deps: 008, 009a, 002–005)
+13. [012-search-command](./012-search-command.md) — `gcal search` command (deps: 008, 009a, 002–005)
+14. [013-show-command](./013-show-command.md) — `gcal show` command (deps: 008, 009a, 005)
 
-### Phase 4: Read Commands
-
-11. [010-calendars-command](./010-calendars-command.md) — `gcal calendars` command
-12. [011-list-command](./011-list-command.md) — `gcal list` command
-13. [012-search-command](./012-search-command.md) — `gcal search` command
-14. [013-show-command](./013-show-command.md) — `gcal show` command
-
-### Phase 5: Write Commands
+### Phase 5: Write Commands (blocked by 009b)
 
 15. [014-add-command](./014-add-command.md) — `gcal add` command
 16. [015-update-command](./015-update-command.md) — `gcal update` command
