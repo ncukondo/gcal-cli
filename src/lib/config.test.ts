@@ -52,7 +52,6 @@ describe("findConfigPath", () => {
     expect(result).toBe(defaultPath);
   });
 
-
   it("returns null when no config exists", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
     const result = findConfigPath({
