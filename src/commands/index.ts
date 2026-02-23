@@ -38,6 +38,7 @@ export function registerCommands(program: Command): void {
             readFileSync: (p) => fs.readFileSync(p, "utf-8"),
           }),
         write: (msg) => process.stdout.write(msg + "\n"),
+        writeErr: (msg) => process.stderr.write(msg + "\n"),
       };
 
       const handleOpts: ListOptions = {

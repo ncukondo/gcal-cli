@@ -43,6 +43,7 @@ function makeDeps(overrides: Partial<ListHandlerDeps> = {}): ListHandlerDeps {
     listEvents: vi.fn().mockResolvedValue([]),
     loadConfig: vi.fn().mockReturnValue(makeConfig()),
     write: vi.fn(),
+    writeErr: vi.fn(),
     now: () => new Date("2026-02-23T10:00:00+09:00"),
     ...overrides,
   };
@@ -85,6 +86,32 @@ describe("resolveDateRange", () => {
     const { timeMin, timeMax } = resolveDateRange({ from: "2026-03-01" }, tz, now);
     expect(timeMin).toBe("2026-03-01T00:00:00+09:00");
     expect(timeMax).toBe("2026-03-08T00:00:00+09:00");
+  });
+
+  it("resolves today's date in target timezone, not system timezone", () => {
+    // System time is UTC 2026-02-23T22:00:00Z.
+    // In Asia/Tokyo (+09:00), that's already 2026-02-24T07:00:00.
+    // The bug: startOfDay(now()) would compute Feb 23 (system UTC date),
+    // but today in Tokyo is Feb 24.
+    const utcNow = () => new Date("2026-02-23T22:00:00Z");
+    const { timeMin, timeMax } = resolveDateRange({ today: true }, "Asia/Tokyo", utcNow);
+    expect(timeMin).toBe("2026-02-24T00:00:00+09:00");
+    expect(timeMax).toBe("2026-02-25T00:00:00+09:00");
+  });
+
+  it("resolves default --days range in target timezone when system TZ differs", () => {
+    // Same scenario: UTC 22:00 is next day in Tokyo
+    const utcNow = () => new Date("2026-02-23T22:00:00Z");
+    const { timeMin, timeMax } = resolveDateRange({}, "Asia/Tokyo", utcNow);
+    expect(timeMin).toBe("2026-02-24T00:00:00+09:00");
+    expect(timeMax).toBe("2026-03-03T00:00:00+09:00");
+  });
+
+  it("--to without --from defaults from to today and returns warning", () => {
+    const result = resolveDateRange({ to: "2026-03-15" }, tz, now);
+    expect(result.timeMin).toBe("2026-02-23T00:00:00+09:00");
+    expect(result.timeMax).toBe("2026-03-16T00:00:00+09:00");
+    expect(result.warning).toBe("--from not specified, defaulting to today");
   });
 });
 
@@ -352,6 +379,41 @@ describe("handleList", () => {
     expect(json.data.events[1].id).toBe("e2");
   });
 
+  it("fetches calendars in parallel using Promise.all", async () => {
+    const callOrder: string[] = [];
+    const mockListEvents = vi.fn().mockImplementation(async (calendarId: string) => {
+      callOrder.push(`start:${calendarId}`);
+      // Simulate async work
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      callOrder.push(`end:${calendarId}`);
+      return [];
+    });
+    const deps = makeDeps({ listEvents: mockListEvents });
+
+    await handleList(
+      { today: true, format: "text", quiet: false },
+      deps,
+    );
+
+    // Both fetches should be started before either finishes (parallel)
+    expect(callOrder[0]).toBe("start:primary");
+    expect(callOrder[1]).toBe("start:work@group.calendar.google.com");
+  });
+
+  it("--to without --from emits warning to stderr", async () => {
+    const writeErr = vi.fn();
+    const deps = makeDeps({ writeErr });
+
+    await handleList(
+      { to: "2026-03-15", format: "text", quiet: false },
+      deps,
+    );
+
+    expect(writeErr).toHaveBeenCalledWith(
+      expect.stringContaining("--from not specified, defaulting to today"),
+    );
+  });
+
   it("returns exitCode SUCCESS", async () => {
     const deps = makeDeps();
 
@@ -416,5 +478,43 @@ describe("createListCommand", () => {
     const cmd = createListCommand();
     const opt = cmd.options.find((o) => o.long === "--include-tentative");
     expect(opt).toBeDefined();
+  });
+
+  it("--today conflicts with --days and --from", () => {
+    const cmd = createListCommand();
+    const todayOpt = cmd.options.find((o) => o.long === "--today") as any;
+    expect(todayOpt).toBeDefined();
+    expect(todayOpt.conflictsWith).toContain("days");
+    expect(todayOpt.conflictsWith).toContain("from");
+  });
+
+  it("--days conflicts with --today and --from", () => {
+    const cmd = createListCommand();
+    const daysOpt = cmd.options.find((o) => o.long === "--days") as any;
+    expect(daysOpt).toBeDefined();
+    expect(daysOpt.conflictsWith).toContain("today");
+    expect(daysOpt.conflictsWith).toContain("from");
+  });
+
+  it("--from conflicts with --today and --days", () => {
+    const cmd = createListCommand();
+    const fromOpt = cmd.options.find((o) => o.long === "--from") as any;
+    expect(fromOpt).toBeDefined();
+    expect(fromOpt.conflictsWith).toContain("today");
+    expect(fromOpt.conflictsWith).toContain("days");
+  });
+
+  it("--busy conflicts with --free", () => {
+    const cmd = createListCommand();
+    const busyOpt = cmd.options.find((o) => o.long === "--busy") as any;
+    expect(busyOpt).toBeDefined();
+    expect(busyOpt.conflictsWith).toContain("free");
+  });
+
+  it("--free conflicts with --busy", () => {
+    const cmd = createListCommand();
+    const freeOpt = cmd.options.find((o) => o.long === "--free") as any;
+    expect(freeOpt).toBeDefined();
+    expect(freeOpt.conflictsWith).toContain("busy");
   });
 });

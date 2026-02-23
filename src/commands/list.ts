@@ -5,9 +5,9 @@ import type { ListEventsOptions } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters } from "../lib/filter.ts";
-import { formatEventListText, formatJsonSuccess } from "../lib/output.ts";
-import { addDays, startOfDay } from "date-fns";
-import { fromZonedTime } from "date-fns-tz";
+import { formatEventListText, formatJsonSuccess, formatTimeRange } from "../lib/output.ts";
+import { addDays } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 export interface DateRangeInput {
   today?: boolean;
@@ -19,6 +19,11 @@ export interface DateRangeInput {
 export interface DateRange {
   timeMin: string;
   timeMax: string;
+  warning?: string;
+}
+
+function todayInZone(now: Date, timezone: string): string {
+  return formatInTimeZone(now, timezone, "yyyy-MM-dd");
 }
 
 export function resolveDateRange(
@@ -27,12 +32,12 @@ export function resolveDateRange(
   now: () => Date = () => new Date(),
 ): DateRange {
   if (input.today) {
-    const todayStart = startOfDay(now());
-    const todayStartUtc = fromZonedTime(todayStart, timezone);
-    const tomorrowUtc = addDays(todayStartUtc, 1);
+    const todayStr = todayInZone(now(), timezone);
+    const todayStart = parseDateTimeInZone(todayStr, timezone);
+    const tomorrow = addDays(todayStart, 1);
     return {
-      timeMin: formatDateTimeInZone(todayStartUtc, timezone),
-      timeMax: formatDateTimeInZone(tomorrowUtc, timezone),
+      timeMin: formatDateTimeInZone(todayStart, timezone),
+      timeMax: formatDateTimeInZone(tomorrow, timezone),
     };
   }
 
@@ -47,14 +52,26 @@ export function resolveDateRange(
     };
   }
 
+  // --to without --from: default from to today with warning
+  if (input.to) {
+    const todayStr = todayInZone(now(), timezone);
+    const fromDate = parseDateTimeInZone(todayStr, timezone);
+    const toDate = addDays(parseDateTimeInZone(input.to, timezone), 1);
+    return {
+      timeMin: formatDateTimeInZone(fromDate, timezone),
+      timeMax: formatDateTimeInZone(toDate, timezone),
+      warning: "--from not specified, defaulting to today",
+    };
+  }
+
   // Default: --days (default 7)
   const days = input.days ?? 7;
-  const todayStart = startOfDay(now());
-  const todayStartUtc = fromZonedTime(todayStart, timezone);
-  const endUtc = addDays(todayStartUtc, days);
+  const todayStr = todayInZone(now(), timezone);
+  const todayStart = parseDateTimeInZone(todayStr, timezone);
+  const end = addDays(todayStart, days);
   return {
-    timeMin: formatDateTimeInZone(todayStartUtc, timezone),
-    timeMax: formatDateTimeInZone(endUtc, timezone),
+    timeMin: formatDateTimeInZone(todayStart, timezone),
+    timeMax: formatDateTimeInZone(end, timezone),
   };
 }
 
@@ -62,6 +79,7 @@ export interface ListHandlerDeps {
   listEvents: (calendarId: string, calendarName: string, options: ListEventsOptions) => Promise<CalendarEvent[]>;
   loadConfig: () => AppConfig;
   write: (msg: string) => void;
+  writeErr?: (msg: string) => void;
   now?: () => Date;
 }
 
@@ -92,9 +110,8 @@ function formatQuietText(events: CalendarEvent[]): string {
     if (event.all_day) {
       lines.push(`[All Day]     ${event.title}`);
     } else {
-      const startTime = event.start.slice(11, 16);
-      const endTime = event.end.slice(11, 16);
-      lines.push(`${startTime}-${endTime}   ${event.title}`);
+      const time = formatTimeRange(event);
+      lines.push(`${time}   ${event.title}`);
     }
   }
   return lines.join("\n");
@@ -113,17 +130,20 @@ export async function handleList(options: ListOptions, deps: ListHandlerDeps): P
 
   const dateRange = resolveDateRange(dateRangeInput, timezone, nowFn);
 
+  if (dateRange.warning && deps.writeErr) {
+    deps.writeErr(dateRange.warning);
+  }
+
   const calendars = selectCalendars(options.calendar, config);
   const apiOptions: ListEventsOptions = {
     timeMin: dateRange.timeMin,
     timeMax: dateRange.timeMax,
   };
 
-  const allEvents: CalendarEvent[] = [];
-  for (const cal of calendars) {
-    const events = await deps.listEvents(cal.id, cal.name, apiOptions);
-    allEvents.push(...events);
-  }
+  const results = await Promise.all(
+    calendars.map((cal) => deps.listEvents(cal.id, cal.name, apiOptions)),
+  );
+  const allEvents: CalendarEvent[] = results.flat();
 
   // Sort by start time
   allEvents.sort((a, b) => a.start.localeCompare(b.start));
@@ -160,6 +180,19 @@ export function createListCommand(): Command {
   cmd.option("--free", "Show only free (transparent) events");
   cmd.option("--confirmed", "Show only confirmed events");
   cmd.option("--include-tentative", "Include tentative events (excluded by default)");
+
+  // Mutual exclusivity
+  const todayOpt = cmd.options.find((o) => o.long === "--today")!;
+  const daysOpt = cmd.options.find((o) => o.long === "--days")!;
+  const fromOpt = cmd.options.find((o) => o.long === "--from")!;
+  const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
+  const freeOpt = cmd.options.find((o) => o.long === "--free")!;
+
+  todayOpt.conflicts(["days", "from"]);
+  daysOpt.conflicts(["today", "from"]);
+  fromOpt.conflicts(["today", "days"]);
+  busyOpt.conflicts(["free"]);
+  freeOpt.conflicts(["busy"]);
 
   return cmd;
 }
