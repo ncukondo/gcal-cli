@@ -784,6 +784,28 @@ describe("updateEvent", () => {
     expect(result.all_day).toBe(true);
   });
 
+  it("throws when partial time fields are provided (start without end/allDay)", async () => {
+    const api = createMockApi({});
+
+    const input = { start: "2024-03-15T09:00:00Z" } as UpdateEventInput;
+
+    await expect(updateEvent(api, "cal1", "Cal", "evt1", input)).rejects.toThrow(
+      "start, end, and allDay must all be provided together",
+    );
+    expect(api.events.patch).not.toHaveBeenCalled();
+  });
+
+  it("throws when start and end provided without allDay", async () => {
+    const api = createMockApi({});
+
+    const input = { start: "2024-03-15T09:00:00Z", end: "2024-03-15T10:00:00Z" } as UpdateEventInput;
+
+    await expect(updateEvent(api, "cal1", "Cal", "evt1", input)).rejects.toThrow(
+      "start, end, and allDay must all be provided together",
+    );
+    expect(api.events.patch).not.toHaveBeenCalled();
+  });
+
   it("maps API errors correctly", async () => {
     const patchFn = vi
       .fn()

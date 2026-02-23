@@ -55,7 +55,7 @@ export interface GoogleEventWriteBody {
   description?: string | null;
   start?: { date?: string; dateTime?: string; timeZone?: string };
   end?: { date?: string; dateTime?: string; timeZone?: string };
-  transparency?: string;
+  transparency?: Transparency;
 }
 
 export interface CreateEventInput {
@@ -68,15 +68,21 @@ export interface CreateEventInput {
   transparency?: Transparency;
 }
 
-export interface UpdateEventInput {
+interface UpdateEventBase {
   title?: string;
-  start?: string;
-  end?: string;
-  allDay?: boolean;
   timeZone?: string;
   description?: string | null;
   transparency?: Transparency;
 }
+
+interface UpdateEventTimeFields {
+  start: string;
+  end: string;
+  allDay: boolean;
+}
+
+export type UpdateEventInput = UpdateEventBase &
+  (UpdateEventTimeFields | { start?: never; end?: never; allDay?: never });
 
 // Google API response types (partial, only fields we use)
 export interface GoogleEvent {
@@ -279,6 +285,12 @@ export async function updateEvent(
   input: UpdateEventInput,
 ): Promise<CalendarEvent> {
   try {
+    const { start, end, allDay } = input as Record<string, unknown>;
+    const timeFieldCount = [start, end, allDay].filter((v) => v !== undefined).length;
+    if (timeFieldCount > 0 && timeFieldCount < 3) {
+      throw new ApiError("INVALID_ARGS", "start, end, and allDay must all be provided together");
+    }
+
     const requestBody: Partial<GoogleEventWriteBody> = {};
     if (input.title !== undefined) {
       requestBody.summary = input.title;
@@ -289,8 +301,8 @@ export async function updateEvent(
     if (input.transparency !== undefined) {
       requestBody.transparency = input.transparency;
     }
-    if (input.start !== undefined && input.end !== undefined && input.allDay !== undefined) {
-      Object.assign(requestBody, buildTimeFields(input.start, input.end, input.allDay, input.timeZone));
+    if (start !== undefined && end !== undefined && allDay !== undefined) {
+      Object.assign(requestBody, buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone));
     }
     const response = await api.events.patch({ calendarId, eventId, requestBody });
     return normalizeEvent(response.data, calendarId, calendarName);
