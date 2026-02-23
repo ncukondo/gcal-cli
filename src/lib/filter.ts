@@ -14,3 +14,20 @@ export function filterByTransparency(
 	}
 	return events;
 }
+
+export interface StatusFilterOptions {
+	confirmed?: boolean;
+	includeTentative?: boolean;
+}
+
+export function filterByStatus(
+	events: CalendarEvent[],
+	options: StatusFilterOptions,
+): CalendarEvent[] {
+	return events.filter((e) => {
+		if (e.status === "cancelled") return false;
+		if (options.confirmed) return e.status === "confirmed";
+		if (options.includeTentative) return true;
+		return e.status === "confirmed";
+	});
+}

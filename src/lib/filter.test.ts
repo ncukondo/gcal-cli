@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../types/index.ts";
-import { filterByTransparency } from "./filter.ts";
+import { filterByStatus, filterByTransparency } from "./filter.ts";
 
 function makeEvent(
 	overrides: Partial<CalendarEvent> = {},
@@ -27,6 +27,11 @@ const opaqueEvent = makeEvent({ id: "1", title: "Busy Event", transparency: "opa
 const transparentEvent = makeEvent({ id: "2", title: "Free Event", transparency: "transparent" });
 const mixedEvents = [opaqueEvent, transparentEvent];
 
+const confirmedEvent = makeEvent({ id: "10", title: "Confirmed", status: "confirmed" });
+const tentativeEvent = makeEvent({ id: "11", title: "Tentative", status: "tentative" });
+const cancelledEvent = makeEvent({ id: "12", title: "Cancelled", status: "cancelled" });
+const statusEvents = [confirmedEvent, tentativeEvent, cancelledEvent];
+
 describe("filterByTransparency", () => {
 	it("returns only opaque events when option is 'busy'", () => {
 		const result = filterByTransparency(mixedEvents, "busy");
@@ -50,6 +55,38 @@ describe("filterByTransparency", () => {
 
 	it("returns empty array when input is empty", () => {
 		const result = filterByTransparency([], "busy");
+		expect(result).toEqual([]);
+	});
+});
+
+describe("filterByStatus", () => {
+	it("excludes tentative and cancelled events by default", () => {
+		const result = filterByStatus(statusEvents, {});
+		expect(result).toEqual([confirmedEvent]);
+	});
+
+	it("returns only confirmed events when confirmed is true", () => {
+		const result = filterByStatus(statusEvents, { confirmed: true });
+		expect(result).toEqual([confirmedEvent]);
+	});
+
+	it("includes tentative events when includeTentative is true", () => {
+		const result = filterByStatus(statusEvents, { includeTentative: true });
+		expect(result).toEqual([confirmedEvent, tentativeEvent]);
+	});
+
+	it("always excludes cancelled events even with includeTentative", () => {
+		const result = filterByStatus(statusEvents, { includeTentative: true });
+		expect(result.some((e) => e.status === "cancelled")).toBe(false);
+	});
+
+	it("always excludes cancelled events even with no options", () => {
+		const result = filterByStatus([cancelledEvent], {});
+		expect(result).toEqual([]);
+	});
+
+	it("returns empty array when input is empty", () => {
+		const result = filterByStatus([], {});
 		expect(result).toEqual([]);
 	});
 });
