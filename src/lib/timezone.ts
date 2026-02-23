@@ -25,12 +25,21 @@ export function formatDateTimeInZone(date: Date, timezone: string): string {
   return formatInTimeZone(date, timezone, ISO_FORMAT);
 }
 
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
 export function parseDateTimeInZone(
   dateStr: string,
   timezone: string,
 ): Date {
-  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateStr);
-  const normalized = isDateOnly ? `${dateStr}T00:00:00` : `${dateStr}:00`;
+  let normalized: string;
+  if (DATE_ONLY_RE.test(dateStr)) {
+    normalized = `${dateStr}T00:00:00`;
+  } else if (DATETIME_NO_SECONDS_RE.test(dateStr)) {
+    normalized = `${dateStr}:00`;
+  } else {
+    normalized = dateStr;
+  }
 
   return fromZonedTime(normalized, timezone);
 }
