@@ -3,9 +3,12 @@ import type { AppConfig, CalendarConfig, OutputFormat } from "../types/index.ts"
 
 export interface FsAdapter {
   existsSync: (path: string) => boolean;
+  readFileSync: (path: string) => string;
 }
 
-export async function findConfigPath(fs: FsAdapter): Promise<string | null> {
+type FindConfigFs = Pick<FsAdapter, "existsSync">;
+
+export async function findConfigPath(fs: FindConfigFs): Promise<string | null> {
   const envPath = process.env["GCAL_CLI_CONFIG"];
   if (envPath && fs.existsSync(envPath)) {
     return envPath;
@@ -57,8 +60,18 @@ export function parseConfig(toml: string): AppConfig {
   return config;
 }
 
-export async function loadConfig(): Promise<AppConfig> {
-  throw new Error("Not implemented");
+const DEFAULT_CONFIG: AppConfig = {
+  default_format: "text",
+  calendars: [],
+};
+
+export async function loadConfig(fs: FsAdapter): Promise<AppConfig> {
+  const configPath = await findConfigPath(fs);
+  if (!configPath) {
+    return parseConfig("");
+  }
+  const content = fs.readFileSync(configPath);
+  return parseConfig(content);
 }
 
 export function getEnabledCalendars(_calendars: CalendarConfig[]): CalendarConfig[] {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   findConfigPath,
   parseConfig,
+  loadConfig,
 } from "./config.ts";
 import type { AppConfig } from "../types/index.ts";
 
@@ -124,5 +125,47 @@ timezone = "Asia/Tokyo"
 this is not valid toml [[[
 `;
     expect(() => parseConfig(badToml)).toThrow();
+  });
+});
+
+describe("loadConfig", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reads and parses config from disk", async () => {
+    const tomlContent = `
+timezone = "Asia/Tokyo"
+default_format = "json"
+
+[[calendars]]
+id = "primary"
+name = "Work"
+enabled = true
+`;
+    vi.stubEnv("GCAL_CLI_CONFIG", "/mock/config.toml");
+    const config = await loadConfig({
+      existsSync: (path: string) => path === "/mock/config.toml",
+      readFileSync: (path: string) => {
+        if (path === "/mock/config.toml") return tomlContent;
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+    expect(config.timezone).toBe("Asia/Tokyo");
+    expect(config.default_format).toBe("json");
+    expect(config.calendars).toHaveLength(1);
+    expect(config.calendars[0]!.id).toBe("primary");
+  });
+
+  it("returns default config when no config file exists", async () => {
+    vi.stubEnv("GCAL_CLI_CONFIG", "");
+    const config = await loadConfig({
+      existsSync: () => false,
+      readFileSync: () => {
+        throw new Error("Should not be called");
+      },
+    });
+    expect(config.default_format).toBe("text");
+    expect(config.calendars).toEqual([]);
   });
 });
