@@ -17,37 +17,44 @@ describe("findConfigPath", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns $GCAL_CLI_CONFIG path when env var is set", async () => {
+  it("returns $GCAL_CLI_CONFIG path when env var is set", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "/custom/path/config.toml");
-    const result = await findConfigPath({
+    const result = findConfigPath({
       existsSync: (path: string) => path === "/custom/path/config.toml",
     });
     expect(result).toBe("/custom/path/config.toml");
   });
 
-  it("returns ./gcal-cli.toml when present in cwd", async () => {
+  it("throws when $GCAL_CLI_CONFIG is set but file does not exist", () => {
+    vi.stubEnv("GCAL_CLI_CONFIG", "/missing/config.toml");
+    expect(() => findConfigPath({ existsSync: () => false })).toThrow(
+      "Config file not found: /missing/config.toml",
+    );
+  });
+
+  it("returns ./gcal-cli.toml when present in cwd", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
     const cwd = process.cwd();
     const cwdConfig = `${cwd}/gcal-cli.toml`;
-    const result = await findConfigPath({
+    const result = findConfigPath({
       existsSync: (path: string) => path === cwdConfig,
     });
     expect(result).toBe(cwdConfig);
   });
 
-  it("returns ~/.config/gcal-cli/config.toml as fallback", async () => {
+  it("returns ~/.config/gcal-cli/config.toml as fallback", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
     vi.stubEnv("HOME", "/home/testuser");
     const defaultPath = "/home/testuser/.config/gcal-cli/config.toml";
-    const result = await findConfigPath({
+    const result = findConfigPath({
       existsSync: (path: string) => path === defaultPath,
     });
     expect(result).toBe(defaultPath);
   });
 
-  it("returns null when no config exists", async () => {
+  it("returns null when no config exists", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
-    const result = await findConfigPath({
+    const result = findConfigPath({
       existsSync: () => false,
     });
     expect(result).toBeNull();
@@ -128,6 +135,19 @@ this is not valid toml [[[
 `;
     expect(() => parseConfig(badToml)).toThrow();
   });
+
+  it("throws on invalid default_format in TOML", () => {
+    const toml = `default_format = "yaml"`;
+    expect(() => parseConfig(toml)).toThrow('Invalid output format "yaml" from config file');
+  });
+
+  it("throws on invalid GCAL_CLI_FORMAT env var", () => {
+    vi.stubEnv("GCAL_CLI_FORMAT", "xml");
+    expect(() => parseConfig("")).toThrow(
+      'Invalid output format "xml" from GCAL_CLI_FORMAT env var',
+    );
+    vi.unstubAllEnvs();
+  });
 });
 
 describe("loadConfig", () => {
@@ -135,7 +155,7 @@ describe("loadConfig", () => {
     vi.unstubAllEnvs();
   });
 
-  it("reads and parses config from disk", async () => {
+  it("reads and parses config from disk", () => {
     const tomlContent = `
 timezone = "Asia/Tokyo"
 default_format = "json"
@@ -146,7 +166,7 @@ name = "Work"
 enabled = true
 `;
     vi.stubEnv("GCAL_CLI_CONFIG", "/mock/config.toml");
-    const config = await loadConfig({
+    const config = loadConfig({
       existsSync: (path: string) => path === "/mock/config.toml",
       readFileSync: (path: string) => {
         if (path === "/mock/config.toml") return tomlContent;
@@ -159,9 +179,9 @@ enabled = true
     expect(config.calendars[0]!.id).toBe("primary");
   });
 
-  it("returns default config when no config file exists", async () => {
+  it("returns default config when no config file exists", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
-    const config = await loadConfig({
+    const config = loadConfig({
       existsSync: () => false,
       readFileSync: () => {
         throw new Error("Should not be called");
@@ -186,9 +206,7 @@ describe("getEnabledCalendars", () => {
   });
 
   it("returns empty array when no calendars are enabled", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "work", name: "Work", enabled: false },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "work", name: "Work", enabled: false }];
     expect(getEnabledCalendars(calendars)).toEqual([]);
   });
 });

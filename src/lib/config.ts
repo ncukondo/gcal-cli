@@ -8,9 +8,12 @@ export interface FsAdapter {
 
 type FindConfigFs = Pick<FsAdapter, "existsSync">;
 
-export async function findConfigPath(fs: FindConfigFs): Promise<string | null> {
+export function findConfigPath(fs: FindConfigFs): string | null {
   const envPath = process.env["GCAL_CLI_CONFIG"];
-  if (envPath && fs.existsSync(envPath)) {
+  if (envPath) {
+    if (!fs.existsSync(envPath)) {
+      throw new Error(`Config file not found: ${envPath}`);
+    }
     return envPath;
   }
 
@@ -42,16 +45,17 @@ export function parseConfig(toml: string): AppConfig {
   const envFormat = process.env["GCAL_CLI_FORMAT"];
   const envTimezone = process.env["GCAL_CLI_TIMEZONE"];
 
-  const fileFormat = typeof raw["default_format"] === "string"
-    ? raw["default_format"] as OutputFormat
-    : "text";
-  const fileTimezone = typeof raw["timezone"] === "string"
-    ? raw["timezone"]
-    : undefined;
+  const fileFormat =
+    typeof raw["default_format"] === "string"
+      ? validateOutputFormat(raw["default_format"], "config file")
+      : "text";
+  const fileTimezone = typeof raw["timezone"] === "string" ? raw["timezone"] : undefined;
 
   const timezone = envTimezone || fileTimezone;
   const config: AppConfig = {
-    default_format: (envFormat as OutputFormat) || fileFormat,
+    default_format: envFormat
+      ? validateOutputFormat(envFormat, "GCAL_CLI_FORMAT env var")
+      : fileFormat,
     calendars,
   };
   if (timezone) {
@@ -60,8 +64,17 @@ export function parseConfig(toml: string): AppConfig {
   return config;
 }
 
-export async function loadConfig(fs: FsAdapter): Promise<AppConfig> {
-  const configPath = await findConfigPath(fs);
+const VALID_OUTPUT_FORMATS: readonly string[] = ["text", "json"];
+
+function validateOutputFormat(value: string, source: string): OutputFormat {
+  if (!VALID_OUTPUT_FORMATS.includes(value)) {
+    throw new Error(`Invalid output format "${value}" from ${source}. Must be "text" or "json".`);
+  }
+  return value as OutputFormat;
+}
+
+export function loadConfig(fs: FsAdapter): AppConfig {
+  const configPath = findConfigPath(fs);
   if (!configPath) {
     return parseConfig("");
   }
