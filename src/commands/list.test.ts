@@ -295,7 +295,7 @@ describe("handleList", () => {
     expect(json.data.events).toHaveLength(2);
   });
 
-  it("--quiet flag outputs minimal event info (text)", async () => {
+  it("--quiet flag outputs date prefix with minimal event info (text)", async () => {
     const events = [
       makeEvent({
         start: "2026-02-23T10:00:00+09:00",
@@ -314,11 +314,53 @@ describe("handleList", () => {
     );
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    // Quiet mode should include time and title but not calendar name or tags
-    expect(output).toContain("10:00-11:00");
+    // Quiet mode should include date prefix, time and title but not calendar name or tags
+    expect(output).toContain("02/23 10:00-11:00");
     expect(output).toContain("Meeting");
     expect(output).not.toContain("Main");
     expect(output).not.toContain("[busy]");
+  });
+
+  it("--quiet flag includes date prefix for multi-day and all-day events", async () => {
+    const events = [
+      makeEvent({
+        start: "2026-02-23T09:00:00+09:00",
+        end: "2026-02-23T10:00:00+09:00",
+        title: "Team Standup",
+      }),
+      makeEvent({
+        start: "2026-02-23T14:00:00+09:00",
+        end: "2026-02-23T15:30:00+09:00",
+        title: "Design Review",
+      }),
+      makeEvent({
+        start: "2026-02-24T10:00:00+09:00",
+        end: "2026-02-24T11:00:00+09:00",
+        title: "1on1 with Manager",
+      }),
+      makeEvent({
+        id: "allday1",
+        start: "2026-02-24",
+        end: "2026-02-25",
+        all_day: true,
+        title: "Company Holiday",
+      }),
+    ];
+    const deps = makeDeps({ listEvents: vi.fn().mockResolvedValue(events) });
+    const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
+    deps.loadConfig = vi.fn().mockReturnValue(config);
+
+    await handleList(
+      { days: 2, format: "text", quiet: true },
+      deps,
+    );
+
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const lines = output.split("\n");
+    expect(lines[0]).toBe("02/23 09:00-10:00  Team Standup");
+    expect(lines[1]).toBe("02/23 14:00-15:30  Design Review");
+    expect(lines[2]).toBe("02/24 All day      Company Holiday");
+    expect(lines[3]).toBe("02/24 10:00-11:00  1on1 with Manager");
   });
 
   it("--timezone flag overrides event display timezone", async () => {

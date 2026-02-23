@@ -110,11 +110,14 @@ function formatQuietText(events: CalendarEvent[]): string {
 
   const lines: string[] = [];
   for (const event of events) {
+    const month = event.start.slice(5, 7);
+    const day = event.start.slice(8, 10);
+    const datePrefix = `${month}/${day}`;
     if (event.all_day) {
-      lines.push(`[All Day]     ${event.title}`);
+      lines.push(`${datePrefix} All day      ${event.title}`);
     } else {
       const time = formatTimeRange(event);
-      lines.push(`${time}   ${event.title}`);
+      lines.push(`${datePrefix} ${time}  ${event.title}`);
     }
   }
   return lines.join("\n");
