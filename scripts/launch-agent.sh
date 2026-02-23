@@ -179,3 +179,6 @@ tmux send-keys -t "$PANE_ID" Enter
 
 echo "[$SCRIPT_NAME] Done. Agent running in pane $PANE_ID."
 echo "[$SCRIPT_NAME] Monitor: tmux capture-pane -t $PANE_ID -p | tail -20"
+
+# --- 5. Apply layout: main pane left, workers stacked right ---
+"$SCRIPT_DIR/apply-layout.sh" 2>/dev/null || true
