@@ -4,9 +4,10 @@ import {
   loadTokens,
   saveTokens,
   isTokenExpired,
+  refreshAccessToken,
   AuthError,
 } from "./auth.ts";
-import type { AuthFsAdapter, TokenData } from "./auth.ts";
+import type { AuthFsAdapter, TokenData, ClientCredentials } from "./auth.ts";
 
 function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
   return {
@@ -204,5 +205,89 @@ describe("isTokenExpired", () => {
   it("returns false when expiry_date is in the future", () => {
     const futureDate = Date.now() + 60_000;
     expect(isTokenExpired(futureDate)).toBe(false);
+  });
+});
+
+function makeCredentials(
+  overrides: Partial<ClientCredentials> = {},
+): ClientCredentials {
+  return {
+    clientId: "test-client-id",
+    clientSecret: "test-client-secret",
+    redirectUri: "http://localhost",
+    ...overrides,
+  };
+}
+
+function makeTokenData(overrides: Partial<TokenData> = {}): TokenData {
+  return {
+    access_token: "old-access-token",
+    refresh_token: "test-refresh-token",
+    token_type: "Bearer",
+    expiry_date: Date.now() - 60_000,
+    ...overrides,
+  };
+}
+
+describe("refreshAccessToken", () => {
+  it("calls Google token endpoint and returns updated tokens", async () => {
+    const credentials = makeCredentials();
+    const tokens = makeTokenData();
+    const newExpiry = Date.now() + 3600_000;
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "new-access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+    });
+
+    const result = await refreshAccessToken(
+      credentials,
+      tokens,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+
+    expect(result.access_token).toBe("new-access-token");
+    expect(result.refresh_token).toBe("test-refresh-token");
+    expect(result.token_type).toBe("Bearer");
+    expect(result.expiry_date).toBeGreaterThan(Date.now() - 1000);
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it("throws AUTH_EXPIRED when refresh fails", async () => {
+    const credentials = makeCredentials();
+    const tokens = makeTokenData();
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({
+          error: "invalid_grant",
+          error_description: "Token has been revoked.",
+        }),
+    });
+
+    await expect(
+      refreshAccessToken(
+        credentials,
+        tokens,
+        mockFetch as unknown as typeof globalThis.fetch,
+      ),
+    ).rejects.toThrow(AuthError);
+
+    try {
+      await refreshAccessToken(
+        credentials,
+        tokens,
+        mockFetch as unknown as typeof globalThis.fetch,
+      );
+    } catch (e) {
+      expect((e as AuthError).code).toBe("AUTH_EXPIRED");
+    }
   });
 });

@@ -94,3 +94,44 @@ export function saveTokens(fs: AuthFsAdapter, tokens: TokenData): void {
 export function isTokenExpired(expiryDate: number): boolean {
   return Date.now() >= expiryDate;
 }
+
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+
+export async function refreshAccessToken(
+  credentials: ClientCredentials,
+  tokens: TokenData,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<TokenData> {
+  const body = new URLSearchParams({
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
+    refresh_token: tokens.refresh_token,
+    grant_type: "refresh_token",
+  });
+
+  const response = await fetchFn(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    throw new AuthError(
+      "AUTH_EXPIRED",
+      "Failed to refresh access token. Please re-authenticate with `gcal auth`.",
+    );
+  }
+
+  const data = (await response.json()) as {
+    access_token: string;
+    expires_in: number;
+    token_type: string;
+  };
+
+  return {
+    access_token: data.access_token,
+    refresh_token: tokens.refresh_token,
+    token_type: data.token_type,
+    expiry_date: Date.now() + data.expires_in * 1000,
+  };
+}
