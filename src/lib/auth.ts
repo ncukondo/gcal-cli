@@ -90,3 +90,7 @@ export function saveTokens(fs: AuthFsAdapter, tokens: TokenData): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(getCredentialsPath(), JSON.stringify(tokens, null, 2));
 }
+
+export function isTokenExpired(expiryDate: number): boolean {
+  return Date.now() >= expiryDate;
+}

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { getClientCredentials, loadTokens, saveTokens, AuthError } from "./auth.ts";
+import {
+  getClientCredentials,
+  loadTokens,
+  saveTokens,
+  isTokenExpired,
+  AuthError,
+} from "./auth.ts";
 import type { AuthFsAdapter, TokenData } from "./auth.ts";
 
 function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
@@ -186,5 +192,17 @@ describe("saveTokens", () => {
       "/home/testuser/.config/gcal-cli/credentials.json",
     );
     expect(JSON.parse(writtenData)).toEqual(tokenData);
+  });
+});
+
+describe("isTokenExpired", () => {
+  it("returns true when expiry_date is in the past", () => {
+    const pastDate = Date.now() - 60_000;
+    expect(isTokenExpired(pastDate)).toBe(true);
+  });
+
+  it("returns false when expiry_date is in the future", () => {
+    const futureDate = Date.now() + 60_000;
+    expect(isTokenExpired(futureDate)).toBe(false);
   });
 });
