@@ -10,7 +10,7 @@ import {
 } from "../lib/auth.ts";
 import { formatJsonSuccess, formatJsonError } from "../lib/output.ts";
 import { ExitCode } from "../types/index.ts";
-import type { OutputFormat } from "../types/index.ts";
+import type { CommandResult, OutputFormat } from "../types/index.ts";
 
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
@@ -28,10 +28,6 @@ interface AuthHandlerOptions {
 interface HandleAuthOptions extends AuthHandlerOptions {
   openUrl: (url: string) => void;
   startOAuthFlowFn?: typeof startOAuthFlow;
-}
-
-interface CommandResult {
-  exitCode: number;
 }
 
 async function fetchUserEmail(

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   CalendarEvent,
   Calendar,
+  CommandResult,
   ErrorCode,
   SuccessResponse,
   ErrorResponse,
@@ -141,6 +142,20 @@ describe("ErrorResponse", () => {
     expect(response.success).toBe(false);
     expect(response.error.code).toBe("AUTH_REQUIRED");
     expect(response.error.message).toBe("Authentication is required");
+  });
+});
+
+describe("CommandResult", () => {
+  it("accepts an object with exitCode", () => {
+    const result: CommandResult = { exitCode: 0 };
+    expect(isType<CommandResult>(result)).toBe(true);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("accepts non-zero exit codes", () => {
+    const result: CommandResult = { exitCode: ExitCode.AUTH };
+    expect(isType<CommandResult>(result)).toBe(true);
+    expect(result.exitCode).toBe(2);
   });
 });
 
