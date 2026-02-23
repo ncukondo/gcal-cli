@@ -72,13 +72,12 @@ export function formatEventListText(events: CalendarEvent[]): string {
 
 function formatSearchEventLine(event: CalendarEvent): string {
   const date = getDateKey(event);
+  const time = formatTimeRange(event).padEnd(11);
   if (event.all_day) {
-    return `${date} [All Day]     ${event.title} (${event.calendar_name})`;
+    return `${date} ${time}  ${event.title} (${event.calendar_name})`;
   }
-  const startTime = event.start.slice(11, 16);
-  const endTime = event.end.slice(11, 16);
   const tag = transparencyTag(event);
-  return `${date} ${startTime}-${endTime}  ${event.title} (${event.calendar_name}) ${tag}`;
+  return `${date} ${time}  ${event.title} (${event.calendar_name}) ${tag}`;
 }
 
 export function formatSearchResultText(query: string, events: CalendarEvent[]): string {

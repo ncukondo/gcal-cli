@@ -132,9 +132,9 @@ describe("formatEventListText", () => {
   });
 
   it("shows correct day of week regardless of runtime timezone", () => {
-    // 2026-01-24 is a Saturday — verify getDayOfWeek uses UTC-based
-    // calculation, not runtime-local getDay() which can shift under
-    // extreme offsets (e.g. UTC+14 where UTC noon = next local day)
+    // Verify getDayOfWeek uses UTC-based calculation by checking
+    // 2026-12-31 = Thursday, not runtime-local getDay() which can
+    // shift under extreme offsets (e.g. UTC+14 where UTC noon = next local day)
     const events = [
       makeEvent({
         all_day: true,
@@ -290,7 +290,7 @@ describe("formatSearchResultText", () => {
       }),
     ];
     const result = formatSearchResultText("holiday", events);
-    expect(result).toContain("2026-01-24 [All Day]     Company Holiday (Main Calendar)");
+    expect(result).toContain("2026-01-24 [All Day]    Company Holiday (Main Calendar)");
   });
 
   it("returns no-results message for empty list", () => {
