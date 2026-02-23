@@ -6,6 +6,7 @@ import {
   listEvents,
   getEvent,
   ApiError,
+  MAX_PAGES,
   type GoogleCalendarApi,
 } from "./api.ts";
 
@@ -93,6 +94,34 @@ describe("normalizeEvent", () => {
     expect(result.created).toBe("");
     expect(result.updated).toBe("");
   });
+
+  it("falls back to defaults for invalid status values", () => {
+    const googleEvent = {
+      id: "evt4",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+      status: "INVALID_STATUS",
+      transparency: "opaque",
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.status).toBe("confirmed");
+  });
+
+  it("falls back to defaults for invalid transparency values", () => {
+    const googleEvent = {
+      id: "evt5",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+      status: "confirmed",
+      transparency: "INVALID_TRANSPARENCY",
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.transparency).toBe("opaque");
+  });
 });
 
 describe("normalizeCalendar", () => {
@@ -142,10 +171,12 @@ function createMockApi(responses: Record<string, unknown>): GoogleCalendarApi {
       }),
     },
     events: {
-      list: vi.fn().mockImplementation(async (params: { calendarId: string; pageToken?: string }) => {
-        const key = params.pageToken ?? "default";
-        return { data: responses[key] ?? responses["default"] };
-      }),
+      list: vi
+        .fn()
+        .mockImplementation(async (params: { calendarId: string; pageToken?: string }) => {
+          const key = params.pageToken ?? "default";
+          return { data: responses[key] ?? responses["default"] };
+        }),
       get: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string }) => {
         const key = params.eventId;
         const response = responses[key];
@@ -195,6 +226,22 @@ describe("listCalendars", () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("cal1");
     expect(result[1]!.id).toBe("cal2");
+  });
+
+  it("throws API_ERROR when pagination exceeds MAX_PAGES", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: {
+        list: vi.fn().mockResolvedValue({
+          data: { items: [{ id: "cal1", summary: "Cal" }], nextPageToken: "next" },
+        }),
+      },
+      events: { list: vi.fn(), get: vi.fn() },
+    };
+
+    const error = await listCalendars(api).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "API_ERROR" });
+    expect(error.message).toContain(`${MAX_PAGES}`);
   });
 });
 
@@ -311,11 +358,25 @@ describe("listEvents", () => {
   it("handles pagination", async () => {
     const api = createMockApi({
       default: {
-        items: [{ id: "evt1", summary: "First", start: { date: "2024-03-15" }, end: { date: "2024-03-16" } }],
+        items: [
+          {
+            id: "evt1",
+            summary: "First",
+            start: { date: "2024-03-15" },
+            end: { date: "2024-03-16" },
+          },
+        ],
         nextPageToken: "page2",
       },
       page2: {
-        items: [{ id: "evt2", summary: "Second", start: { date: "2024-03-16" }, end: { date: "2024-03-17" } }],
+        items: [
+          {
+            id: "evt2",
+            summary: "Second",
+            start: { date: "2024-03-16" },
+            end: { date: "2024-03-17" },
+          },
+        ],
       },
     });
 
@@ -324,6 +385,33 @@ describe("listEvents", () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("evt1");
     expect(result[1]!.id).toBe("evt2");
+  });
+
+  it("throws API_ERROR when pagination exceeds MAX_PAGES", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn().mockResolvedValue({
+          data: {
+            items: [
+              {
+                id: "evt1",
+                summary: "E",
+                start: { date: "2024-01-01" },
+                end: { date: "2024-01-02" },
+              },
+            ],
+            nextPageToken: "next",
+          },
+        }),
+        get: vi.fn(),
+      },
+    };
+
+    const error = await listEvents(api, "cal1", "Cal").catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "API_ERROR" });
+    expect(error.message).toContain(`${MAX_PAGES}`);
   });
 });
 
@@ -349,10 +437,9 @@ describe("getEvent", () => {
   it("throws NOT_FOUND for non-existent event", async () => {
     const api = createMockApi({});
 
-    await expect(getEvent(api, "cal1", "Cal", "missing")).rejects.toThrow(ApiError);
-    await expect(getEvent(api, "cal1", "Cal", "missing")).rejects.toMatchObject({
-      code: "NOT_FOUND",
-    });
+    const error = await getEvent(api, "cal1", "Cal", "missing").catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "NOT_FOUND" });
   });
 });
 
@@ -360,34 +447,28 @@ describe("API error mapping", () => {
   it("maps 401 errors to AUTH_REQUIRED", async () => {
     const api: GoogleCalendarApi = {
       calendarList: {
-        list: vi.fn().mockRejectedValue(
-          Object.assign(new Error("Unauthorized"), { code: 401 }),
-        ),
+        list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
       events: { list: vi.fn(), get: vi.fn() },
     };
 
-    await expect(listCalendars(api)).rejects.toThrow(ApiError);
-    await expect(listCalendars(api)).rejects.toMatchObject({
-      code: "AUTH_REQUIRED",
-    });
+    const error = await listCalendars(api).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
   it("maps 403 errors to AUTH_REQUIRED", async () => {
     const api: GoogleCalendarApi = {
       calendarList: { list: vi.fn() },
       events: {
-        list: vi.fn().mockRejectedValue(
-          Object.assign(new Error("Forbidden"), { code: 403 }),
-        ),
+        list: vi.fn().mockRejectedValue(Object.assign(new Error("Forbidden"), { code: 403 })),
         get: vi.fn(),
       },
     };
 
-    await expect(listEvents(api, "cal1", "Cal")).rejects.toThrow(ApiError);
-    await expect(listEvents(api, "cal1", "Cal")).rejects.toMatchObject({
-      code: "AUTH_REQUIRED",
-    });
+    const error = await listEvents(api, "cal1", "Cal").catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
   it("maps other HTTP errors to API_ERROR", async () => {
@@ -395,16 +476,15 @@ describe("API error mapping", () => {
       calendarList: { list: vi.fn() },
       events: {
         list: vi.fn(),
-        get: vi.fn().mockRejectedValue(
-          Object.assign(new Error("Internal Server Error"), { code: 500 }),
-        ),
+        get: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error("Internal Server Error"), { code: 500 })),
       },
     };
 
-    await expect(getEvent(api, "cal1", "Cal", "evt1")).rejects.toThrow(ApiError);
-    await expect(getEvent(api, "cal1", "Cal", "evt1")).rejects.toMatchObject({
-      code: "API_ERROR",
-    });
+    const error = await getEvent(api, "cal1", "Cal", "evt1").catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "API_ERROR" });
   });
 
   it("re-throws non-HTTP errors as-is", async () => {

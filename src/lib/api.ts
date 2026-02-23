@@ -1,4 +1,5 @@
-import type { Calendar, CalendarEvent, ErrorCode, EventStatus, Transparency } from "../types/index.ts";
+import * as z from "zod";
+import type { Calendar, CalendarEvent, ErrorCode } from "../types/index.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -9,6 +10,11 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+export const MAX_PAGES = 100;
+
+const EventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]).catch("confirmed");
+const TransparencySchema = z.enum(["opaque", "transparent"]).catch("opaque");
 
 // Abstraction over the Google Calendar API client for testability
 export interface GoogleCalendarApi {
@@ -29,10 +35,7 @@ export interface GoogleCalendarApi {
     }) => Promise<{
       data: { items?: GoogleEvent[]; nextPageToken?: string };
     }>;
-    get: (params: {
-      calendarId: string;
-      eventId: string;
-    }) => Promise<{ data: GoogleEvent }>;
+    get: (params: { calendarId: string; eventId: string }) => Promise<{ data: GoogleEvent }>;
   };
 }
 
@@ -76,8 +79,8 @@ export function normalizeEvent(
     calendar_id: calendarId,
     calendar_name: calendarName,
     html_link: event.htmlLink ?? "",
-    status: (event.status as EventStatus) ?? "confirmed",
-    transparency: (event.transparency as Transparency) ?? "opaque",
+    status: EventStatusSchema.parse(event.status ?? undefined),
+    transparency: TransparencySchema.parse(event.transparency ?? undefined),
     created: event.created ?? "",
     updated: event.updated ?? "",
   };
@@ -97,16 +100,19 @@ export async function listCalendars(api: GoogleCalendarApi): Promise<Calendar[]>
   try {
     const calendars: Calendar[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
 
     do {
-      const response = await api.calendarList.list(
-        pageToken ? { pageToken } : undefined,
-      );
+      if (pages >= MAX_PAGES) {
+        throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
+      }
+      const response = await api.calendarList.list(pageToken ? { pageToken } : undefined);
       const items = response.data.items ?? [];
       for (const item of items) {
         calendars.push(normalizeCalendar(item));
       }
       pageToken = response.data.nextPageToken;
+      pages++;
     } while (pageToken);
 
     return calendars;
@@ -130,8 +136,12 @@ export async function listEvents(
   try {
     const events: CalendarEvent[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
 
     do {
+      if (pages >= MAX_PAGES) {
+        throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
+      }
       const params: {
         calendarId: string;
         pageToken?: string;
@@ -156,6 +166,7 @@ export async function listEvents(
         events.push(normalizeEvent(item, calendarId, calendarName));
       }
       pageToken = response.data.nextPageToken;
+      pages++;
     } while (pageToken);
 
     return events;
@@ -179,7 +190,11 @@ export async function getEvent(
 }
 
 function isGoogleApiError(error: unknown): error is Error & { code: number } {
-  return error instanceof Error && "code" in error && typeof (error as { code: unknown }).code === "number";
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "number"
+  );
 }
 
 function mapApiError(error: unknown): never {
