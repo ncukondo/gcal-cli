@@ -233,7 +233,6 @@ describe("refreshAccessToken", () => {
   it("calls Google token endpoint and returns updated tokens", async () => {
     const credentials = makeCredentials();
     const tokens = makeTokenData();
-    const newExpiry = Date.now() + 3600_000;
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
