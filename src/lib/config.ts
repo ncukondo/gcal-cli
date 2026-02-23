@@ -69,13 +69,19 @@ export async function loadConfig(fs: FsAdapter): Promise<AppConfig> {
   return parseConfig(content);
 }
 
-export function getEnabledCalendars(_calendars: CalendarConfig[]): CalendarConfig[] {
-  throw new Error("Not implemented");
+export function getEnabledCalendars(calendars: CalendarConfig[]): CalendarConfig[] {
+  return calendars.filter((c) => c.enabled);
 }
 
 export function selectCalendars(
-  _cliCalendars: string[] | undefined,
-  _config: AppConfig,
+  cliCalendars: string[] | undefined,
+  config: AppConfig,
 ): CalendarConfig[] {
-  throw new Error("Not implemented");
+  if (cliCalendars && cliCalendars.length > 0) {
+    return cliCalendars.map((id) => {
+      const found = config.calendars.find((c) => c.id === id);
+      return found ?? { id, name: id, enabled: true };
+    });
+  }
+  return getEnabledCalendars(config.calendars);
 }

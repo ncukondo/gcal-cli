@@ -3,8 +3,10 @@ import {
   findConfigPath,
   parseConfig,
   loadConfig,
+  getEnabledCalendars,
+  selectCalendars,
 } from "./config.ts";
-import type { AppConfig } from "../types/index.ts";
+import type { AppConfig, CalendarConfig } from "../types/index.ts";
 
 describe("findConfigPath", () => {
   beforeEach(() => {
@@ -167,5 +169,60 @@ enabled = true
     });
     expect(config.default_format).toBe("text");
     expect(config.calendars).toEqual([]);
+  });
+});
+
+describe("getEnabledCalendars", () => {
+  it("returns only calendars with enabled = true", () => {
+    const calendars: CalendarConfig[] = [
+      { id: "primary", name: "Main", enabled: true },
+      { id: "work", name: "Work", enabled: false },
+      { id: "family", name: "Family", enabled: true },
+    ];
+    const result = getEnabledCalendars(calendars);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("primary");
+    expect(result[1]!.id).toBe("family");
+  });
+
+  it("returns empty array when no calendars are enabled", () => {
+    const calendars: CalendarConfig[] = [
+      { id: "work", name: "Work", enabled: false },
+    ];
+    expect(getEnabledCalendars(calendars)).toEqual([]);
+  });
+});
+
+describe("selectCalendars", () => {
+  const config: AppConfig = {
+    default_format: "text",
+    calendars: [
+      { id: "primary", name: "Main", enabled: true },
+      { id: "work", name: "Work", enabled: false },
+      { id: "family", name: "Family", enabled: true },
+    ],
+  };
+
+  it("returns CLI-specified calendars when -c provided (overrides config)", () => {
+    const result = selectCalendars(["work", "other"], config);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("work");
+    expect(result[1]!.id).toBe("other");
+  });
+
+  it("returns enabled calendars from config when no CLI override", () => {
+    const result = selectCalendars(undefined, config);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe("primary");
+    expect(result[1]!.id).toBe("family");
+  });
+
+  it("returns empty array when no CLI override and no enabled calendars", () => {
+    const emptyConfig: AppConfig = {
+      default_format: "text",
+      calendars: [{ id: "work", name: "Work", enabled: false }],
+    };
+    const result = selectCalendars(undefined, emptyConfig);
+    expect(result).toEqual([]);
   });
 });
