@@ -8,7 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 2: Auth
 
-6. [006-auth-module](./006-auth-module.md) — OAuth flow, token storage/refresh
 7. [007-auth-command](./007-auth-command.md) — `gcal auth` / `--status` / `--logout` command
 
 ### Phase 3: CLI Framework & API
@@ -40,6 +39,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 (none)
 
 ## Completed
+
+### Phase 2: Auth (partial)
+
+6. [006-auth-module](./completed/006-auth-module.md) — OAuth flow, token storage/refresh (#13)
 
 ### Phase 1: Core Library
 
