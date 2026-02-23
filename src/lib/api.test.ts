@@ -355,3 +355,66 @@ describe("getEvent", () => {
     });
   });
 });
+
+describe("API error mapping", () => {
+  it("maps 401 errors to AUTH_REQUIRED", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: {
+        list: vi.fn().mockRejectedValue(
+          Object.assign(new Error("Unauthorized"), { code: 401 }),
+        ),
+      },
+      events: { list: vi.fn(), get: vi.fn() },
+    };
+
+    await expect(listCalendars(api)).rejects.toThrow(ApiError);
+    await expect(listCalendars(api)).rejects.toMatchObject({
+      code: "AUTH_REQUIRED",
+    });
+  });
+
+  it("maps 403 errors to AUTH_REQUIRED", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn().mockRejectedValue(
+          Object.assign(new Error("Forbidden"), { code: 403 }),
+        ),
+        get: vi.fn(),
+      },
+    };
+
+    await expect(listEvents(api, "cal1", "Cal")).rejects.toThrow(ApiError);
+    await expect(listEvents(api, "cal1", "Cal")).rejects.toMatchObject({
+      code: "AUTH_REQUIRED",
+    });
+  });
+
+  it("maps other HTTP errors to API_ERROR", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn().mockRejectedValue(
+          Object.assign(new Error("Internal Server Error"), { code: 500 }),
+        ),
+      },
+    };
+
+    await expect(getEvent(api, "cal1", "Cal", "evt1")).rejects.toThrow(ApiError);
+    await expect(getEvent(api, "cal1", "Cal", "evt1")).rejects.toMatchObject({
+      code: "API_ERROR",
+    });
+  });
+
+  it("re-throws non-HTTP errors as-is", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: {
+        list: vi.fn().mockRejectedValue(new TypeError("Network error")),
+      },
+      events: { list: vi.fn(), get: vi.fn() },
+    };
+
+    await expect(listCalendars(api)).rejects.toThrow(TypeError);
+  });
+});

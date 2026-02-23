@@ -94,21 +94,25 @@ export function normalizeCalendar(calendar: GoogleCalendar): Calendar {
 }
 
 export async function listCalendars(api: GoogleCalendarApi): Promise<Calendar[]> {
-  const calendars: Calendar[] = [];
-  let pageToken: string | undefined;
+  try {
+    const calendars: Calendar[] = [];
+    let pageToken: string | undefined;
 
-  do {
-    const response = await api.calendarList.list(
-      pageToken ? { pageToken } : undefined,
-    );
-    const items = response.data.items ?? [];
-    for (const item of items) {
-      calendars.push(normalizeCalendar(item));
-    }
-    pageToken = response.data.nextPageToken;
-  } while (pageToken);
+    do {
+      const response = await api.calendarList.list(
+        pageToken ? { pageToken } : undefined,
+      );
+      const items = response.data.items ?? [];
+      for (const item of items) {
+        calendars.push(normalizeCalendar(item));
+      }
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
 
-  return calendars;
+    return calendars;
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
 }
 
 export interface ListEventsOptions {
@@ -123,37 +127,41 @@ export async function listEvents(
   calendarName: string,
   options?: ListEventsOptions,
 ): Promise<CalendarEvent[]> {
-  const events: CalendarEvent[] = [];
-  let pageToken: string | undefined;
+  try {
+    const events: CalendarEvent[] = [];
+    let pageToken: string | undefined;
 
-  do {
-    const params: {
-      calendarId: string;
-      pageToken?: string;
-      timeMin?: string;
-      timeMax?: string;
-      q?: string;
-      singleEvents: boolean;
-      orderBy: string;
-    } = {
-      calendarId,
-      singleEvents: true,
-      orderBy: "startTime",
-      ...options,
-    };
-    if (pageToken) {
-      params.pageToken = pageToken;
-    }
+    do {
+      const params: {
+        calendarId: string;
+        pageToken?: string;
+        timeMin?: string;
+        timeMax?: string;
+        q?: string;
+        singleEvents: boolean;
+        orderBy: string;
+      } = {
+        calendarId,
+        singleEvents: true,
+        orderBy: "startTime",
+        ...options,
+      };
+      if (pageToken) {
+        params.pageToken = pageToken;
+      }
 
-    const response = await api.events.list(params);
-    const items = response.data.items ?? [];
-    for (const item of items) {
-      events.push(normalizeEvent(item, calendarId, calendarName));
-    }
-    pageToken = response.data.nextPageToken;
-  } while (pageToken);
+      const response = await api.events.list(params);
+      const items = response.data.items ?? [];
+      for (const item of items) {
+        events.push(normalizeEvent(item, calendarId, calendarName));
+      }
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
 
-  return events;
+    return events;
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
 }
 
 export async function getEvent(
@@ -166,13 +174,23 @@ export async function getEvent(
     const response = await api.events.get({ calendarId, eventId });
     return normalizeEvent(response.data, calendarId, calendarName);
   } catch (error: unknown) {
-    if (isGoogleApiError(error) && error.code === 404) {
-      throw new ApiError("NOT_FOUND", `Event not found: ${eventId}`);
-    }
-    throw error;
+    mapApiError(error);
   }
 }
 
 function isGoogleApiError(error: unknown): error is Error & { code: number } {
   return error instanceof Error && "code" in error && typeof (error as { code: unknown }).code === "number";
+}
+
+function mapApiError(error: unknown): never {
+  if (isGoogleApiError(error)) {
+    if (error.code === 401 || error.code === 403) {
+      throw new ApiError("AUTH_REQUIRED", error.message);
+    }
+    if (error.code === 404) {
+      throw new ApiError("NOT_FOUND", error.message);
+    }
+    throw new ApiError("API_ERROR", error.message);
+  }
+  throw error;
 }
