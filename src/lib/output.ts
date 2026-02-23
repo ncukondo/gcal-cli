@@ -23,7 +23,7 @@ function getDayOfWeek(dateStr: string): string {
   return DAY_NAMES[date.getUTCDay()] ?? "???";
 }
 
-function formatTimeRange(event: CalendarEvent): string {
+export function formatTimeRange(event: CalendarEvent): string {
   if (event.all_day) {
     return "[All Day]";
   }
