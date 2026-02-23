@@ -66,6 +66,9 @@ export function resolveDateRange(
 
   // Default: --days (default 7)
   const days = input.days ?? 7;
+  if (days <= 0) {
+    throw new Error("--days must be a positive integer");
+  }
   const todayStr = todayInZone(now(), timezone);
   const todayStart = parseDateTimeInZone(todayStr, timezone);
   const end = addDays(todayStart, days);
@@ -140,10 +143,19 @@ export async function handleList(options: ListOptions, deps: ListHandlerDeps): P
     timeMax: dateRange.timeMax,
   };
 
-  const results = await Promise.all(
+  const writeErr = deps.writeErr ?? (() => {});
+  const settled = await Promise.allSettled(
     calendars.map((cal) => deps.listEvents(cal.id, cal.name, apiOptions)),
   );
-  const allEvents: CalendarEvent[] = results.flat();
+  const allEvents: CalendarEvent[] = [];
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i]!;
+    if (result.status === "fulfilled") {
+      allEvents.push(...result.value);
+    } else {
+      writeErr(`Warning: failed to fetch calendar "${calendars[i]!.name}": ${result.reason}`);
+    }
+  }
 
   // Sort by start time
   allEvents.sort((a, b) => a.start.localeCompare(b.start));

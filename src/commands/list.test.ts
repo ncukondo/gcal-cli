@@ -113,6 +113,14 @@ describe("resolveDateRange", () => {
     expect(result.timeMax).toBe("2026-03-16T00:00:00+09:00");
     expect(result.warning).toBe("--from not specified, defaulting to today");
   });
+
+  it("--days 0 throws an error", () => {
+    expect(() => resolveDateRange({ days: 0 }, tz, now)).toThrow("--days must be a positive integer");
+  });
+
+  it("--days -1 throws an error", () => {
+    expect(() => resolveDateRange({ days: -1 }, tz, now)).toThrow("--days must be a positive integer");
+  });
 });
 
 describe("handleList", () => {
@@ -379,7 +387,7 @@ describe("handleList", () => {
     expect(json.data.events[1].id).toBe("e2");
   });
 
-  it("fetches calendars in parallel using Promise.all", async () => {
+  it("fetches calendars in parallel", async () => {
     const callOrder: string[] = [];
     const mockListEvents = vi.fn().mockImplementation(async (calendarId: string) => {
       callOrder.push(`start:${calendarId}`);
@@ -398,6 +406,28 @@ describe("handleList", () => {
     // Both fetches should be started before either finishes (parallel)
     expect(callOrder[0]).toBe("start:primary");
     expect(callOrder[1]).toBe("start:work@group.calendar.google.com");
+  });
+
+  it("returns partial results when one calendar fails", async () => {
+    const events = [makeEvent({ id: "e1", calendar_name: "Main Calendar" })];
+    const mockListEvents = vi.fn()
+      .mockResolvedValueOnce(events)
+      .mockRejectedValueOnce(new Error("API error"));
+    const writeErr = vi.fn();
+    const deps = makeDeps({ listEvents: mockListEvents, writeErr });
+
+    const result = await handleList(
+      { today: true, format: "json", quiet: false },
+      deps,
+    );
+
+    const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
+    expect(json.data.events).toHaveLength(1);
+    expect(json.data.events[0].id).toBe("e1");
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(writeErr).toHaveBeenCalledWith(
+      expect.stringContaining("Work"),
+    );
   });
 
   it("--to without --from emits warning to stderr", async () => {
