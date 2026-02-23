@@ -19,13 +19,13 @@ function getDateKey(event: CalendarEvent): string {
 }
 
 function getDayOfWeek(dateStr: string): string {
-  const date = new Date(dateStr + "T12:00:00Z");
-  return DAY_NAMES[date.getDay()] ?? "???";
+  const date = new Date(dateStr + "T00:00:00Z");
+  return DAY_NAMES[date.getUTCDay()] ?? "???";
 }
 
 function formatTimeRange(event: CalendarEvent): string {
   if (event.all_day) {
-    return "[All Day]  ";
+    return "[All Day]";
   }
   const startTime = event.start.slice(11, 16);
   const endTime = event.end.slice(11, 16);
@@ -57,7 +57,7 @@ export function formatEventListText(events: CalendarEvent[]): string {
     first = false;
     lines.push(`${dateKey} (${getDayOfWeek(dateKey)})`);
     for (const event of groupEvents) {
-      const time = formatTimeRange(event);
+      const time = formatTimeRange(event).padEnd(11);
       if (event.all_day) {
         lines.push(`  ${time}   ${event.title} (${event.calendar_name})`);
       } else {
@@ -72,13 +72,12 @@ export function formatEventListText(events: CalendarEvent[]): string {
 
 function formatSearchEventLine(event: CalendarEvent): string {
   const date = getDateKey(event);
+  const time = formatTimeRange(event).padEnd(11);
   if (event.all_day) {
-    return `${date} [All Day]     ${event.title} (${event.calendar_name})`;
+    return `${date} ${time}  ${event.title} (${event.calendar_name})`;
   }
-  const startTime = event.start.slice(11, 16);
-  const endTime = event.end.slice(11, 16);
   const tag = transparencyTag(event);
-  return `${date} ${startTime}-${endTime}  ${event.title} (${event.calendar_name}) ${tag}`;
+  return `${date} ${time}  ${event.title} (${event.calendar_name}) ${tag}`;
 }
 
 export function formatSearchResultText(query: string, events: CalendarEvent[]): string {
@@ -129,7 +128,11 @@ export function formatEventDetailText(event: CalendarEvent): string {
   const lines: string[] = [event.title, ""];
 
   if (event.all_day) {
-    lines.push(detailLine("Date", event.start));
+    const endDate = new Date(event.end + "T00:00:00Z");
+    endDate.setUTCDate(endDate.getUTCDate() - 1);
+    const endStr = endDate.toISOString().slice(0, 10);
+    const dateValue = endStr === event.start ? event.start : `${event.start} - ${endStr}`;
+    lines.push(detailLine("Date", dateValue));
     lines.push(detailLine("Time", "All Day"));
   } else {
     const date = event.start.slice(0, 10);
