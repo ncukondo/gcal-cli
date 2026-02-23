@@ -4,8 +4,8 @@ import { listEvents } from "../lib/api.ts";
 import { applyFilters } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
 import { formatJsonSuccess, formatSearchResultText } from "../lib/output.ts";
-import { formatDateTimeInZone } from "../lib/timezone.ts";
-import type { CalendarConfig, CalendarEvent, OutputFormat } from "../types/index.ts";
+import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
+import type { CalendarConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
 const DEFAULT_SEARCH_DAYS = 30;
@@ -35,28 +35,26 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
 
   const now = new Date();
   const timeMin = opts.from
-    ? formatDateTimeInZone(new Date(opts.from + "T00:00:00"), timezone)
+    ? formatDateTimeInZone(parseDateTimeInZone(opts.from, timezone), timezone)
     : formatDateTimeInZone(now, timezone);
 
   let timeMax: string;
   if (opts.to) {
-    timeMax = formatDateTimeInZone(new Date(opts.to + "T23:59:59"), timezone);
+    timeMax = formatDateTimeInZone(parseDateTimeInZone(opts.to + "T23:59:59", timezone), timezone);
   } else {
     const days = opts.days ?? DEFAULT_SEARCH_DAYS;
-    const endDate = new Date(opts.from ? new Date(opts.from + "T00:00:00").getTime() : now.getTime());
+    const startDate = opts.from ? parseDateTimeInZone(opts.from, timezone) : now;
+    const endDate = new Date(startDate.getTime());
     endDate.setDate(endDate.getDate() + days);
     timeMax = formatDateTimeInZone(endDate, timezone);
   }
 
-  const allEvents: CalendarEvent[] = [];
-  for (const cal of calendars) {
-    const events = await listEvents(api, cal.id, cal.name, {
-      timeMin,
-      timeMax,
-      q: query,
-    });
-    allEvents.push(...events);
-  }
+  const results = await Promise.all(
+    calendars.map((cal) =>
+      listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query }),
+    ),
+  );
+  const allEvents = results.flat();
 
   const transparency: TransparencyOption = opts.busy ? "busy" : opts.free ? "free" : undefined;
   const filterOpts: FilterOptions = { transparency };

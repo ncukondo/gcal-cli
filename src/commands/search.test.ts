@@ -136,6 +136,24 @@ describe("search command", () => {
       expect(call.timeMin).toContain("2026-03-01");
       expect(call.timeMax).toContain("2026-03-31");
     });
+
+    it("--from/--to use configured timezone, not system timezone", async () => {
+      const api = makeMockApi([]);
+      // User configured timezone is Asia/Tokyo (UTC+9)
+      // If code incorrectly uses system TZ (e.g. UTC), the offset would be +00:00
+      await runSearch(api, {
+        query: "test",
+        from: "2026-03-01",
+        to: "2026-03-31",
+        timezone: "Asia/Tokyo",
+      });
+
+      const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      // timeMin should be 2026-03-01T00:00:00+09:00 (midnight in Asia/Tokyo)
+      expect(call.timeMin).toBe("2026-03-01T00:00:00+09:00");
+      // timeMax should be 2026-03-31T23:59:59+09:00 (end of day in Asia/Tokyo)
+      expect(call.timeMax).toBe("2026-03-31T23:59:59+09:00");
+    });
   });
 
   describe("multi-calendar", () => {
@@ -157,6 +175,35 @@ describe("search command", () => {
         expect.objectContaining({ calendarId: "cal2" }),
       );
     });
+
+    it("fetches calendars in parallel", async () => {
+      const callOrder: string[] = [];
+      const api = makeMockApi([]);
+      // Override events.list to track concurrency
+      (api.events.list as ReturnType<typeof vi.fn>).mockImplementation(
+        (params: { calendarId: string }) => {
+          callOrder.push(`start:${params.calendarId}`);
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              callOrder.push(`end:${params.calendarId}`);
+              resolve({ data: { items: [] } });
+            }, 10);
+          });
+        },
+      );
+
+      await runSearch(api, {
+        query: "test",
+        calendars: [
+          { id: "cal1", name: "Calendar 1", enabled: true },
+          { id: "cal2", name: "Calendar 2", enabled: true },
+        ],
+      });
+
+      // With parallel fetching, both starts happen before any end
+      expect(callOrder[0]).toBe("start:cal1");
+      expect(callOrder[1]).toBe("start:cal2");
+    });
   });
 
   describe("filtering", () => {
@@ -170,8 +217,10 @@ describe("search command", () => {
       const result = await runSearch(api, { query: "meeting", busy: true });
 
       // busy filter: only opaque; default status filter: only confirmed
-      expect(result.output.join("\n")).toContain("1 event");
-      expect(result.output.join("\n")).not.toContain("e2");
+      const text = result.output.join("\n");
+      expect(text).toContain("1 event");
+      expect(text).not.toContain("e2");
+      expect(text).not.toContain("e3");
     });
   });
 
