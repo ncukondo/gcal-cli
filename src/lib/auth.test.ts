@@ -7,6 +7,7 @@ import {
   refreshAccessToken,
   getAuthenticatedClient,
   startOAuthFlow,
+  revokeTokens,
   AuthError,
 } from "./auth.ts";
 import type { AuthFsAdapter, TokenData, ClientCredentials } from "./auth.ts";
@@ -480,5 +481,94 @@ describe("startOAuthFlow", () => {
     expect(savedData).toBeTruthy();
 
     server.close();
+  });
+});
+
+describe("revokeTokens", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("calls revocation endpoint and deletes credentials file", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const tokens = makeTokenData({ access_token: "token-to-revoke" });
+
+    let deletedPath = "";
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      readFileSync: (path: string) => {
+        if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
+          return JSON.stringify(tokens);
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+      unlinkSync: (path: string) => {
+        deletedPath = path;
+      },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+
+    await revokeTokens(
+      fs,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const fetchUrl = mockFetch.mock.calls[0]![0] as string;
+    expect(fetchUrl).toContain("oauth2.googleapis.com/revoke");
+    expect(fetchUrl).toContain("token=token-to-revoke");
+    expect(deletedPath).toBe(
+      "/home/testuser/.config/gcal-cli/credentials.json",
+    );
+  });
+
+  it("deletes credentials even when revocation endpoint fails", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const tokens = makeTokenData();
+
+    let deletedPath = "";
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      readFileSync: (path: string) => {
+        if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
+          return JSON.stringify(tokens);
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+      unlinkSync: (path: string) => {
+        deletedPath = path;
+      },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 400 });
+
+    await revokeTokens(
+      fs,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+
+    expect(deletedPath).toBe(
+      "/home/testuser/.config/gcal-cli/credentials.json",
+    );
+  });
+
+  it("succeeds silently when no tokens exist", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const fs = makeFsAdapter();
+    const mockFetch = vi.fn();
+
+    await revokeTokens(
+      fs,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

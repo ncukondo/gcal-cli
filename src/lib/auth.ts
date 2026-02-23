@@ -98,6 +98,7 @@ export function isTokenExpired(expiryDate: number): boolean {
 }
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 export async function refreshAccessToken(
   credentials: ClientCredentials,
@@ -272,4 +273,30 @@ export async function startOAuthFlow(
       resolve({ authUrl, waitForCode, server });
     });
   });
+}
+
+export async function revokeTokens(
+  fs: AuthFsAdapter,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<void> {
+  const tokens = loadTokens(fs);
+
+  if (!tokens) {
+    return;
+  }
+
+  // Best-effort revocation — delete credentials regardless
+  try {
+    await fetchFn(
+      `${GOOGLE_REVOKE_URL}?token=${tokens.access_token}`,
+      { method: "POST" },
+    );
+  } catch {
+    // Ignore revocation errors
+  }
+
+  const credPath = getCredentialsPath();
+  if (fs.existsSync(credPath)) {
+    fs.unlinkSync(credPath);
+  }
 }
