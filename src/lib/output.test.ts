@@ -278,7 +278,7 @@ describe("formatSearchResultText", () => {
 
   it("returns no-results message for empty list", () => {
     const result = formatSearchResultText("nonexistent", []);
-    expect(result).toContain('Found 0 events matching "nonexistent"');
+    expect(result).toBe('Found 0 events matching "nonexistent".');
   });
 });
 

@@ -19,7 +19,7 @@ function getDateKey(event: CalendarEvent): string {
 }
 
 function getDayOfWeek(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
+  const date = new Date(dateStr + "T12:00:00Z");
   return DAY_NAMES[date.getDay()] ?? "???";
 }
 
@@ -84,9 +84,9 @@ function formatSearchEventLine(event: CalendarEvent): string {
 export function formatSearchResultText(query: string, events: CalendarEvent[]): string {
   const count = events.length;
   const plural = count === 1 ? "event" : "events";
-  const header = `Found ${count} ${plural} matching "${query}":`;
+  if (count === 0) return `Found 0 events matching "${query}".`;
 
-  if (count === 0) return header;
+  const header = `Found ${count} ${plural} matching "${query}":`;
 
   const lines = [header, ""];
   for (const event of events) {
