@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GlobalOptions } from "./cli.ts";
-import { createProgram, resolveGlobalOptions } from "./cli.ts";
+import { createProgram, resolveGlobalOptions, handleError } from "./cli.ts";
+import type { ErrorCode } from "./types/index.ts";
+import { ExitCode } from "./types/index.ts";
 
 function parseArgs(args: string[]): GlobalOptions {
   const program = createProgram();
@@ -85,5 +87,97 @@ describe("global options", () => {
       const opts = parseArgs(["-q"]);
       expect(opts.quiet).toBe(true);
     });
+  });
+});
+
+describe("unknown command", () => {
+  it("exits with code 3 for unknown commands", () => {
+    const program = createProgram();
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    program.parse(["node", "gcal", "unknowncommand"]);
+
+    expect(exitSpy).toHaveBeenCalledWith(ExitCode.ARGUMENT);
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+});
+
+describe("handleError", () => {
+  it("outputs text error message to stderr", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    handleError(new Error("something failed"), "text");
+
+    const output = stderrSpy.mock.calls.map((c) => c[0]).join("");
+    expect(output).toContain("something failed");
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it("outputs JSON error to stderr for json format", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    handleError(new Error("auth required"), "json");
+
+    const output = stderrSpy.mock.calls.map((c) => c[0]).join("");
+    const parsed = JSON.parse(output);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error.message).toBe("auth required");
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it("exits with code 1 for general errors", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    handleError(new Error("general failure"), "text");
+
+    expect(exitSpy).toHaveBeenCalledWith(ExitCode.GENERAL);
+    exitSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("exits with code 2 for auth errors", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const error = new Error("not authenticated");
+    (error as Error & { code: ErrorCode }).code = "AUTH_REQUIRED";
+    handleError(error, "text");
+
+    expect(exitSpy).toHaveBeenCalledWith(ExitCode.AUTH);
+    exitSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("exits with code 3 for argument errors", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const error = new Error("invalid argument");
+    (error as Error & { code: ErrorCode }).code = "INVALID_ARGS";
+    handleError(error, "text");
+
+    expect(exitSpy).toHaveBeenCalledWith(ExitCode.ARGUMENT);
+    exitSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("uses API_ERROR code in JSON output for general errors", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    handleError(new Error("unexpected"), "json");
+
+    const output = stderrSpy.mock.calls.map((c) => c[0]).join("");
+    const parsed = JSON.parse(output);
+    expect(parsed.error.code).toBe("API_ERROR");
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 });

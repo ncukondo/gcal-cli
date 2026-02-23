@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 import { Command, Option } from "commander";
+import type { ErrorCode, OutputFormat } from "./types/index.ts";
+import { ExitCode } from "./types/index.ts";
+import { formatJsonError, errorCodeToExitCode } from "./lib/output.ts";
 
 export interface GlobalOptions {
   format: "text" | "json";
@@ -26,6 +29,13 @@ export function createProgram(): Command {
   program.addOption(new Option("--timezone <zone>", "Timezone (e.g., Asia/Tokyo)"));
   program.addOption(new Option("--tz <zone>", "Timezone alias").hideHelp());
 
+  // Handle unknown commands: show help and exit with code 3
+  program.on("command:*", (operands) => {
+    process.stderr.write(`error: unknown command '${operands[0]}'\n\n`);
+    program.outputHelp({ error: true });
+    process.exit(ExitCode.ARGUMENT);
+  });
+
   return program;
 }
 
@@ -38,4 +48,35 @@ export function resolveGlobalOptions(program: Command): GlobalOptions {
     timezone,
     quiet: raw.quiet,
   };
+}
+
+function getErrorCode(error: unknown): ErrorCode {
+  if (error instanceof Error && "code" in error) {
+    const code = (error as Error & { code: string }).code;
+    const validCodes: ErrorCode[] = [
+      "AUTH_REQUIRED",
+      "AUTH_EXPIRED",
+      "NOT_FOUND",
+      "INVALID_ARGS",
+      "API_ERROR",
+      "CONFIG_ERROR",
+    ];
+    if (validCodes.includes(code as ErrorCode)) {
+      return code as ErrorCode;
+    }
+  }
+  return "API_ERROR";
+}
+
+export function handleError(error: unknown, format: OutputFormat): void {
+  const errorCode = getErrorCode(error);
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (format === "json") {
+    process.stderr.write(formatJsonError(errorCode, message));
+  } else {
+    process.stderr.write(`Error: ${message}\n`);
+  }
+
+  process.exit(errorCodeToExitCode(errorCode));
 }
