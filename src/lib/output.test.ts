@@ -9,6 +9,7 @@ import {
   formatSearchResultText,
   formatCalendarListText,
   formatEventDetailText,
+  errorCodeToExitCode,
 } from "./output.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -426,5 +427,31 @@ describe("formatEventDetailText", () => {
       "Link: https://calendar.google.com/event?id=test",
     ].join("\n");
     expect(result).toBe(expected);
+  });
+});
+
+describe("errorCodeToExitCode", () => {
+  it("maps AUTH_REQUIRED to exit code 2", () => {
+    expect(errorCodeToExitCode("AUTH_REQUIRED")).toBe(2);
+  });
+
+  it("maps AUTH_EXPIRED to exit code 2", () => {
+    expect(errorCodeToExitCode("AUTH_EXPIRED")).toBe(2);
+  });
+
+  it("maps NOT_FOUND to exit code 1", () => {
+    expect(errorCodeToExitCode("NOT_FOUND")).toBe(1);
+  });
+
+  it("maps INVALID_ARGS to exit code 3", () => {
+    expect(errorCodeToExitCode("INVALID_ARGS")).toBe(3);
+  });
+
+  it("maps API_ERROR to exit code 1", () => {
+    expect(errorCodeToExitCode("API_ERROR")).toBe(1);
+  });
+
+  it("maps CONFIG_ERROR to exit code 1", () => {
+    expect(errorCodeToExitCode("CONFIG_ERROR")).toBe(1);
   });
 });

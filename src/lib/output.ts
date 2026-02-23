@@ -4,6 +4,7 @@ import type {
   ErrorCode,
   OutputFormat,
 } from "../types/index.ts";
+import { ExitCode } from "../types/index.ts";
 
 export function formatSuccess(data: unknown, format: OutputFormat): string {
   if (format === "json") {
@@ -173,4 +174,17 @@ export function formatEventDetailText(event: CalendarEvent): string {
   lines.push(`Link: ${event.html_link}`);
 
   return lines.join("\n");
+}
+
+const ERROR_CODE_EXIT_MAP: Record<ErrorCode, number> = {
+  AUTH_REQUIRED: ExitCode.AUTH,
+  AUTH_EXPIRED: ExitCode.AUTH,
+  NOT_FOUND: ExitCode.GENERAL,
+  INVALID_ARGS: ExitCode.ARGUMENT,
+  API_ERROR: ExitCode.GENERAL,
+  CONFIG_ERROR: ExitCode.GENERAL,
+};
+
+export function errorCodeToExitCode(code: ErrorCode): number {
+  return ERROR_CODE_EXIT_MAP[code];
 }
