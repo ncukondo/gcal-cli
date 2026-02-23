@@ -31,3 +31,15 @@ export function filterByStatus(
 		return e.status === "confirmed";
 	});
 }
+
+export interface FilterOptions extends StatusFilterOptions {
+	transparency?: TransparencyOption;
+}
+
+export function applyFilters(
+	events: CalendarEvent[],
+	options: FilterOptions,
+): CalendarEvent[] {
+	const afterTransparency = filterByTransparency(events, options.transparency);
+	return filterByStatus(afterTransparency, options);
+}

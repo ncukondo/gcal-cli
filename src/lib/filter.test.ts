@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../types/index.ts";
-import { filterByStatus, filterByTransparency } from "./filter.ts";
+import { applyFilters, filterByStatus, filterByTransparency } from "./filter.ts";
 
 function makeEvent(
 	overrides: Partial<CalendarEvent> = {},
@@ -87,6 +87,75 @@ describe("filterByStatus", () => {
 
 	it("returns empty array when input is empty", () => {
 		const result = filterByStatus([], {});
+		expect(result).toEqual([]);
+	});
+});
+
+describe("applyFilters", () => {
+	const busyConfirmed = makeEvent({
+		id: "20",
+		title: "Busy Confirmed",
+		transparency: "opaque",
+		status: "confirmed",
+	});
+	const busyTentative = makeEvent({
+		id: "21",
+		title: "Busy Tentative",
+		transparency: "opaque",
+		status: "tentative",
+	});
+	const freeConfirmed = makeEvent({
+		id: "22",
+		title: "Free Confirmed",
+		transparency: "transparent",
+		status: "confirmed",
+	});
+	const freeCancelled = makeEvent({
+		id: "23",
+		title: "Free Cancelled",
+		transparency: "transparent",
+		status: "cancelled",
+	});
+	const allEvents = [busyConfirmed, busyTentative, freeConfirmed, freeCancelled];
+
+	it("applies both transparency and status filters", () => {
+		const result = applyFilters(allEvents, { transparency: "busy", confirmed: true });
+		expect(result).toEqual([busyConfirmed]);
+	});
+
+	it("applies only transparency filter when no status options", () => {
+		const result = applyFilters(allEvents, { transparency: "free" });
+		expect(result).toEqual([freeConfirmed]);
+	});
+
+	it("applies only status filter when no transparency option", () => {
+		const result = applyFilters(allEvents, { includeTentative: true });
+		expect(result).toEqual([busyConfirmed, busyTentative, freeConfirmed]);
+	});
+
+	it("returns confirmed events by default (no options)", () => {
+		const result = applyFilters(allEvents, {});
+		expect(result).toEqual([busyConfirmed, freeConfirmed]);
+	});
+
+	it("handles --busy --include-tentative combination", () => {
+		const result = applyFilters(allEvents, {
+			transparency: "busy",
+			includeTentative: true,
+		});
+		expect(result).toEqual([busyConfirmed, busyTentative]);
+	});
+
+	it("returns empty array when no events match composed filters", () => {
+		const result = applyFilters(allEvents, {
+			transparency: "free",
+			confirmed: true,
+		});
+		expect(result).toEqual([freeConfirmed]);
+	});
+
+	it("returns empty array for empty input", () => {
+		const result = applyFilters([], { transparency: "busy" });
 		expect(result).toEqual([]);
 	});
 });
