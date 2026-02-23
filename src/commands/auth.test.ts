@@ -71,6 +71,88 @@ describe("handleAuth", () => {
     expect(mockServer.close).toHaveBeenCalled();
   });
 
+  it("invokes OAuth flow and outputs JSON on success", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
+
+    const mockServer = { close: vi.fn() };
+    const mockTokens = makeTokenData();
+    const mockStartOAuthFlow = vi.fn().mockResolvedValue({
+      authUrl: "https://accounts.google.com/o/oauth2/auth?test=1",
+      waitForCode: Promise.resolve(mockTokens),
+      server: mockServer,
+    });
+
+    const fs = makeFsAdapter();
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+    const openUrl = vi.fn();
+
+    const result = await handleAuth({
+      fs,
+      format: "json",
+      write,
+      openUrl,
+      fetchFn: vi.fn() as unknown as typeof globalThis.fetch,
+      startOAuthFlowFn: mockStartOAuthFlow,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const jsonOutput = output.find((msg) => msg.includes("authenticated"));
+    expect(jsonOutput).toBeDefined();
+    const json = JSON.parse(jsonOutput!);
+    expect(json.success).toBe(true);
+    expect(json.data.authenticated).toBe(true);
+    expect(mockServer.close).toHaveBeenCalled();
+  });
+
+  it("handles missing client credentials (text)", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+
+    const fs = makeFsAdapter();
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const result = await handleAuth({
+      fs,
+      format: "text",
+      write,
+      openUrl: vi.fn(),
+      fetchFn: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.AUTH);
+    expect(output.some((msg) => msg.includes("No client credentials found"))).toBe(true);
+  });
+
+  it("handles missing client credentials (json)", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+
+    const fs = makeFsAdapter();
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const result = await handleAuth({
+      fs,
+      format: "json",
+      write,
+      openUrl: vi.fn(),
+      fetchFn: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.AUTH);
+    const json = JSON.parse(output.join(""));
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe("AUTH_REQUIRED");
+  });
+
   it("shows status when already authenticated", async () => {
     vi.stubEnv("HOME", "/home/testuser");
 
@@ -373,6 +455,33 @@ describe("handleAuthLogout", () => {
 
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     expect(output.some((msg) => msg.includes("Not authenticated"))).toBe(true);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("handles case when not authenticated (json)", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+
+    const fs = makeFsAdapter();
+
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const mockFetch = vi.fn();
+
+    const result = await handleAuthLogout({
+      fs,
+      format: "json",
+      write,
+      fetchFn: mockFetch as unknown as typeof globalThis.fetch,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const json = JSON.parse(output.join(""));
+    expect(json.success).toBe(true);
+    expect(json.data.logged_out).toBe(false);
+    expect(json.data.message).toBe("Not authenticated.");
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

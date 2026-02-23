@@ -1,11 +1,22 @@
 import { Command } from "commander";
-import type { AuthFsAdapter } from "../lib/auth.ts";
-import { loadTokens, getClientCredentials, startOAuthFlow, revokeTokens } from "../lib/auth.ts";
+import * as z from "zod";
+import type { AuthFsAdapter, TokenData } from "../lib/auth.ts";
+import {
+  AuthError,
+  loadTokens,
+  getClientCredentials,
+  startOAuthFlow,
+  revokeTokens,
+} from "../lib/auth.ts";
 import { formatJsonSuccess, formatJsonError } from "../lib/output.ts";
 import { ExitCode } from "../types/index.ts";
 import type { OutputFormat } from "../types/index.ts";
 
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+
+const UserinfoSchema = z.object({
+  email: z.string().optional(),
+});
 
 interface AuthHandlerOptions {
   fs: AuthFsAdapter;
@@ -32,8 +43,9 @@ async function fetchUserEmail(
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { email?: string };
-    return data.email ?? null;
+    const parsed = UserinfoSchema.safeParse(await res.json());
+    if (!parsed.success) return null;
+    return parsed.data.email ?? null;
   } catch {
     return null;
   }
@@ -45,10 +57,24 @@ export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult
   const tokens = loadTokens(fs);
 
   if (tokens) {
-    return handleAuthStatus({ fs, format, write, fetchFn });
+    return handleAuthStatus({ fs, format, write, fetchFn, cachedTokens: tokens });
   }
 
-  const credentials = getClientCredentials(fs);
+  let credentials: ReturnType<typeof getClientCredentials>;
+  try {
+    credentials = getClientCredentials(fs);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      if (format === "json") {
+        write(formatJsonError(err.code, err.message));
+      } else {
+        write(err.message);
+      }
+      return { exitCode: ExitCode.AUTH };
+    }
+    throw err;
+  }
+
   const { authUrl, waitForCode, server } = await startOAuthFlowFn(credentials, fs, fetchFn);
 
   write(`Open this URL to authenticate:\n${authUrl}`);
@@ -67,10 +93,14 @@ export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult
   }
 }
 
-export async function handleAuthStatus(opts: AuthHandlerOptions): Promise<CommandResult> {
-  const { fs, format, write, fetchFn } = opts;
+interface AuthStatusOptions extends AuthHandlerOptions {
+  cachedTokens?: TokenData;
+}
 
-  const tokens = loadTokens(fs);
+export async function handleAuthStatus(opts: AuthStatusOptions): Promise<CommandResult> {
+  const { fs, format, write, fetchFn, cachedTokens } = opts;
+
+  const tokens = cachedTokens ?? loadTokens(fs);
 
   if (!tokens) {
     if (format === "json") {
