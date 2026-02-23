@@ -4,7 +4,7 @@ import { listCalendars, ApiError } from "../lib/api.ts";
 import { formatCalendarListText, formatJsonSuccess, formatJsonError } from "../lib/output.ts";
 import { errorCodeToExitCode } from "../lib/output.ts";
 import { ExitCode } from "../types/index.ts";
-import type { Calendar, CalendarConfig, OutputFormat } from "../types/index.ts";
+import type { Calendar, CalendarConfig, CommandResult, OutputFormat } from "../types/index.ts";
 
 interface HandleCalendarsOptions {
   api: GoogleCalendarApi;
@@ -12,10 +12,6 @@ interface HandleCalendarsOptions {
   quiet: boolean;
   write: (msg: string) => void;
   configCalendars: CalendarConfig[];
-}
-
-interface CommandResult {
-  exitCode: number;
 }
 
 function mergeCalendarsWithConfig(
