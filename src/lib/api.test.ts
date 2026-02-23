@@ -4,6 +4,8 @@ import {
   normalizeCalendar,
   listCalendars,
   listEvents,
+  getEvent,
+  ApiError,
   type GoogleCalendarApi,
 } from "./api.ts";
 
@@ -322,5 +324,34 @@ describe("listEvents", () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("evt1");
     expect(result[1]!.id).toBe("evt2");
+  });
+});
+
+describe("getEvent", () => {
+  it("returns a single normalized event by ID", async () => {
+    const api = createMockApi({
+      evt1: {
+        id: "evt1",
+        summary: "Standup",
+        start: { dateTime: "2024-03-15T09:00:00+09:00" },
+        end: { dateTime: "2024-03-15T09:30:00+09:00" },
+        status: "confirmed",
+      },
+    });
+
+    const result = await getEvent(api, "cal1", "My Cal", "evt1");
+
+    expect(result.id).toBe("evt1");
+    expect(result.title).toBe("Standup");
+    expect(result.calendar_id).toBe("cal1");
+  });
+
+  it("throws NOT_FOUND for non-existent event", async () => {
+    const api = createMockApi({});
+
+    await expect(getEvent(api, "cal1", "Cal", "missing")).rejects.toThrow(ApiError);
+    await expect(getEvent(api, "cal1", "Cal", "missing")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
   });
 });

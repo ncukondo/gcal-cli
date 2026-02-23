@@ -155,3 +155,24 @@ export async function listEvents(
 
   return events;
 }
+
+export async function getEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  calendarName: string,
+  eventId: string,
+): Promise<CalendarEvent> {
+  try {
+    const response = await api.events.get({ calendarId, eventId });
+    return normalizeEvent(response.data, calendarId, calendarName);
+  } catch (error: unknown) {
+    if (isGoogleApiError(error) && error.code === 404) {
+      throw new ApiError("NOT_FOUND", `Event not found: ${eventId}`);
+    }
+    throw error;
+  }
+}
+
+function isGoogleApiError(error: unknown): error is Error & { code: number } {
+  return error instanceof Error && "code" in error && typeof (error as { code: unknown }).code === "number";
+}
