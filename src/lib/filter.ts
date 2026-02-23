@@ -20,13 +20,19 @@ export interface StatusFilterOptions {
 	includeTentative?: boolean;
 }
 
+/**
+ * Filter events by status. Cancelled events are always excluded.
+ *
+ * - Default (no options): returns only confirmed events.
+ * - `confirmed: true`: identical to default — explicitly requesting confirmed-only.
+ * - `includeTentative: true`: returns confirmed + tentative events.
+ */
 export function filterByStatus(
 	events: CalendarEvent[],
 	options: StatusFilterOptions,
 ): CalendarEvent[] {
 	return events.filter((e) => {
 		if (e.status === "cancelled") return false;
-		// confirmed:true is intentionally identical to the default (both exclude tentative/cancelled); the flag is a no-op by design
 		if (options.confirmed) return e.status === "confirmed";
 		if (options.includeTentative) return true;
 		return e.status === "confirmed";

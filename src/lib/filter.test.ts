@@ -89,6 +89,12 @@ describe("filterByStatus", () => {
 		const result = filterByStatus([], {});
 		expect(result).toEqual([]);
 	});
+
+	it("confirmed:true produces same result as default (no options)", () => {
+		const defaultResult = filterByStatus(statusEvents, {});
+		const confirmedResult = filterByStatus(statusEvents, { confirmed: true });
+		expect(confirmedResult).toEqual(defaultResult);
+	});
 });
 
 describe("applyFilters", () => {
