@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { getClientCredentials, AuthError } from "./auth.ts";
-import type { AuthFsAdapter } from "./auth.ts";
+import { getClientCredentials, loadTokens, saveTokens, AuthError } from "./auth.ts";
+import type { AuthFsAdapter, TokenData } from "./auth.ts";
 
 function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
   return {
@@ -104,5 +104,87 @@ describe("getClientCredentials", () => {
 
     const result = getClientCredentials(fs);
     expect(result.clientId).toBe("file-client-id");
+  });
+});
+
+describe("loadTokens", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("reads tokens from credentials.json", () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const tokenData: TokenData = {
+      access_token: "access-123",
+      refresh_token: "refresh-456",
+      token_type: "Bearer",
+      expiry_date: 1706000000000,
+    };
+    const fs = makeFsAdapter({
+      existsSync: (path: string) =>
+        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      readFileSync: (path: string) => {
+        if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
+          return JSON.stringify(tokenData);
+        }
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+
+    const result = loadTokens(fs);
+    expect(result).toEqual(tokenData);
+  });
+
+  it("returns null when no credentials file exists", () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const fs = makeFsAdapter();
+
+    const result = loadTokens(fs);
+    expect(result).toBeNull();
+  });
+});
+
+describe("saveTokens", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("writes token data to credentials file", () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const tokenData: TokenData = {
+      access_token: "access-123",
+      refresh_token: "refresh-456",
+      token_type: "Bearer",
+      expiry_date: 1706000000000,
+    };
+
+    let writtenPath = "";
+    let writtenData = "";
+    let mkdirPath = "";
+    const fs = makeFsAdapter({
+      mkdirSync: (path: string) => {
+        mkdirPath = path;
+      },
+      writeFileSync: (path: string, data: string) => {
+        writtenPath = path;
+        writtenData = data;
+      },
+    });
+
+    saveTokens(fs, tokenData);
+
+    expect(mkdirPath).toBe("/home/testuser/.config/gcal-cli");
+    expect(writtenPath).toBe(
+      "/home/testuser/.config/gcal-cli/credentials.json",
+    );
+    expect(JSON.parse(writtenData)).toEqual(tokenData);
   });
 });

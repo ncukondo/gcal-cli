@@ -14,6 +14,13 @@ export interface ClientCredentials {
   redirectUri: string;
 }
 
+export interface TokenData {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expiry_date: number;
+}
+
 export class AuthError extends Error {
   constructor(
     public readonly code: ErrorCode,
@@ -64,4 +71,22 @@ export function getClientCredentials(fs: AuthFsAdapter): ClientCredentials {
     "AUTH_REQUIRED",
     "No client credentials found. Place client_secret.json in ~/.config/gcal-cli/ or set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.",
   );
+}
+
+function getCredentialsPath(): string {
+  return `${getCredentialsDir()}/credentials.json`;
+}
+
+export function loadTokens(fs: AuthFsAdapter): TokenData | null {
+  const credPath = getCredentialsPath();
+  if (!fs.existsSync(credPath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(credPath)) as TokenData;
+}
+
+export function saveTokens(fs: AuthFsAdapter, tokens: TokenData): void {
+  const dir = getCredentialsDir();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(getCredentialsPath(), JSON.stringify(tokens, null, 2));
 }
