@@ -1,6 +1,6 @@
 import type { Command } from "commander";
+import { createSearchCommand } from "./search.ts";
 
-export function registerCommands(_program: Command): void {
-  // Commands will be registered here as they are implemented.
-  // Each command module (list, search, add, etc.) will be imported and registered.
+export function registerCommands(program: Command): void {
+  program.addCommand(createSearchCommand());
 }

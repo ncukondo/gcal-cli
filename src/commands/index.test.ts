@@ -8,10 +8,10 @@ describe("registerCommands", () => {
     expect(() => registerCommands(program)).not.toThrow();
   });
 
-  it("does not add commands when none are implemented yet", () => {
+  it("registers the search command", () => {
     const program = new Command();
     registerCommands(program);
-    // Only default commands (help, version) should exist
-    expect(program.commands.length).toBe(0);
+    const names = program.commands.map((c) => c.name());
+    expect(names).toContain("search");
   });
 });
