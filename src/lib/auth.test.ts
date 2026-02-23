@@ -21,6 +21,7 @@ function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
     writeFileSync: () => {},
     mkdirSync: () => {},
     unlinkSync: () => {},
+    chmodSync: () => {},
     ...overrides,
   };
 }
@@ -44,8 +45,7 @@ describe("getClientCredentials", () => {
       },
     });
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/client_secret.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/client_secret.json",
       readFileSync: (path: string) => {
         if (path === "/home/testuser/.config/gcal-cli/client_secret.json") {
           return clientSecretJson;
@@ -102,8 +102,7 @@ describe("getClientCredentials", () => {
       },
     });
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/client_secret.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/client_secret.json",
       readFileSync: (path: string) => {
         if (path === "/home/testuser/.config/gcal-cli/client_secret.json") {
           return clientSecretJson;
@@ -135,8 +134,7 @@ describe("loadTokens", () => {
       expiry_date: 1706000000000,
     };
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/credentials.json",
       readFileSync: (path: string) => {
         if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
           return JSON.stringify(tokenData);
@@ -167,7 +165,7 @@ describe("saveTokens", () => {
     vi.unstubAllEnvs();
   });
 
-  it("writes token data to credentials file", () => {
+  it("writes token data to credentials file with 0o600 permissions", () => {
     vi.stubEnv("HOME", "/home/testuser");
     const tokenData: TokenData = {
       access_token: "access-123",
@@ -179,6 +177,8 @@ describe("saveTokens", () => {
     let writtenPath = "";
     let writtenData = "";
     let mkdirPath = "";
+    let chmodPath = "";
+    let chmodMode = 0;
     const fs = makeFsAdapter({
       mkdirSync: (path: string) => {
         mkdirPath = path;
@@ -187,15 +187,19 @@ describe("saveTokens", () => {
         writtenPath = path;
         writtenData = data;
       },
+      chmodSync: (path: string, mode: number) => {
+        chmodPath = path;
+        chmodMode = mode;
+      },
     });
 
     saveTokens(fs, tokenData);
 
     expect(mkdirPath).toBe("/home/testuser/.config/gcal-cli");
-    expect(writtenPath).toBe(
-      "/home/testuser/.config/gcal-cli/credentials.json",
-    );
+    expect(writtenPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
     expect(JSON.parse(writtenData)).toEqual(tokenData);
+    expect(chmodPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
+    expect(chmodMode).toBe(0o600);
   });
 });
 
@@ -205,15 +209,18 @@ describe("isTokenExpired", () => {
     expect(isTokenExpired(pastDate)).toBe(true);
   });
 
-  it("returns false when expiry_date is in the future", () => {
-    const futureDate = Date.now() + 60_000;
+  it("returns true when expiry_date is within the 5-minute buffer", () => {
+    const almostExpired = Date.now() + 2 * 60 * 1000; // 2 minutes from now
+    expect(isTokenExpired(almostExpired)).toBe(true);
+  });
+
+  it("returns false when expiry_date is beyond the 5-minute buffer", () => {
+    const futureDate = Date.now() + 10 * 60 * 1000; // 10 minutes from now
     expect(isTokenExpired(futureDate)).toBe(false);
   });
 });
 
-function makeCredentials(
-  overrides: Partial<ClientCredentials> = {},
-): ClientCredentials {
+function makeCredentials(overrides: Partial<ClientCredentials> = {}): ClientCredentials {
   return {
     clientId: "test-client-id",
     clientSecret: "test-client-secret",
@@ -275,11 +282,7 @@ describe("refreshAccessToken", () => {
     });
 
     await expect(
-      refreshAccessToken(
-        credentials,
-        tokens,
-        mockFetch as unknown as typeof globalThis.fetch,
-      ),
+      refreshAccessToken(credentials, tokens, mockFetch as unknown as typeof globalThis.fetch),
     ).rejects.toThrow(AuthError);
 
     try {
@@ -322,9 +325,7 @@ describe("getAuthenticatedClient", () => {
         path === "/home/testuser/.config/gcal-cli/client_secret.json" ||
         path === "/home/testuser/.config/gcal-cli/credentials.json",
       readFileSync: (path: string) => {
-        if (
-          path === "/home/testuser/.config/gcal-cli/client_secret.json"
-        ) {
+        if (path === "/home/testuser/.config/gcal-cli/client_secret.json") {
           return clientSecretJson;
         }
         if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
@@ -359,9 +360,7 @@ describe("getAuthenticatedClient", () => {
         path === "/home/testuser/.config/gcal-cli/client_secret.json" ||
         path === "/home/testuser/.config/gcal-cli/credentials.json",
       readFileSync: (path: string) => {
-        if (
-          path === "/home/testuser/.config/gcal-cli/client_secret.json"
-        ) {
+        if (path === "/home/testuser/.config/gcal-cli/client_secret.json") {
           return clientSecretJson;
         }
         if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
@@ -391,9 +390,21 @@ describe("getAuthenticatedClient", () => {
     expect(client.credentials.access_token).toBe("refreshed-access-token");
     expect(mockFetch).toHaveBeenCalledOnce();
     expect(savedData).toBeTruthy();
-    expect(JSON.parse(savedData).access_token).toBe(
-      "refreshed-access-token",
-    );
+    expect(JSON.parse(savedData).access_token).toBe("refreshed-access-token");
+  });
+
+  it("throws AUTH_REQUIRED when neither client_secret.json nor env vars exist", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+    const fs = makeFsAdapter();
+
+    await expect(getAuthenticatedClient(fs)).rejects.toThrow(AuthError);
+    try {
+      await getAuthenticatedClient(fs);
+    } catch (e) {
+      expect((e as AuthError).code).toBe("AUTH_REQUIRED");
+    }
   });
 
   it("throws AUTH_REQUIRED when no tokens exist", async () => {
@@ -407,12 +418,9 @@ describe("getAuthenticatedClient", () => {
     });
 
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/client_secret.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/client_secret.json",
       readFileSync: (path: string) => {
-        if (
-          path === "/home/testuser/.config/gcal-cli/client_secret.json"
-        ) {
+        if (path === "/home/testuser/.config/gcal-cli/client_secret.json") {
           return clientSecretJson;
         }
         throw new Error(`File not found: ${path}`);
@@ -460,27 +468,28 @@ describe("startOAuthFlow", () => {
       mockFetch as unknown as typeof globalThis.fetch,
     );
 
-    expect(authUrl).toContain("accounts.google.com");
-    expect(authUrl).toContain("client_id=test-client-id");
-    expect(authUrl).toContain("calendar.readonly");
-    expect(server).toBeDefined();
+    try {
+      expect(authUrl).toContain("accounts.google.com");
+      expect(authUrl).toContain("client_id=test-client-id");
+      expect(authUrl).toContain("calendar.readonly");
+      expect(server).toBeDefined();
 
-    // Simulate callback with auth code
-    const port = server.address();
-    const addr =
-      typeof port === "object" && port !== null ? port.port : 0;
-    const callbackUrl = `http://localhost:${String(addr)}?code=test-auth-code`;
+      // Simulate callback with auth code
+      const port = server.address();
+      const addr = typeof port === "object" && port !== null ? port.port : 0;
+      const callbackUrl = `http://localhost:${String(addr)}?code=test-auth-code`;
 
-    // Fetch the callback URL to trigger the code exchange
-    const callbackResponse = await globalThis.fetch(callbackUrl);
-    expect(callbackResponse.ok).toBe(true);
+      // Fetch the callback URL to trigger the code exchange
+      const callbackResponse = await globalThis.fetch(callbackUrl);
+      expect(callbackResponse.ok).toBe(true);
 
-    const tokens = await waitForCode;
-    expect(tokens.access_token).toBe("new-access-token");
-    expect(tokens.refresh_token).toBe("new-refresh-token");
-    expect(savedData).toBeTruthy();
-
-    server.close();
+      const tokens = await waitForCode;
+      expect(tokens.access_token).toBe("new-access-token");
+      expect(tokens.refresh_token).toBe("new-refresh-token");
+      expect(savedData).toBeTruthy();
+    } finally {
+      server.close();
+    }
   });
 });
 
@@ -493,14 +502,13 @@ describe("revokeTokens", () => {
     vi.unstubAllEnvs();
   });
 
-  it("calls revocation endpoint and deletes credentials file", async () => {
+  it("calls revocation endpoint with refresh_token and deletes credentials file", async () => {
     vi.stubEnv("HOME", "/home/testuser");
-    const tokens = makeTokenData({ access_token: "token-to-revoke" });
+    const tokens = makeTokenData({ refresh_token: "refresh-token-to-revoke" });
 
     let deletedPath = "";
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/credentials.json",
       readFileSync: (path: string) => {
         if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
           return JSON.stringify(tokens);
@@ -514,18 +522,13 @@ describe("revokeTokens", () => {
 
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
 
-    await revokeTokens(
-      fs,
-      mockFetch as unknown as typeof globalThis.fetch,
-    );
+    await revokeTokens(fs, mockFetch as unknown as typeof globalThis.fetch);
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const fetchUrl = mockFetch.mock.calls[0]![0] as string;
     expect(fetchUrl).toContain("oauth2.googleapis.com/revoke");
-    expect(fetchUrl).toContain("token=token-to-revoke");
-    expect(deletedPath).toBe(
-      "/home/testuser/.config/gcal-cli/credentials.json",
-    );
+    expect(fetchUrl).toContain("token=refresh-token-to-revoke");
+    expect(deletedPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
   });
 
   it("deletes credentials even when revocation endpoint fails", async () => {
@@ -534,8 +537,7 @@ describe("revokeTokens", () => {
 
     let deletedPath = "";
     const fs = makeFsAdapter({
-      existsSync: (path: string) =>
-        path === "/home/testuser/.config/gcal-cli/credentials.json",
+      existsSync: (path: string) => path === "/home/testuser/.config/gcal-cli/credentials.json",
       readFileSync: (path: string) => {
         if (path === "/home/testuser/.config/gcal-cli/credentials.json") {
           return JSON.stringify(tokens);
@@ -549,14 +551,9 @@ describe("revokeTokens", () => {
 
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 400 });
 
-    await revokeTokens(
-      fs,
-      mockFetch as unknown as typeof globalThis.fetch,
-    );
+    await revokeTokens(fs, mockFetch as unknown as typeof globalThis.fetch);
 
-    expect(deletedPath).toBe(
-      "/home/testuser/.config/gcal-cli/credentials.json",
-    );
+    expect(deletedPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
   });
 
   it("succeeds silently when no tokens exist", async () => {
@@ -564,10 +561,7 @@ describe("revokeTokens", () => {
     const fs = makeFsAdapter();
     const mockFetch = vi.fn();
 
-    await revokeTokens(
-      fs,
-      mockFetch as unknown as typeof globalThis.fetch,
-    );
+    await revokeTokens(fs, mockFetch as unknown as typeof globalThis.fetch);
 
     expect(mockFetch).not.toHaveBeenCalled();
   });

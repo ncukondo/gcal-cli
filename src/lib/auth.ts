@@ -8,6 +8,7 @@ export interface AuthFsAdapter {
   writeFileSync: (path: string, data: string) => void;
   mkdirSync: (path: string, options?: { recursive: boolean }) => void;
   unlinkSync: (path: string) => void;
+  chmodSync: (path: string, mode: number) => void;
 }
 
 export interface ClientCredentials {
@@ -90,11 +91,15 @@ export function loadTokens(fs: AuthFsAdapter): TokenData | null {
 export function saveTokens(fs: AuthFsAdapter, tokens: TokenData): void {
   const dir = getCredentialsDir();
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(getCredentialsPath(), JSON.stringify(tokens, null, 2));
+  const credPath = getCredentialsPath();
+  fs.writeFileSync(credPath, JSON.stringify(tokens, null, 2));
+  fs.chmodSync(credPath, 0o600);
 }
 
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
 export function isTokenExpired(expiryDate: number): boolean {
-  return Date.now() >= expiryDate;
+  return Date.now() >= expiryDate - EXPIRY_BUFFER_MS;
 }
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -200,6 +205,9 @@ export async function startOAuthFlow(
     server.listen(0, () => {
       const addr = server.address();
       const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      // Override redirect_uri with the ephemeral port assigned by the OS.
+      // Google OAuth requires the redirect_uri in the token exchange to match
+      // the one used when generating the auth URL, so we bind both to this port.
       const redirectUri = `http://localhost:${String(port)}`;
 
       const oauth2Client = new google.auth.OAuth2(
@@ -239,7 +247,10 @@ export async function startOAuthFlow(
             });
 
             if (!tokenResponse.ok) {
-              throw new AuthError("AUTH_REQUIRED", "Failed to exchange authorization code for tokens.");
+              throw new AuthError(
+                "AUTH_REQUIRED",
+                "Failed to exchange authorization code for tokens.",
+              );
             }
 
             const data = (await tokenResponse.json()) as {
@@ -259,7 +270,9 @@ export async function startOAuthFlow(
             saveTokens(fs, tokens);
 
             res.writeHead(200, { "Content-Type": "text/html" });
-            res.end("<html><body><h1>Authentication successful!</h1><p>You can close this window.</p></body></html>");
+            res.end(
+              "<html><body><h1>Authentication successful!</h1><p>You can close this window.</p></body></html>",
+            );
 
             resolveCode(tokens);
           } catch (err) {
@@ -287,10 +300,7 @@ export async function revokeTokens(
 
   // Best-effort revocation — delete credentials regardless
   try {
-    await fetchFn(
-      `${GOOGLE_REVOKE_URL}?token=${tokens.access_token}`,
-      { method: "POST" },
-    );
+    await fetchFn(`${GOOGLE_REVOKE_URL}?token=${tokens.refresh_token}`, { method: "POST" });
   } catch {
     // Ignore revocation errors
   }
