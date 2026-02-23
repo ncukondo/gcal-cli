@@ -73,4 +73,10 @@ describe("parseDateTimeInZone", () => {
     // 2026-01-24T10:00 in America/New_York (EST, -05:00) = 2026-01-24T15:00:00.000Z
     expect(result.toISOString()).toBe("2026-01-24T15:00:00.000Z");
   });
+
+  it("parses datetime with seconds", () => {
+    const result = parseDateTimeInZone("2026-01-24T10:00:00", "Asia/Tokyo");
+    // 2026-01-24T10:00:00 in Asia/Tokyo = 2026-01-24T01:00:00.000Z
+    expect(result.toISOString()).toBe("2026-01-24T01:00:00.000Z");
+  });
 });

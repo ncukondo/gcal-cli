@@ -21,6 +21,7 @@ export function resolveTimezone(cliTz?: string, configTz?: string): string {
 
 const ISO_FORMAT = "yyyy-MM-dd'T'HH:mm:ssxxx";
 
+// Expects a pre-validated timezone; callers should use resolveTimezone first.
 export function formatDateTimeInZone(date: Date, timezone: string): string {
   return formatInTimeZone(date, timezone, ISO_FORMAT);
 }
@@ -28,6 +29,7 @@ export function formatDateTimeInZone(date: Date, timezone: string): string {
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
+// Expects a pre-validated timezone; callers should use resolveTimezone first.
 export function parseDateTimeInZone(
   dateStr: string,
   timezone: string,
