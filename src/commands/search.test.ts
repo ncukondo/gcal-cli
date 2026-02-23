@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { CalendarEvent } from "../types/index.ts";
-import { handleSearch } from "./search.ts";
+import { createSearchCommand, handleSearch } from "./search.ts";
 import type { SearchHandlerOptions } from "./search.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -209,9 +209,9 @@ describe("search command", () => {
   describe("filtering", () => {
     it("filters by transparency and status", async () => {
       const events = [
-        makeEvent({ id: "e1", transparency: "opaque", status: "confirmed" }),
-        makeEvent({ id: "e2", transparency: "transparent", status: "confirmed" }),
-        makeEvent({ id: "e3", transparency: "opaque", status: "tentative" }),
+        makeEvent({ id: "e1", title: "Confirmed Meeting", transparency: "opaque", status: "confirmed" }),
+        makeEvent({ id: "e2", title: "Cancelled Meeting", transparency: "transparent", status: "confirmed" }),
+        makeEvent({ id: "e3", title: "Tentative Meeting", transparency: "opaque", status: "tentative" }),
       ];
       const api = makeMockApi(events);
       const result = await runSearch(api, { query: "meeting", busy: true });
@@ -219,8 +219,9 @@ describe("search command", () => {
       // busy filter: only opaque; default status filter: only confirmed
       const text = result.output.join("\n");
       expect(text).toContain("1 event");
-      expect(text).not.toContain("e2");
-      expect(text).not.toContain("e3");
+      expect(text).toContain("Confirmed Meeting");
+      expect(text).not.toContain("Cancelled Meeting");
+      expect(text).not.toContain("Tentative Meeting");
     });
   });
 
@@ -273,6 +274,48 @@ describe("search command", () => {
       const api = makeMockApi([]);
       const result = await runSearch(api, { query: "test" });
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe("option conflicts", () => {
+    function parseSearch(args: string[]): { error: string | null } {
+      const cmd = createSearchCommand();
+      // Prevent Commander from calling process.exit on error
+      cmd.exitOverride();
+      try {
+        cmd.parse(["node", "search", ...args]);
+        return { error: null };
+      } catch (e: unknown) {
+        return { error: (e as Error).message };
+      }
+    }
+
+    it("rejects --to and --days together", () => {
+      const result = parseSearch(["test", "--to", "2026-03-01", "--days", "60"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("rejects --days and --from together", () => {
+      const result = parseSearch(["test", "--days", "60", "--from", "2026-03-01"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("rejects --days and --to together", () => {
+      const result = parseSearch(["test", "--days", "60", "--to", "2026-03-31"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("allows --from and --to together", () => {
+      const result = parseSearch(["test", "--from", "2026-03-01", "--to", "2026-03-31"]);
+      expect(result.error).toBeNull();
+    });
+
+    it("allows --days alone", () => {
+      const result = parseSearch(["test", "--days", "60"]);
+      expect(result.error).toBeNull();
     });
   });
 });

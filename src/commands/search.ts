@@ -85,6 +85,15 @@ export function createSearchCommand(): Command {
   cmd.option("--from <date>", "Start date for search range");
   cmd.option("--to <date>", "End date for search range");
   cmd.option("--days <n>", "Search within next n days (default: 30)", Number.parseInt);
+
+  // --days is mutually exclusive with --from and --to
+  const daysOpt = cmd.options.find((o) => o.long === "--days")!;
+  const fromOpt = cmd.options.find((o) => o.long === "--from")!;
+  const toOpt = cmd.options.find((o) => o.long === "--to")!;
+  daysOpt.conflicts(["from", "to"]);
+  fromOpt.conflicts(["days"]);
+  toOpt.conflicts(["days"]);
+
   cmd.option("--busy", "Show only busy (opaque) events");
   cmd.option("--free", "Show only free (transparent) events");
   cmd.option("--confirmed", "Show only confirmed events");
