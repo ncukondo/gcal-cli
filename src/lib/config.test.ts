@@ -52,6 +52,16 @@ describe("findConfigPath", () => {
     expect(result).toBe(defaultPath);
   });
 
+  it("treats empty string GCAL_CLI_CONFIG same as unset", () => {
+    vi.stubEnv("GCAL_CLI_CONFIG", "");
+    const cwdConfig = `${process.cwd()}/gcal-cli.toml`;
+    const result = findConfigPath({
+      existsSync: (path: string) => path === cwdConfig,
+    });
+    // Empty string should NOT throw "Config file not found" — it falls through to cwd lookup
+    expect(result).toBe(cwdConfig);
+  });
+
   it("returns null when no config exists", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
     const result = findConfigPath({
@@ -99,6 +109,16 @@ enabled = false
     expect(config.timezone).toBeUndefined();
     expect(config.default_format).toBe("text");
     expect(config.calendars).toEqual([]);
+  });
+
+  it("handles empty string safely without relying on TOML parser", () => {
+    // Guard: parseConfig("") must return safe defaults even if smol-toml
+    // changes its empty-string behavior in a future version
+    const config = parseConfig("");
+    expect(config).toEqual({
+      default_format: "text",
+      calendars: [],
+    });
   });
 
   it("respects GCAL_CLI_FORMAT env var", () => {
@@ -233,6 +253,26 @@ describe("selectCalendars", () => {
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("primary");
     expect(result[1]!.id).toBe("family");
+  });
+
+  it("uses short label as name for unknown calendar IDs with @", () => {
+    const result = selectCalendars(["work@group.calendar.google.com"], config);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("work@group.calendar.google.com");
+    expect(result[0]!.name).toBe("work");
+    expect(result[0]!.enabled).toBe(true);
+  });
+
+  it("uses full id as name for unknown calendar IDs without @", () => {
+    const result = selectCalendars(["primary"], config);
+    // "primary" exists in config, so it uses the config name
+    expect(result[0]!.name).toBe("Main");
+  });
+
+  it("uses full id as name for simple unknown calendar IDs", () => {
+    const result = selectCalendars(["mycal"], config);
+    expect(result[0]!.id).toBe("mycal");
+    expect(result[0]!.name).toBe("mycal");
   });
 
   it("returns empty array when no CLI override and no enabled calendars", () => {

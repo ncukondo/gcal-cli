@@ -32,7 +32,7 @@ export function findConfigPath(fs: FindConfigFs): string | null {
 }
 
 export function parseConfig(toml: string): AppConfig {
-  const raw = parseToml(toml);
+  const raw = toml.trim() === "" ? {} : parseToml(toml);
 
   const calendars: CalendarConfig[] = Array.isArray(raw["calendars"])
     ? (raw["calendars"] as Record<string, unknown>[]).map((c) => ({
@@ -86,6 +86,11 @@ export function getEnabledCalendars(calendars: CalendarConfig[]): CalendarConfig
   return calendars.filter((c) => c.enabled);
 }
 
+export function calendarIdToName(id: string): string {
+  const atIndex = id.indexOf("@");
+  return atIndex > 0 ? id.substring(0, atIndex) : id;
+}
+
 export function selectCalendars(
   cliCalendars: string[] | undefined,
   config: AppConfig,
@@ -93,7 +98,7 @@ export function selectCalendars(
   if (cliCalendars && cliCalendars.length > 0) {
     return cliCalendars.map((id) => {
       const found = config.calendars.find((c) => c.id === id);
-      return found ?? { id, name: id, enabled: true };
+      return found ?? { id, name: calendarIdToName(id), enabled: true };
     });
   }
   return getEnabledCalendars(config.calendars);
