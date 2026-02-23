@@ -1,6 +1,7 @@
-import type { AppConfig, CalendarConfig } from "../types/index.ts";
+import { parse as parseToml } from "smol-toml";
+import type { AppConfig, CalendarConfig, OutputFormat } from "../types/index.ts";
 
-interface FsAdapter {
+export interface FsAdapter {
   existsSync: (path: string) => boolean;
 }
 
@@ -24,8 +25,36 @@ export async function findConfigPath(fs: FsAdapter): Promise<string | null> {
   return null;
 }
 
-export function parseConfig(_toml: string): AppConfig {
-  throw new Error("Not implemented");
+export function parseConfig(toml: string): AppConfig {
+  const raw = parseToml(toml);
+
+  const calendars: CalendarConfig[] = Array.isArray(raw["calendars"])
+    ? (raw["calendars"] as Record<string, unknown>[]).map((c) => ({
+        id: String(c["id"]),
+        name: String(c["name"]),
+        enabled: Boolean(c["enabled"]),
+      }))
+    : [];
+
+  const envFormat = process.env["GCAL_CLI_FORMAT"];
+  const envTimezone = process.env["GCAL_CLI_TIMEZONE"];
+
+  const fileFormat = typeof raw["default_format"] === "string"
+    ? raw["default_format"] as OutputFormat
+    : "text";
+  const fileTimezone = typeof raw["timezone"] === "string"
+    ? raw["timezone"]
+    : undefined;
+
+  const timezone = envTimezone || fileTimezone;
+  const config: AppConfig = {
+    default_format: (envFormat as OutputFormat) || fileFormat,
+    calendars,
+  };
+  if (timezone) {
+    config.timezone = timezone;
+  }
+  return config;
 }
 
 export async function loadConfig(): Promise<AppConfig> {
