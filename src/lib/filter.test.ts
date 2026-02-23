@@ -146,7 +146,7 @@ describe("applyFilters", () => {
 		expect(result).toEqual([busyConfirmed, busyTentative]);
 	});
 
-	it("returns empty array when no events match composed filters", () => {
+	it("applies composed filters to return only matching events", () => {
 		const result = applyFilters(allEvents, {
 			transparency: "free",
 			confirmed: true,
