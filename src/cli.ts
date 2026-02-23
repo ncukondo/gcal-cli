@@ -1,8 +1,10 @@
-#!/usr/bin/env bun
-import { Command, Option } from "commander";
+import { Command } from "commander";
+import { enum as zenum } from "zod";
 import type { ErrorCode, OutputFormat } from "./types/index.ts";
 import { ExitCode } from "./types/index.ts";
 import { formatJsonError, errorCodeToExitCode } from "./lib/output.ts";
+
+const FormatSchema = zenum(["text", "json"]);
 
 export interface GlobalOptions {
   format: "text" | "json";
@@ -24,10 +26,8 @@ export function createProgram(): Command {
     .version("0.1.0")
     .option("-f, --format <format>", "Output format: text | json", "text")
     .option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, [])
-    .option("-q, --quiet", "Minimal output", false);
-
-  program.addOption(new Option("--timezone <zone>", "Timezone (e.g., Asia/Tokyo)"));
-  program.addOption(new Option("--tz <zone>", "Timezone alias").hideHelp());
+    .option("-q, --quiet", "Minimal output", false)
+    .option("--tz, --timezone <zone>", "Timezone (e.g., Asia/Tokyo)");
 
   // Handle unknown commands: show help and exit with code 3
   program.on("command:*", (operands) => {
@@ -41,11 +41,17 @@ export function createProgram(): Command {
 
 export function resolveGlobalOptions(program: Command): GlobalOptions {
   const raw = program.opts();
-  const timezone = raw.timezone ?? raw.tz;
+
+  const formatResult = FormatSchema.safeParse(raw.format);
+  if (!formatResult.success) {
+    process.stderr.write(`error: invalid format '${raw.format}'. Must be 'text' or 'json'.\n`);
+    process.exit(ExitCode.ARGUMENT);
+  }
+
   return {
-    format: raw.format,
+    format: formatResult.data,
     calendar: raw.calendar,
-    timezone,
+    timezone: raw.timezone,
     quiet: raw.quiet,
   };
 }
