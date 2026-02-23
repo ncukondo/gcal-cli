@@ -131,6 +131,23 @@ describe("formatEventListText", () => {
     expect(result).toContain("[busy]");
   });
 
+  it("shows correct day of week regardless of runtime timezone", () => {
+    // 2026-01-24 is a Saturday — verify getDayOfWeek uses UTC-based
+    // calculation, not runtime-local getDay() which can shift under
+    // extreme offsets (e.g. UTC+14 where UTC noon = next local day)
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-12-31",
+        end: "2027-01-01",
+        title: "New Year Eve",
+      }),
+    ];
+    const result = formatEventListText(events);
+    // 2026-12-31 is a Thursday
+    expect(result).toContain("2026-12-31 (Thu)");
+  });
+
   it("does not show transparency tag for all-day events", () => {
     const events = [
       makeEvent({
@@ -364,6 +381,16 @@ describe("formatEventDetailText", () => {
     });
     const result = formatEventDetailText(event);
     expect(result).toContain("All Day");
+  });
+
+  it("shows date range for multi-day all-day events (end exclusive)", () => {
+    const event = makeEvent({
+      all_day: true,
+      start: "2026-01-24",
+      end: "2026-01-26", // Google exclusive end = 2 day event (24th-25th)
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("2026-01-24 - 2026-01-25");
   });
 
   it("shows calendar name", () => {
