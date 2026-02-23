@@ -32,7 +32,6 @@ export function filterByStatus(
 ): CalendarEvent[] {
   return events.filter((e) => {
     if (e.status === "cancelled") return false;
-    // confirmed:true is intentionally identical to the default (both exclude tentative/cancelled); the flag is a no-op by design
     if (options.confirmed) return e.status === "confirmed";
     if (options.includeTentative) return true;
     return e.status === "confirmed";
