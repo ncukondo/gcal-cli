@@ -6,6 +6,7 @@ import {
   isTokenExpired,
   refreshAccessToken,
   getAuthenticatedClient,
+  startOAuthFlow,
   AuthError,
 } from "./auth.ts";
 import type { AuthFsAdapter, TokenData, ClientCredentials } from "./auth.ts";
@@ -418,5 +419,66 @@ describe("getAuthenticatedClient", () => {
     });
 
     await expect(getAuthenticatedClient(fs)).rejects.toThrow(AuthError);
+  });
+});
+
+describe("startOAuthFlow", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("starts local server and generates auth URL", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    const credentials = makeCredentials();
+
+    let savedData = "";
+    const fs = makeFsAdapter({
+      writeFileSync: (_path: string, data: string) => {
+        savedData = data;
+      },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "new-access-token",
+          refresh_token: "new-refresh-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+    });
+
+    const { authUrl, waitForCode, server } = await startOAuthFlow(
+      credentials,
+      fs,
+      mockFetch as unknown as typeof globalThis.fetch,
+    );
+
+    expect(authUrl).toContain("accounts.google.com");
+    expect(authUrl).toContain("client_id=test-client-id");
+    expect(authUrl).toContain("calendar.readonly");
+    expect(server).toBeDefined();
+
+    // Simulate callback with auth code
+    const port = server.address();
+    const addr =
+      typeof port === "object" && port !== null ? port.port : 0;
+    const callbackUrl = `http://localhost:${String(addr)}?code=test-auth-code`;
+
+    // Fetch the callback URL to trigger the code exchange
+    const callbackResponse = await globalThis.fetch(callbackUrl);
+    expect(callbackResponse.ok).toBe(true);
+
+    const tokens = await waitForCode;
+    expect(tokens.access_token).toBe("new-access-token");
+    expect(tokens.refresh_token).toBe("new-refresh-token");
+    expect(savedData).toBeTruthy();
+
+    server.close();
   });
 });

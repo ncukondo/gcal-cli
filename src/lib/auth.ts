@@ -1,3 +1,4 @@
+import http from "node:http";
 import { google } from "googleapis";
 import type { ErrorCode } from "../types/index.ts";
 
@@ -174,4 +175,101 @@ export async function getAuthenticatedClient(
   });
 
   return oauth2Client;
+}
+
+const OAUTH_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+];
+
+export interface OAuthFlowResult {
+  authUrl: string;
+  waitForCode: Promise<TokenData>;
+  server: http.Server;
+}
+
+export async function startOAuthFlow(
+  credentials: ClientCredentials,
+  fs: AuthFsAdapter,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<OAuthFlowResult> {
+  return new Promise((resolve) => {
+    const server = http.createServer();
+
+    server.listen(0, () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      const redirectUri = `http://localhost:${String(port)}`;
+
+      const oauth2Client = new google.auth.OAuth2(
+        credentials.clientId,
+        credentials.clientSecret,
+        redirectUri,
+      );
+
+      const authUrl = oauth2Client.generateAuthUrl({
+        access_type: "offline",
+        scope: OAUTH_SCOPES,
+        prompt: "consent",
+      });
+
+      const waitForCode = new Promise<TokenData>((resolveCode, rejectCode) => {
+        server.on("request", async (req, res) => {
+          const url = new URL(req.url ?? "/", `http://localhost:${String(port)}`);
+          const code = url.searchParams.get("code");
+
+          if (!code) {
+            res.writeHead(400, { "Content-Type": "text/html" });
+            res.end("<html><body><h1>Error: No authorization code received.</h1></body></html>");
+            return;
+          }
+
+          try {
+            const tokenResponse = await fetchFn(GOOGLE_TOKEN_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                code,
+                client_id: credentials.clientId,
+                client_secret: credentials.clientSecret,
+                redirect_uri: redirectUri,
+                grant_type: "authorization_code",
+              }).toString(),
+            });
+
+            if (!tokenResponse.ok) {
+              throw new AuthError("AUTH_REQUIRED", "Failed to exchange authorization code for tokens.");
+            }
+
+            const data = (await tokenResponse.json()) as {
+              access_token: string;
+              refresh_token: string;
+              expires_in: number;
+              token_type: string;
+            };
+
+            const tokens: TokenData = {
+              access_token: data.access_token,
+              refresh_token: data.refresh_token,
+              token_type: data.token_type,
+              expiry_date: Date.now() + data.expires_in * 1000,
+            };
+
+            saveTokens(fs, tokens);
+
+            res.writeHead(200, { "Content-Type": "text/html" });
+            res.end("<html><body><h1>Authentication successful!</h1><p>You can close this window.</p></body></html>");
+
+            resolveCode(tokens);
+          } catch (err) {
+            res.writeHead(500, { "Content-Type": "text/html" });
+            res.end("<html><body><h1>Authentication failed.</h1></body></html>");
+            rejectCode(err);
+          }
+        });
+      });
+
+      resolve({ authUrl, waitForCode, server });
+    });
+  });
 }
