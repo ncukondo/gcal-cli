@@ -79,4 +79,23 @@ describe("parseDateTimeInZone", () => {
     // 2026-01-24T10:00:00 in Asia/Tokyo = 2026-01-24T01:00:00.000Z
     expect(result.toISOString()).toBe("2026-01-24T01:00:00.000Z");
   });
+
+  it("throws on invalid date string", () => {
+    expect(() => parseDateTimeInZone("not-a-date", "Asia/Tokyo")).toThrow(
+      "Invalid date string: not-a-date",
+    );
+  });
+
+  it("parses offset-aware ISO string without double-applying timezone", () => {
+    // String already has +09:00 offset — should parse directly, not re-interpret in timezone
+    const result = parseDateTimeInZone("2026-01-24T10:00:00+09:00", "America/New_York");
+    // +09:00 means UTC is 2026-01-24T01:00:00.000Z regardless of the timezone parameter
+    expect(result.toISOString()).toBe("2026-01-24T01:00:00.000Z");
+  });
+
+  it("parses Z-terminated ISO string without double-applying timezone", () => {
+    // String with Z suffix — should parse directly as UTC
+    const result = parseDateTimeInZone("2026-01-24T10:00:00Z", "Asia/Tokyo");
+    expect(result.toISOString()).toBe("2026-01-24T10:00:00.000Z");
+  });
 });

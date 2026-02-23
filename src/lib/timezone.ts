@@ -28,12 +28,22 @@ export function formatDateTimeInZone(date: Date, timezone: string): string {
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const OFFSET_RE = /(?:[+-]\d{2}:\d{2}|Z)$/;
 
 // Expects a pre-validated timezone; callers should use resolveTimezone first.
 export function parseDateTimeInZone(
   dateStr: string,
   timezone: string,
 ): Date {
+  // If the string already contains a timezone offset, parse directly
+  if (OFFSET_RE.test(dateStr)) {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error(`Invalid date string: ${dateStr}`);
+    }
+    return date;
+  }
+
   let normalized: string;
   if (DATE_ONLY_RE.test(dateStr)) {
     normalized = `${dateStr}T00:00:00`;
@@ -43,5 +53,9 @@ export function parseDateTimeInZone(
     normalized = dateStr;
   }
 
-  return fromZonedTime(normalized, timezone);
+  const result = fromZonedTime(normalized, timezone);
+  if (Number.isNaN(result.getTime())) {
+    throw new Error(`Invalid date string: ${dateStr}`);
+  }
+  return result;
 }
