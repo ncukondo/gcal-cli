@@ -92,4 +92,10 @@ describe("parseDateTimeInZone", () => {
     // +09:00 means UTC is 2026-01-24T01:00:00.000Z regardless of the timezone parameter
     expect(result.toISOString()).toBe("2026-01-24T01:00:00.000Z");
   });
+
+  it("parses Z-terminated ISO string without double-applying timezone", () => {
+    // String with Z suffix — should parse directly as UTC
+    const result = parseDateTimeInZone("2026-01-24T10:00:00Z", "Asia/Tokyo");
+    expect(result.toISOString()).toBe("2026-01-24T10:00:00.000Z");
+  });
 });

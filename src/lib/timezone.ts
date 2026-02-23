@@ -28,7 +28,7 @@ export function formatDateTimeInZone(date: Date, timezone: string): string {
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-const OFFSET_RE = /[+-]\d{2}:\d{2}$|Z$/;
+const OFFSET_RE = /(?:[+-]\d{2}:\d{2}|Z)$/;
 
 // Expects a pre-validated timezone; callers should use resolveTimezone first.
 export function parseDateTimeInZone(
