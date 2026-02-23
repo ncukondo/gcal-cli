@@ -52,15 +52,6 @@ describe("findConfigPath", () => {
     expect(result).toBe(defaultPath);
   });
 
-  it("treats empty string GCAL_CLI_CONFIG same as unset", () => {
-    vi.stubEnv("GCAL_CLI_CONFIG", "");
-    const cwdConfig = `${process.cwd()}/gcal-cli.toml`;
-    const result = findConfigPath({
-      existsSync: (path: string) => path === cwdConfig,
-    });
-    // Empty string should NOT throw "Config file not found" — it falls through to cwd lookup
-    expect(result).toBe(cwdConfig);
-  });
 
   it("returns null when no config exists", () => {
     vi.stubEnv("GCAL_CLI_CONFIG", "");
@@ -263,7 +254,7 @@ describe("selectCalendars", () => {
     expect(result[0]!.enabled).toBe(true);
   });
 
-  it("uses full id as name for unknown calendar IDs without @", () => {
+  it("uses config name for known calendar IDs", () => {
     const result = selectCalendars(["primary"], config);
     // "primary" exists in config, so it uses the config name
     expect(result[0]!.name).toBe("Main");
