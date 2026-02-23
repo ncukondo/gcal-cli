@@ -8,6 +8,7 @@ import {
   formatEventListText,
   formatSearchResultText,
   formatCalendarListText,
+  formatEventDetailText,
 } from "./output.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -339,6 +340,90 @@ describe("formatCalendarListText", () => {
       "  [x] primary           Main Calendar",
       "  [x] family@group...   Family",
       "  [ ] work@group.c...   Work Main (disabled)",
+    ].join("\n");
+    expect(result).toBe(expected);
+  });
+});
+
+describe("formatEventDetailText", () => {
+  it("shows event title as header", () => {
+    const event = makeEvent({ title: "Team Meeting" });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("Team Meeting");
+  });
+
+  it("shows date and time for timed events", () => {
+    const event = makeEvent({
+      start: "2026-01-24T10:00:00+09:00",
+      end: "2026-01-24T11:00:00+09:00",
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("2026-01-24");
+    expect(result).toContain("10:00 - 11:00");
+  });
+
+  it("shows All Day for all-day events", () => {
+    const event = makeEvent({
+      all_day: true,
+      start: "2026-01-24",
+      end: "2026-01-25",
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("All Day");
+  });
+
+  it("shows calendar name", () => {
+    const event = makeEvent({ calendar_name: "Work Calendar" });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("Work Calendar");
+  });
+
+  it("shows status and transparency", () => {
+    const event = makeEvent({
+      status: "confirmed",
+      transparency: "transparent",
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("confirmed");
+    expect(result).toContain("free");
+  });
+
+  it("shows description when present", () => {
+    const event = makeEvent({ description: "Discuss Q1 goals" });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("Discuss Q1 goals");
+  });
+
+  it("omits description line when null", () => {
+    const event = makeEvent({ description: null });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Description:");
+  });
+
+  it("shows full detail format", () => {
+    const event = makeEvent({
+      title: "Team Meeting",
+      start: "2026-01-24T10:00:00+09:00",
+      end: "2026-01-24T11:00:00+09:00",
+      all_day: false,
+      calendar_name: "Main Calendar",
+      status: "confirmed",
+      transparency: "opaque",
+      description: "Weekly sync",
+      html_link: "https://calendar.google.com/event?id=test",
+    });
+    const result = formatEventDetailText(event);
+    const expected = [
+      "Team Meeting",
+      "",
+      "Date:         2026-01-24",
+      "Time:         10:00 - 11:00",
+      "Calendar:     Main Calendar",
+      "Status:       confirmed",
+      "Availability: busy",
+      "Description:  Weekly sync",
+      "",
+      "Link: https://calendar.google.com/event?id=test",
     ].join("\n");
     expect(result).toBe(expected);
   });

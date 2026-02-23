@@ -135,3 +135,42 @@ export function formatCalendarListText(calendars: Calendar[]): string {
   }
   return lines.join("\n");
 }
+
+const DETAIL_LABEL_WIDTH = 14;
+
+function detailLine(label: string, value: string): string {
+  return `${label}:`.padEnd(DETAIL_LABEL_WIDTH) + value;
+}
+
+export function formatEventDetailText(event: CalendarEvent): string {
+  const lines: string[] = [event.title, ""];
+
+  if (event.all_day) {
+    lines.push(detailLine("Date", event.start));
+    lines.push(detailLine("Time", "All Day"));
+  } else {
+    const date = event.start.slice(0, 10);
+    const startTime = event.start.slice(11, 16);
+    const endTime = event.end.slice(11, 16);
+    lines.push(detailLine("Date", date));
+    lines.push(detailLine("Time", `${startTime} - ${endTime}`));
+  }
+
+  lines.push(detailLine("Calendar", event.calendar_name));
+  lines.push(detailLine("Status", event.status));
+  lines.push(
+    detailLine(
+      "Availability",
+      event.transparency === "transparent" ? "free" : "busy",
+    ),
+  );
+
+  if (event.description !== null) {
+    lines.push(detailLine("Description", event.description));
+  }
+
+  lines.push("");
+  lines.push(`Link: ${event.html_link}`);
+
+  return lines.join("\n");
+}
