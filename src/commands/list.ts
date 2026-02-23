@@ -4,7 +4,7 @@ import { ExitCode } from "../types/index.ts";
 import type { ListEventsOptions } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
-import { applyFilters, type TransparencyOption } from "../lib/filter.ts";
+import { applyFilters } from "../lib/filter.ts";
 import { formatEventListText, formatJsonSuccess } from "../lib/output.ts";
 import { addDays, startOfDay } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
