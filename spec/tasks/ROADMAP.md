@@ -6,14 +6,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 1: Core Library (no Google API dependency, unit-testable)
-
-1. [001-types](./001-types.md) — Expand type definitions (Event, Calendar, Error types)
-2. [002-timezone](./002-timezone.md) — Timezone resolution module (CLI > config > system)
-3. [003-config](./003-config.md) — TOML config management (parsing, discovery, calendar selection)
-4. [004-filter](./004-filter.md) — Event filtering (busy/free, confirmed/tentative)
-5. [005-output](./005-output.md) — Enhance output formatting (date grouping, JSON envelope, error codes)
-
 ### Phase 2: Auth
 
 6. [006-auth-module](./006-auth-module.md) — OAuth flow, token storage/refresh
@@ -45,4 +37,14 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
+(none)
+
 ## Completed
+
+### Phase 1: Core Library
+
+1. [001-types](./completed/001-types.md) — Expand type definitions (#1)
+2. [002-timezone](./completed/002-timezone.md) — Timezone resolution module (#2)
+3. [003-config](./completed/003-config.md) — TOML config management (#3)
+4. [004-filter](./completed/004-filter.md) — Event filtering (#4)
+5. [005-output](./completed/005-output.md) — Enhance output formatting (#5)
