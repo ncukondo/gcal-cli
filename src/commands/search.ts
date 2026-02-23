@@ -1,0 +1,96 @@
+import { Command } from "commander";
+import type { GoogleCalendarApi } from "../lib/api.ts";
+import { listEvents } from "../lib/api.ts";
+import { applyFilters } from "../lib/filter.ts";
+import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
+import { formatJsonSuccess, formatSearchResultText } from "../lib/output.ts";
+import { formatDateTimeInZone } from "../lib/timezone.ts";
+import type { CalendarConfig, CalendarEvent, OutputFormat } from "../types/index.ts";
+import { ExitCode } from "../types/index.ts";
+
+const DEFAULT_SEARCH_DAYS = 30;
+
+export interface SearchHandlerOptions {
+  api: GoogleCalendarApi;
+  query: string;
+  format: OutputFormat;
+  calendars: CalendarConfig[];
+  timezone: string;
+  days?: number;
+  from?: string;
+  to?: string;
+  busy?: boolean;
+  free?: boolean;
+  confirmed?: boolean;
+  includeTentative?: boolean;
+  write: (msg: string) => void;
+}
+
+interface CommandResult {
+  exitCode: number;
+}
+
+export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandResult> {
+  const { api, query, format, calendars, timezone, write } = opts;
+
+  const now = new Date();
+  const timeMin = opts.from
+    ? formatDateTimeInZone(new Date(opts.from + "T00:00:00"), timezone)
+    : formatDateTimeInZone(now, timezone);
+
+  let timeMax: string;
+  if (opts.to) {
+    timeMax = formatDateTimeInZone(new Date(opts.to + "T23:59:59"), timezone);
+  } else {
+    const days = opts.days ?? DEFAULT_SEARCH_DAYS;
+    const endDate = new Date(opts.from ? new Date(opts.from + "T00:00:00").getTime() : now.getTime());
+    endDate.setDate(endDate.getDate() + days);
+    timeMax = formatDateTimeInZone(endDate, timezone);
+  }
+
+  const allEvents: CalendarEvent[] = [];
+  for (const cal of calendars) {
+    const events = await listEvents(api, cal.id, cal.name, {
+      timeMin,
+      timeMax,
+      q: query,
+    });
+    allEvents.push(...events);
+  }
+
+  const transparency: TransparencyOption = opts.busy ? "busy" : opts.free ? "free" : undefined;
+  const filterOpts: FilterOptions = { transparency };
+  if (opts.confirmed !== undefined) filterOpts.confirmed = opts.confirmed;
+  if (opts.includeTentative !== undefined) filterOpts.includeTentative = opts.includeTentative;
+  const filtered = applyFilters(allEvents, filterOpts);
+
+  if (format === "json") {
+    write(
+      formatJsonSuccess({
+        query,
+        events: filtered,
+        count: filtered.length,
+      }),
+    );
+  } else {
+    write(formatSearchResultText(query, filtered));
+  }
+
+  return { exitCode: ExitCode.SUCCESS };
+}
+
+export function createSearchCommand(): Command {
+  const cmd = new Command("search")
+    .description("Search events by keyword")
+    .argument("<query>", "Search query string");
+
+  cmd.option("--from <date>", "Start date for search range");
+  cmd.option("--to <date>", "End date for search range");
+  cmd.option("--days <n>", "Search within next n days (default: 30)", Number.parseInt);
+  cmd.option("--busy", "Show only busy (opaque) events");
+  cmd.option("--free", "Show only free (transparent) events");
+  cmd.option("--confirmed", "Show only confirmed events");
+  cmd.option("--include-tentative", "Include tentative events");
+
+  return cmd;
+}
