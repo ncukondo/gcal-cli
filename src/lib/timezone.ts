@@ -30,10 +30,7 @@ const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATETIME_NO_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 // Expects a pre-validated timezone; callers should use resolveTimezone first.
-export function parseDateTimeInZone(
-  dateStr: string,
-  timezone: string,
-): Date {
+export function parseDateTimeInZone(dateStr: string, timezone: string): Date {
   let normalized: string;
   if (DATE_ONLY_RE.test(dateStr)) {
     normalized = `${dateStr}T00:00:00`;
