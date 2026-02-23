@@ -1,8 +1,13 @@
 #!/usr/bin/env bun
-import { Command } from "commander";
+import { createProgram, resolveGlobalOptions, handleError } from "./cli.ts";
+import { registerCommands } from "./commands/index.ts";
 
-const program = new Command();
+const program = createProgram();
+registerCommands(program);
 
-program.name("gcal").description("CLI tool for managing Google Calendar events").version("0.1.0");
-
-program.parse();
+try {
+  program.parse();
+} catch (error) {
+  const opts = resolveGlobalOptions(program);
+  handleError(error, opts.format);
+}
