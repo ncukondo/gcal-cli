@@ -90,3 +90,28 @@ export function formatEventListText(events: CalendarEvent[]): string {
 
   return lines.join("\n");
 }
+
+function formatSearchEventLine(event: CalendarEvent): string {
+  const date = getDateKey(event);
+  const startTime = event.start.slice(11, 16);
+  const endTime = event.end.slice(11, 16);
+  const tag = transparencyTag(event);
+  return `${date} ${startTime}-${endTime}  ${event.title} (${event.calendar_name}) ${tag}`;
+}
+
+export function formatSearchResultText(
+  query: string,
+  events: CalendarEvent[],
+): string {
+  const count = events.length;
+  const plural = count === 1 ? "event" : "events";
+  const header = `Found ${count} ${plural} matching "${query}":`;
+
+  if (count === 0) return header;
+
+  const lines = [header, ""];
+  for (const event of events) {
+    lines.push(formatSearchEventLine(event));
+  }
+  return lines.join("\n");
+}

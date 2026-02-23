@@ -6,6 +6,7 @@ import {
   formatError,
   formatSuccess,
   formatEventListText,
+  formatSearchResultText,
 } from "./output.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -210,5 +211,77 @@ describe("formatEventListText", () => {
       "  [All Day]     Vacation (Main Calendar) [busy]",
     ].join("\n");
     expect(result).toBe(expected);
+  });
+});
+
+describe("formatSearchResultText", () => {
+  it("shows match count and query in header", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Team Meeting",
+      }),
+    ];
+    const result = formatSearchResultText("meeting", events);
+    expect(result).toContain('Found 1 event matching "meeting"');
+  });
+
+  it("uses plural form for multiple matches", () => {
+    const events = [
+      makeEvent({ title: "Meeting 1" }),
+      makeEvent({ title: "Meeting 2" }),
+      makeEvent({ title: "Meeting 3" }),
+    ];
+    const result = formatSearchResultText("meeting", events);
+    expect(result).toContain('Found 3 events matching "meeting"');
+  });
+
+  it("shows flat event list with date and time", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Team Meeting",
+        calendar_name: "Main Calendar",
+        transparency: "opaque",
+      }),
+    ];
+    const result = formatSearchResultText("meeting", events);
+    expect(result).toContain(
+      "2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]",
+    );
+  });
+
+  it("matches spec output format", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Team Meeting",
+        calendar_name: "Main Calendar",
+        transparency: "opaque",
+      }),
+      makeEvent({
+        start: "2026-01-28T09:00:00+09:00",
+        end: "2026-01-28T10:00:00+09:00",
+        title: "Project Meeting",
+        calendar_name: "Main Calendar",
+        transparency: "opaque",
+      }),
+    ];
+    const result = formatSearchResultText("meeting", events);
+    const expected = [
+      'Found 2 events matching "meeting":',
+      "",
+      "2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]",
+      "2026-01-28 09:00-10:00  Project Meeting (Main Calendar) [busy]",
+    ].join("\n");
+    expect(result).toBe(expected);
+  });
+
+  it("returns no-results message for empty list", () => {
+    const result = formatSearchResultText("nonexistent", []);
+    expect(result).toContain('Found 0 events matching "nonexistent"');
   });
 });
