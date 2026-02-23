@@ -5,9 +5,14 @@ import {
   listCalendars,
   listEvents,
   getEvent,
+  createEvent,
+  updateEvent,
+  deleteEvent,
   ApiError,
   MAX_PAGES,
   type GoogleCalendarApi,
+  type CreateEventInput,
+  type UpdateEventInput,
 } from "./api.ts";
 
 describe("normalizeEvent", () => {
@@ -187,6 +192,20 @@ function createMockApi(responses: Record<string, unknown>): GoogleCalendarApi {
         }
         return { data: response };
       }),
+      insert: vi.fn().mockImplementation(async () => {
+        return { data: responses["inserted"] ?? responses["default"] };
+      }),
+      patch: vi.fn().mockImplementation(async () => {
+        return { data: responses["patched"] ?? responses["default"] };
+      }),
+      delete: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string }) => {
+        const key = params.eventId;
+        if (responses[key] === "not_found") {
+          const error = new Error("Not Found") as Error & { code: number };
+          error.code = 404;
+          throw error;
+        }
+      }),
     },
   };
 }
@@ -235,7 +254,7 @@ describe("listCalendars", () => {
           data: { items: [{ id: "cal1", summary: "Cal" }], nextPageToken: "next" },
         }),
       },
-      events: { list: vi.fn(), get: vi.fn() },
+      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
     const error = await listCalendars(api).catch((e) => e);
@@ -317,6 +336,9 @@ describe("listEvents", () => {
       events: {
         list: listFn,
         get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       },
     };
 
@@ -343,6 +365,9 @@ describe("listEvents", () => {
       events: {
         list: listFn,
         get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       },
     };
 
@@ -405,6 +430,9 @@ describe("listEvents", () => {
           },
         }),
         get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       },
     };
 
@@ -449,7 +477,7 @@ describe("API error mapping", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
-      events: { list: vi.fn(), get: vi.fn() },
+      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
     const error = await listCalendars(api).catch((e) => e);
@@ -463,6 +491,9 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Forbidden"), { code: 403 })),
         get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       },
     };
 
@@ -479,6 +510,9 @@ describe("API error mapping", () => {
         get: vi
           .fn()
           .mockRejectedValue(Object.assign(new Error("Internal Server Error"), { code: 500 })),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       },
     };
 
@@ -492,9 +526,324 @@ describe("API error mapping", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(new TypeError("Network error")),
       },
-      events: { list: vi.fn(), get: vi.fn() },
+      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
     await expect(listCalendars(api)).rejects.toThrow(TypeError);
+  });
+});
+
+describe("createEvent", () => {
+  it("sends correct payload for timed event and returns normalized event", async () => {
+    const returnedEvent = {
+      id: "new1",
+      summary: "Team Meeting",
+      description: "Weekly sync",
+      start: { dateTime: "2024-03-15T09:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00", timeZone: "Asia/Tokyo" },
+      htmlLink: "https://calendar.google.com/event?eid=new1",
+      status: "confirmed",
+      transparency: "opaque",
+      created: "2024-03-15T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ inserted: returnedEvent });
+
+    const input: CreateEventInput = {
+      title: "Team Meeting",
+      start: "2024-03-15T09:00:00+09:00",
+      end: "2024-03-15T10:00:00+09:00",
+      allDay: false,
+      timeZone: "Asia/Tokyo",
+      description: "Weekly sync",
+    };
+
+    const result = await createEvent(api, "cal1", "My Cal", input);
+
+    expect(api.events.insert).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      requestBody: {
+        summary: "Team Meeting",
+        description: "Weekly sync",
+        start: { dateTime: "2024-03-15T09:00:00+09:00", timeZone: "Asia/Tokyo" },
+        end: { dateTime: "2024-03-15T10:00:00+09:00", timeZone: "Asia/Tokyo" },
+        transparency: "opaque",
+      },
+    });
+
+    expect(result.id).toBe("new1");
+    expect(result.title).toBe("Team Meeting");
+    expect(result.calendar_id).toBe("cal1");
+    expect(result.calendar_name).toBe("My Cal");
+    expect(result.all_day).toBe(false);
+  });
+
+  it("handles all-day event creation (date vs dateTime)", async () => {
+    const returnedEvent = {
+      id: "new2",
+      summary: "Vacation",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-17" },
+      htmlLink: "https://calendar.google.com/event?eid=new2",
+      status: "confirmed",
+      transparency: "transparent",
+      created: "2024-03-15T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ inserted: returnedEvent });
+
+    const input: CreateEventInput = {
+      title: "Vacation",
+      start: "2024-03-15",
+      end: "2024-03-17",
+      allDay: true,
+      transparency: "transparent",
+    };
+
+    const result = await createEvent(api, "cal1", "My Cal", input);
+
+    expect(api.events.insert).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      requestBody: {
+        summary: "Vacation",
+        start: { date: "2024-03-15" },
+        end: { date: "2024-03-17" },
+        transparency: "transparent",
+      },
+    });
+
+    expect(result.all_day).toBe(true);
+    expect(result.start).toBe("2024-03-15");
+  });
+
+  it("sets transparency (opaque/transparent)", async () => {
+    const returnedEvent = {
+      id: "new3",
+      summary: "Focus Time",
+      start: { dateTime: "2024-03-15T14:00:00Z" },
+      end: { dateTime: "2024-03-15T16:00:00Z" },
+      status: "confirmed",
+      transparency: "transparent",
+      created: "2024-03-15T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ inserted: returnedEvent });
+
+    const input: CreateEventInput = {
+      title: "Focus Time",
+      start: "2024-03-15T14:00:00Z",
+      end: "2024-03-15T16:00:00Z",
+      allDay: false,
+      transparency: "transparent",
+    };
+
+    await createEvent(api, "cal1", "Cal", input);
+
+    expect(api.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestBody: expect.objectContaining({
+          transparency: "transparent",
+        }),
+      }),
+    );
+  });
+
+  it("maps API errors correctly", async () => {
+    const insertFn = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Forbidden"), { code: 403 }));
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: insertFn,
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const input: CreateEventInput = {
+      title: "Test",
+      start: "2024-03-15T09:00:00Z",
+      end: "2024-03-15T10:00:00Z",
+      allDay: false,
+    };
+
+    const error = await createEvent(api, "cal1", "Cal", input).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
+  });
+});
+
+describe("updateEvent", () => {
+  it("sends partial update and returns normalized updated event", async () => {
+    const returnedEvent = {
+      id: "evt1",
+      summary: "Updated Title",
+      description: "Original desc",
+      start: { dateTime: "2024-03-15T09:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00", timeZone: "Asia/Tokyo" },
+      htmlLink: "https://calendar.google.com/event?eid=evt1",
+      status: "confirmed",
+      transparency: "opaque",
+      created: "2024-03-01T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ patched: returnedEvent });
+
+    const input: UpdateEventInput = {
+      title: "Updated Title",
+    };
+
+    const result = await updateEvent(api, "cal1", "My Cal", "evt1", input);
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+      requestBody: {
+        summary: "Updated Title",
+      },
+    });
+
+    expect(result.id).toBe("evt1");
+    expect(result.title).toBe("Updated Title");
+    expect(result.calendar_id).toBe("cal1");
+  });
+
+  it("handles time field updates with timezone", async () => {
+    const returnedEvent = {
+      id: "evt1",
+      summary: "Meeting",
+      start: { dateTime: "2024-03-15T14:00:00-05:00", timeZone: "America/New_York" },
+      end: { dateTime: "2024-03-15T15:00:00-05:00", timeZone: "America/New_York" },
+      status: "confirmed",
+      transparency: "opaque",
+      created: "2024-03-01T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ patched: returnedEvent });
+
+    const input: UpdateEventInput = {
+      start: "2024-03-15T14:00:00-05:00",
+      end: "2024-03-15T15:00:00-05:00",
+      allDay: false,
+      timeZone: "America/New_York",
+    };
+
+    const result = await updateEvent(api, "cal1", "Cal", "evt1", input);
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+      requestBody: {
+        start: { dateTime: "2024-03-15T14:00:00-05:00", timeZone: "America/New_York" },
+        end: { dateTime: "2024-03-15T15:00:00-05:00", timeZone: "America/New_York" },
+      },
+    });
+
+    expect(result.start).toBe("2024-03-15T14:00:00-05:00");
+  });
+
+  it("handles updating to all-day event", async () => {
+    const returnedEvent = {
+      id: "evt1",
+      summary: "All Day",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+      status: "confirmed",
+      transparency: "opaque",
+      created: "2024-03-01T00:00:00.000Z",
+      updated: "2024-03-15T00:00:00.000Z",
+    };
+
+    const api = createMockApi({ patched: returnedEvent });
+
+    const input: UpdateEventInput = {
+      start: "2024-03-15",
+      end: "2024-03-16",
+      allDay: true,
+    };
+
+    const result = await updateEvent(api, "cal1", "Cal", "evt1", input);
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+      requestBody: {
+        start: { date: "2024-03-15" },
+        end: { date: "2024-03-16" },
+      },
+    });
+
+    expect(result.all_day).toBe(true);
+  });
+
+  it("maps API errors correctly", async () => {
+    const patchFn = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 }));
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: patchFn,
+        delete: vi.fn(),
+      },
+    };
+
+    const input: UpdateEventInput = { title: "New Title" };
+
+    const error = await updateEvent(api, "cal1", "Cal", "missing", input).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("deleteEvent", () => {
+  it("sends delete request and returns success", async () => {
+    const api = createMockApi({ evt1: "exists" });
+
+    await deleteEvent(api, "cal1", "evt1");
+
+    expect(api.events.delete).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+    });
+  });
+
+  it("throws NOT_FOUND for non-existent event", async () => {
+    const api = createMockApi({ missing: "not_found" });
+
+    const error = await deleteEvent(api, "cal1", "missing").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("maps API errors correctly", async () => {
+    const deleteFn = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Server Error"), { code: 500 }));
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: deleteFn,
+      },
+    };
+
+    const error = await deleteEvent(api, "cal1", "evt1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "API_ERROR" });
   });
 });

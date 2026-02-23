@@ -1,5 +1,5 @@
 import * as z from "zod";
-import type { Calendar, CalendarEvent, ErrorCode } from "../types/index.ts";
+import type { Calendar, CalendarEvent, ErrorCode, Transparency } from "../types/index.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -36,7 +36,46 @@ export interface GoogleCalendarApi {
       data: { items?: GoogleEvent[]; nextPageToken?: string };
     }>;
     get: (params: { calendarId: string; eventId: string }) => Promise<{ data: GoogleEvent }>;
+    insert: (params: {
+      calendarId: string;
+      requestBody: GoogleEventWriteBody;
+    }) => Promise<{ data: GoogleEvent }>;
+    patch: (params: {
+      calendarId: string;
+      eventId: string;
+      requestBody: Partial<GoogleEventWriteBody>;
+    }) => Promise<{ data: GoogleEvent }>;
+    delete: (params: { calendarId: string; eventId: string }) => Promise<void>;
   };
+}
+
+// Request body for creating/updating events
+export interface GoogleEventWriteBody {
+  summary?: string;
+  description?: string | null;
+  start?: { date?: string; dateTime?: string; timeZone?: string };
+  end?: { date?: string; dateTime?: string; timeZone?: string };
+  transparency?: string;
+}
+
+export interface CreateEventInput {
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  timeZone?: string;
+  description?: string | null;
+  transparency?: Transparency;
+}
+
+export interface UpdateEventInput {
+  title?: string;
+  start?: string;
+  end?: string;
+  allDay?: boolean;
+  timeZone?: string;
+  description?: string | null;
+  transparency?: Transparency;
 }
 
 // Google API response types (partial, only fields we use)
@@ -184,6 +223,89 @@ export async function getEvent(
   try {
     const response = await api.events.get({ calendarId, eventId });
     return normalizeEvent(response.data, calendarId, calendarName);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+function buildTimeFields(
+  start: string,
+  end: string,
+  allDay: boolean,
+  timeZone?: string,
+): Pick<GoogleEventWriteBody, "start" | "end"> {
+  if (allDay) {
+    return {
+      start: { date: start },
+      end: { date: end },
+    };
+  }
+  const startField: { dateTime: string; timeZone?: string } = { dateTime: start };
+  const endField: { dateTime: string; timeZone?: string } = { dateTime: end };
+  if (timeZone) {
+    startField.timeZone = timeZone;
+    endField.timeZone = timeZone;
+  }
+  return { start: startField, end: endField };
+}
+
+export async function createEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  calendarName: string,
+  input: CreateEventInput,
+): Promise<CalendarEvent> {
+  try {
+    const requestBody: GoogleEventWriteBody = {
+      summary: input.title,
+      ...buildTimeFields(input.start, input.end, input.allDay, input.timeZone),
+      transparency: input.transparency ?? "opaque",
+    };
+    if (input.description !== undefined) {
+      requestBody.description = input.description;
+    }
+    const response = await api.events.insert({ calendarId, requestBody });
+    return normalizeEvent(response.data, calendarId, calendarName);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+export async function updateEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  calendarName: string,
+  eventId: string,
+  input: UpdateEventInput,
+): Promise<CalendarEvent> {
+  try {
+    const requestBody: Partial<GoogleEventWriteBody> = {};
+    if (input.title !== undefined) {
+      requestBody.summary = input.title;
+    }
+    if (input.description !== undefined) {
+      requestBody.description = input.description;
+    }
+    if (input.transparency !== undefined) {
+      requestBody.transparency = input.transparency;
+    }
+    if (input.start !== undefined && input.end !== undefined && input.allDay !== undefined) {
+      Object.assign(requestBody, buildTimeFields(input.start, input.end, input.allDay, input.timeZone));
+    }
+    const response = await api.events.patch({ calendarId, eventId, requestBody });
+    return normalizeEvent(response.data, calendarId, calendarName);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+export async function deleteEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  try {
+    await api.events.delete({ calendarId, eventId });
   } catch (error: unknown) {
     mapApiError(error);
   }
