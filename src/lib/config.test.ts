@@ -5,6 +5,8 @@ import {
   loadConfig,
   getEnabledCalendars,
   selectCalendars,
+  generateConfigToml,
+  getDefaultConfigPath,
 } from "./config.ts";
 import type { AppConfig, CalendarConfig } from "../types/index.ts";
 
@@ -272,5 +274,65 @@ describe("selectCalendars", () => {
     };
     const result = selectCalendars(undefined, emptyConfig);
     expect(result).toEqual([]);
+  });
+});
+
+describe("getDefaultConfigPath", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns ~/.config/gcal-cli/config.toml", () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    expect(getDefaultConfigPath()).toBe("/home/testuser/.config/gcal-cli/config.toml");
+  });
+});
+
+describe("generateConfigToml", () => {
+  it("generates TOML with calendars and timezone", () => {
+    const calendars: CalendarConfig[] = [
+      { id: "primary", name: "Main Calendar", enabled: true },
+      { id: "family@group.calendar.google.com", name: "Family", enabled: false },
+    ];
+    const toml = generateConfigToml(calendars, "Asia/Tokyo");
+    expect(toml).toContain('timezone = "Asia/Tokyo"');
+    expect(toml).toContain("[[calendars]]");
+    expect(toml).toContain('id = "primary"');
+    expect(toml).toContain('name = "Main Calendar"');
+    expect(toml).toContain("enabled = true");
+    expect(toml).toContain('id = "family@group.calendar.google.com"');
+    expect(toml).toContain('name = "Family"');
+    expect(toml).toContain("enabled = false");
+  });
+
+  it("generates TOML without timezone when not provided", () => {
+    const calendars: CalendarConfig[] = [
+      { id: "primary", name: "Main", enabled: true },
+    ];
+    const toml = generateConfigToml(calendars);
+    expect(toml).not.toContain("timezone");
+    expect(toml).toContain('id = "primary"');
+  });
+
+  it("round-trips through parseConfig correctly", () => {
+    const calendars: CalendarConfig[] = [
+      { id: "primary", name: "Main Calendar", enabled: true },
+      { id: "work@group.calendar.google.com", name: "Work", enabled: false },
+    ];
+    const toml = generateConfigToml(calendars, "America/New_York");
+    const parsed = parseConfig(toml);
+    expect(parsed.timezone).toBe("America/New_York");
+    expect(parsed.calendars).toEqual(calendars);
+  });
+
+  it("handles empty calendars array", () => {
+    const toml = generateConfigToml([], "UTC");
+    const parsed = parseConfig(toml);
+    expect(parsed.calendars).toEqual([]);
+    expect(parsed.timezone).toBe("UTC");
   });
 });

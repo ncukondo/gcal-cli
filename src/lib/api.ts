@@ -334,6 +334,10 @@ function isGoogleApiError(error: unknown): error is Error & { code: number } {
   );
 }
 
+export function isAuthRequiredError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "AUTH_REQUIRED";
+}
+
 function mapApiError(error: unknown): never {
   if (isGoogleApiError(error)) {
     if (error.code === 401 || error.code === 403) {

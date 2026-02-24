@@ -43,6 +43,13 @@ describe("registerCommands", () => {
     expect(showCmd).toBeDefined();
   });
 
+  it("registers the init command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const initCmd = program.commands.find((c) => c.name() === "init");
+    expect(initCmd).toBeDefined();
+  });
+
   it("registers the update command", () => {
     const program = new Command();
     registerCommands(program);

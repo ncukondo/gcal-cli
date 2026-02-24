@@ -5,15 +5,22 @@ import { createSearchCommand } from "./search.ts";
 import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createUpdateCommand, handleUpdate } from "./update.ts";
+import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
+import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
-import { getAuthenticatedClient } from "../lib/auth.ts";
-import { listEvents } from "../lib/api.ts";
+import {
+  getAuthenticatedClient,
+  getClientCredentials,
+  startOAuthFlow,
+} from "../lib/auth.ts";
+import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
 import type { ListOptions } from "./list.ts";
+import type { AddOptions } from "./add.ts";
 
 export function registerCommands(program: Command): void {
   const authCmd = createAuthCommand();
@@ -135,6 +142,99 @@ export function registerCommands(program: Command): void {
     }
   });
   program.addCommand(showCmd);
+
+  const addCmd = createAddCommand();
+  addCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const addOpts = addCmd.opts();
+
+    try {
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const api = createGoogleCalendarApi(google.calendar({ version: "v3", auth }));
+
+      const deps: AddHandlerDeps = {
+        createEvent: (calendarId, calendarName, input) =>
+          createEvent(api, calendarId, calendarName, input),
+        loadConfig: () => loadConfig(fsAdapter),
+        write: (msg) => process.stdout.write(msg + "\n"),
+      };
+
+      const handleOpts: AddOptions = {
+        title: addOpts.title,
+        start: addOpts.start,
+        end: addOpts.end,
+        allDay: addOpts.allDay,
+        description: addOpts.description,
+        busy: addOpts.busy,
+        free: addOpts.free,
+        format: globalOpts.format,
+      };
+      if (globalOpts.calendar?.[0]) handleOpts.calendar = globalOpts.calendar[0];
+      if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
+
+      const result = await handleAdd(handleOpts, deps);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(addCmd);
+
+  const initCmd = createInitCommand();
+  initCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const initOpts = initCmd.opts<{ force?: boolean; all?: boolean; local?: boolean; timezone?: string }>();
+    const write = (msg: string) => process.stdout.write(msg + "\n");
+
+    try {
+      let apiRef: GoogleCalendarApi | null = null;
+
+      const getApi = async (): Promise<GoogleCalendarApi> => {
+        if (!apiRef) {
+          const oauth2Client = await getAuthenticatedClient(fsAdapter);
+          const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+          apiRef = createGoogleCalendarApi(calendar);
+        }
+        return apiRef;
+      };
+
+      const result = await handleInit({
+        listCalendars: async () => {
+          const api = await getApi();
+          return listCalendars(api);
+        },
+        requestAuth: async () => {
+          apiRef = null;
+          const credentials = getClientCredentials(fsAdapter);
+          const { authUrl, waitForCode, server } = await startOAuthFlow(
+            credentials,
+            fsAdapter,
+            globalThis.fetch,
+          );
+          write(`Not authenticated. Starting OAuth flow...`);
+          write(`Open this URL in your browser:\n${authUrl}`);
+          try {
+            await waitForCode;
+            write("Authentication successful.");
+          } finally {
+            server.close();
+          }
+        },
+        fs: fsAdapter,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write,
+        force: initOpts.force ?? false,
+        all: initOpts.all ?? false,
+        local: initOpts.local ?? false,
+        timezone: initOpts.timezone ?? globalOpts.timezone,
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(initCmd);
 
   const updateCmd = createUpdateCommand();
   updateCmd.action(async (eventId: string) => {
