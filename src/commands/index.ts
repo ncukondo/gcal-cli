@@ -9,7 +9,7 @@ import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig } from "../lib/config.ts";
 import { getAuthenticatedClient } from "../lib/auth.ts";
-import { listEvents, getEvent } from "../lib/api.ts";
+import { listEvents } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { ListOptions } from "./list.ts";
 
