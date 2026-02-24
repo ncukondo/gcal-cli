@@ -1,13 +1,20 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { runCli, runCliJson, testEventTitle, todayAt, TestCleanup, hasCredentials } from "./helpers.ts";
-
-const cleanup = new TestCleanup();
-
-afterAll(async () => {
-  await cleanup.deleteAll();
-});
+import {
+  runCli,
+  runCliJson,
+  testEventTitle,
+  todayAt,
+  TestCleanup,
+  hasCredentials,
+} from "./helpers.ts";
 
 describe.runIf(hasCredentials())("E2E: CRUD lifecycle", () => {
+  const cleanup = new TestCleanup();
+
+  afterAll(async () => {
+    await cleanup.deleteAll();
+  });
+
   const title = testEventTitle("CRUD");
   const updatedTitle = `${title} Updated`;
   let eventId: string;
@@ -28,7 +35,10 @@ describe.runIf(hasCredentials())("E2E: CRUD lifecycle", () => {
 
     expect(result.exitCode).toBe(0);
 
-    const data = json as { success: boolean; data: { event: { id: string; title: string }; message: string } };
+    const data = json as {
+      success: boolean;
+      data: { event: { id: string; title: string }; message: string };
+    };
     expect(data.success).toBe(true);
     expect(data.data.message).toBe("Event created");
     expect(data.data.event.title).toBe(title);

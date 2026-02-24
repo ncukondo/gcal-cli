@@ -1,12 +1,14 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { runCli, runCliJson, testEventTitle, todayAt, TestCleanup, hasCredentials } from "./helpers.ts";
+import {
+  runCli,
+  runCliJson,
+  testEventTitle,
+  todayAt,
+  TestCleanup,
+  hasCredentials,
+} from "./helpers.ts";
 
 const creds = hasCredentials();
-const cleanup = new TestCleanup();
-
-afterAll(async () => {
-  await cleanup.deleteAll();
-});
 
 describe.runIf(creds)("E2E: output formats", () => {
   it("list --today returns text output", async () => {
@@ -30,6 +32,12 @@ describe.runIf(creds)("E2E: output formats", () => {
 });
 
 describe.runIf(creds)("E2E: filtering", () => {
+  const cleanup = new TestCleanup();
+
+  afterAll(async () => {
+    await cleanup.deleteAll();
+  });
+
   const busyTitle = testEventTitle("Busy");
   let busyEventId: string;
 
@@ -71,6 +79,12 @@ describe.runIf(creds)("E2E: filtering", () => {
 });
 
 describe.runIf(creds)("E2E: timezone override", () => {
+  const cleanup = new TestCleanup();
+
+  afterAll(async () => {
+    await cleanup.deleteAll();
+  });
+
   const tzTitle = testEventTitle("TZ");
   let tzEventId: string;
 
@@ -95,22 +109,18 @@ describe.runIf(creds)("E2E: timezone override", () => {
     cleanup.track(tzEventId);
   });
 
-  it("show with timezone override displays correct times", async () => {
+  it("show with different timezones displays different times in text output", async () => {
     expect(tzEventId).toBeTruthy();
 
-    // Show the event with a different timezone
-    const { json: jsonUtc } = await runCliJson("--tz", "UTC", "show", tzEventId);
-    const { json: jsonTokyo } = await runCliJson("--tz", "Asia/Tokyo", "show", tzEventId);
+    // Show the event in text format with different timezones
+    const nyResult = await runCli("--tz", "America/New_York", "show", tzEventId);
+    const tokyoResult = await runCli("--tz", "Asia/Tokyo", "show", tzEventId);
 
-    const utcData = jsonUtc as { success: boolean; data: { event: { start: string; end: string } } };
-    const tokyoData = jsonTokyo as { success: boolean; data: { event: { start: string; end: string } } };
+    expect(nyResult.exitCode).toBe(0);
+    expect(tokyoResult.exitCode).toBe(0);
 
-    expect(utcData.success).toBe(true);
-    expect(tokyoData.success).toBe(true);
-
-    // Both should reference the same event but the underlying start/end are ISO strings
-    // from the API, so they should be identical (timezone doesn't change stored data)
-    expect(utcData.data.event.start).toBe(tokyoData.data.event.start);
+    // Text format should show visibly different time strings for different timezones
+    expect(nyResult.stdout).not.toBe(tokyoResult.stdout);
   });
 
   it("list with timezone override works without errors", async () => {

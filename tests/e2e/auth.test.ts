@@ -12,7 +12,10 @@ describe.runIf(creds)("E2E: auth", () => {
 
   it("auth --status returns JSON with authenticated: true", async () => {
     const { json } = await runCliJson("auth", "--status");
-    const data = json as { success: boolean; data: { authenticated: boolean; email: string | null } };
+    const data = json as {
+      success: boolean;
+      data: { authenticated: boolean; email: string | null };
+    };
     expect(data.success).toBe(true);
     expect(data.data.authenticated).toBe(true);
   });
