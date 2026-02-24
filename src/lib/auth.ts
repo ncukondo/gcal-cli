@@ -11,6 +11,8 @@ export interface AuthFsAdapter {
   chmodSync: (path: string, mode: number) => void;
 }
 
+export type PromptFn = (message: string) => Promise<string>;
+
 export interface ClientCredentials {
   clientId: string;
   clientSecret: string;
@@ -78,6 +80,32 @@ export function getClientCredentials(fs: AuthFsAdapter): ClientCredentials {
 
 function getCredentialsPath(): string {
   return `${getCredentialsDir()}/credentials.json`;
+}
+
+export async function promptForClientCredentials(
+  write: (msg: string) => void,
+  promptFn: PromptFn,
+): Promise<{ clientId: string; clientSecret: string }> {
+  write("No client credentials found.");
+  write("");
+  write("To set up Google Calendar API access:");
+  write("  1. Go to https://console.cloud.google.com");
+  write("  2. Create a project and enable the Google Calendar API");
+  write("  3. Create OAuth 2.0 credentials (Desktop app)");
+  write("  4. Copy the Client ID and Client Secret below");
+  write("");
+
+  const clientId = (await promptFn("Client ID: ")).trim();
+  if (!clientId) {
+    throw new AuthError("AUTH_REQUIRED", "Client ID is required.");
+  }
+
+  const clientSecret = (await promptFn("Client Secret: ")).trim();
+  if (!clientSecret) {
+    throw new AuthError("AUTH_REQUIRED", "Client Secret is required.");
+  }
+
+  return { clientId, clientSecret };
 }
 
 export function saveClientCredentials(

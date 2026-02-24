@@ -4,6 +4,7 @@ import {
   loadTokens,
   saveTokens,
   saveClientCredentials,
+  promptForClientCredentials,
   isTokenExpired,
   refreshAccessToken,
   getAuthenticatedClient,
@@ -11,7 +12,7 @@ import {
   revokeTokens,
   AuthError,
 } from "./auth.ts";
-import type { AuthFsAdapter, TokenData, ClientCredentials } from "./auth.ts";
+import type { AuthFsAdapter, TokenData, ClientCredentials, PromptFn } from "./auth.ts";
 
 function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
   return {
@@ -249,6 +250,63 @@ describe("saveClientCredentials", () => {
     });
     expect(chmodPath).toBe("/home/testuser/.config/gcal-cli/client_secret.json");
     expect(chmodMode).toBe(0o600);
+  });
+});
+
+describe("promptForClientCredentials", () => {
+  it("returns trimmed clientId and clientSecret", async () => {
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+    const promptFn: PromptFn = vi
+      .fn<PromptFn>()
+      .mockResolvedValueOnce("  my-client-id  ")
+      .mockResolvedValueOnce("  my-client-secret  ");
+
+    const result = await promptForClientCredentials(write, promptFn);
+
+    expect(result.clientId).toBe("my-client-id");
+    expect(result.clientSecret).toBe("my-client-secret");
+  });
+
+  it("shows Google Cloud Console guidance", async () => {
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+    const promptFn: PromptFn = vi
+      .fn<PromptFn>()
+      .mockResolvedValueOnce("id")
+      .mockResolvedValueOnce("secret");
+
+    await promptForClientCredentials(write, promptFn);
+
+    const text = output.join("\n");
+    expect(text).toContain("console.cloud.google.com");
+  });
+
+  it("throws on empty client_id", async () => {
+    const write = vi.fn();
+    const promptFn: PromptFn = vi.fn<PromptFn>().mockResolvedValueOnce("   ");
+
+    await expect(promptForClientCredentials(write, promptFn)).rejects.toThrow(AuthError);
+    try {
+      const pf: PromptFn = vi.fn<PromptFn>().mockResolvedValueOnce("");
+      await promptForClientCredentials(write, pf);
+    } catch (e) {
+      expect((e as AuthError).code).toBe("AUTH_REQUIRED");
+    }
+  });
+
+  it("throws on empty client_secret", async () => {
+    const write = vi.fn();
+    const promptFn: PromptFn = vi
+      .fn<PromptFn>()
+      .mockResolvedValueOnce("valid-id")
+      .mockResolvedValueOnce("   ");
+
+    await expect(promptForClientCredentials(write, promptFn)).rejects.toThrow(AuthError);
   });
 });
 
