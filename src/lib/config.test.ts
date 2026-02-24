@@ -310,9 +310,7 @@ describe("generateConfigToml", () => {
   });
 
   it("generates TOML without timezone when not provided", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "primary", name: "Main", enabled: true },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main", enabled: true }];
     const toml = generateConfigToml(calendars);
     expect(toml).not.toContain("timezone");
     expect(toml).toContain('id = "primary"');

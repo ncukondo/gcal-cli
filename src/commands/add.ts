@@ -20,7 +20,11 @@ export interface AddOptions {
 }
 
 export interface AddHandlerDeps {
-  createEvent: (calendarId: string, calendarName: string, input: CreateEventInput) => Promise<CalendarEvent>;
+  createEvent: (
+    calendarId: string,
+    calendarName: string,
+    input: CreateEventInput,
+  ) => Promise<CalendarEvent>;
   loadConfig: () => AppConfig;
   write: (msg: string) => void;
 }

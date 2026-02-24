@@ -29,10 +29,12 @@ function makeFs(overrides: Partial<HandleInitOptions["fs"]> = {}): HandleInitOpt
 function makeOpts(overrides: Partial<HandleInitOptions> = {}): HandleInitOptions {
   const output: string[] = [];
   return {
-    listCalendars: vi.fn().mockResolvedValue([
-      makeCal({ id: "user@gmail.com", name: "Main Calendar", primary: true }),
-      makeCal({ id: "family@group.calendar.google.com", name: "Family", primary: false }),
-    ]),
+    listCalendars: vi
+      .fn()
+      .mockResolvedValue([
+        makeCal({ id: "user@gmail.com", name: "Main Calendar", primary: true }),
+        makeCal({ id: "family@group.calendar.google.com", name: "Family", primary: false }),
+      ]),
     fs: makeFs(),
     format: "text",
     quiet: false,
@@ -111,10 +113,9 @@ describe("handleInit", () => {
 
     await handleInit(opts);
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith(
-      "/home/testuser/.config/gcal-cli",
-      { recursive: true },
-    );
+    expect(fs.mkdirSync).toHaveBeenCalledWith("/home/testuser/.config/gcal-cli", {
+      recursive: true,
+    });
   });
 
   it("outputs text format by default", async () => {

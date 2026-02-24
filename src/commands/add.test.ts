@@ -55,10 +55,7 @@ function baseOptions(overrides: Partial<AddOptions> = {}): AddOptions {
 describe("handleAdd", () => {
   it("validates --title is required", async () => {
     const deps = makeDeps();
-    const result = await handleAdd(
-      baseOptions({ title: undefined as unknown as string }),
-      deps,
-    );
+    const result = await handleAdd(baseOptions({ title: undefined as unknown as string }), deps);
     expect(result.exitCode).toBe(ExitCode.ARGUMENT);
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("INVALID_ARGS");
@@ -66,10 +63,7 @@ describe("handleAdd", () => {
 
   it("validates --start is required", async () => {
     const deps = makeDeps();
-    const result = await handleAdd(
-      baseOptions({ start: undefined as unknown as string }),
-      deps,
-    );
+    const result = await handleAdd(baseOptions({ start: undefined as unknown as string }), deps);
     expect(result.exitCode).toBe(ExitCode.ARGUMENT);
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("INVALID_ARGS");
@@ -77,10 +71,7 @@ describe("handleAdd", () => {
 
   it("validates --end is required", async () => {
     const deps = makeDeps();
-    const result = await handleAdd(
-      baseOptions({ end: undefined as unknown as string }),
-      deps,
-    );
+    const result = await handleAdd(baseOptions({ end: undefined as unknown as string }), deps);
     expect(result.exitCode).toBe(ExitCode.ARGUMENT);
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("INVALID_ARGS");
@@ -88,10 +79,7 @@ describe("handleAdd", () => {
 
   it("missing required option returns INVALID_ARGS error with exit code 3", async () => {
     const deps = makeDeps();
-    const result = await handleAdd(
-      baseOptions({ title: "" }),
-      deps,
-    );
+    const result = await handleAdd(baseOptions({ title: "" }), deps);
     expect(result.exitCode).toBe(ExitCode.ARGUMENT);
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("INVALID_ARGS");
@@ -101,10 +89,7 @@ describe("handleAdd", () => {
     const mockCreate = vi.fn().mockResolvedValue(makeEvent());
     const deps = makeDeps({ createEvent: mockCreate });
 
-    await handleAdd(
-      baseOptions({ timezone: "Asia/Tokyo" }),
-      deps,
-    );
+    await handleAdd(baseOptions({ timezone: "Asia/Tokyo" }), deps);
 
     expect(mockCreate).toHaveBeenCalledTimes(1);
     const [_calendarId, _calendarName, input] = mockCreate.mock.calls[0]!;
@@ -116,9 +101,9 @@ describe("handleAdd", () => {
   });
 
   it("--all-day flag creates all-day event with date-only start/end", async () => {
-    const mockCreate = vi.fn().mockResolvedValue(
-      makeEvent({ all_day: true, start: "2026-02-24", end: "2026-02-26" }),
-    );
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(makeEvent({ all_day: true, start: "2026-02-24", end: "2026-02-26" }));
     const deps = makeDeps({ createEvent: mockCreate });
 
     await handleAdd(
@@ -149,30 +134,24 @@ describe("handleAdd", () => {
   });
 
   it("-c flag targets specified calendar", async () => {
-    const mockCreate = vi.fn().mockResolvedValue(
-      makeEvent({ calendar_id: "work@group.calendar.google.com", calendar_name: "Work" }),
-    );
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(
+        makeEvent({ calendar_id: "work@group.calendar.google.com", calendar_name: "Work" }),
+      );
     const deps = makeDeps({ createEvent: mockCreate });
 
-    await handleAdd(
-      baseOptions({ calendar: "work@group.calendar.google.com" }),
-      deps,
-    );
+    await handleAdd(baseOptions({ calendar: "work@group.calendar.google.com" }), deps);
 
     const [calendarId] = mockCreate.mock.calls[0]!;
     expect(calendarId).toBe("work@group.calendar.google.com");
   });
 
   it("--free flag sets transparency to transparent", async () => {
-    const mockCreate = vi.fn().mockResolvedValue(
-      makeEvent({ transparency: "transparent" }),
-    );
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent({ transparency: "transparent" }));
     const deps = makeDeps({ createEvent: mockCreate });
 
-    await handleAdd(
-      baseOptions({ free: true }),
-      deps,
-    );
+    await handleAdd(baseOptions({ free: true }), deps);
 
     const [, , input] = mockCreate.mock.calls[0]!;
     expect(input.transparency).toBe("transparent");
@@ -189,15 +168,10 @@ describe("handleAdd", () => {
   });
 
   it("--description sets event description", async () => {
-    const mockCreate = vi.fn().mockResolvedValue(
-      makeEvent({ description: "My description" }),
-    );
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent({ description: "My description" }));
     const deps = makeDeps({ createEvent: mockCreate });
 
-    await handleAdd(
-      baseOptions({ description: "My description" }),
-      deps,
-    );
+    await handleAdd(baseOptions({ description: "My description" }), deps);
 
     const [, , input] = mockCreate.mock.calls[0]!;
     expect(input.description).toBe("My description");
@@ -222,10 +196,7 @@ describe("handleAdd", () => {
     const event = makeEvent({ title: "Team Meeting" });
     const deps = makeDeps({ createEvent: vi.fn().mockResolvedValue(event) });
 
-    await handleAdd(
-      baseOptions({ title: "Team Meeting", format: "json" }),
-      deps,
-    );
+    await handleAdd(baseOptions({ title: "Team Meeting", format: "json" }), deps);
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     const json = JSON.parse(output);

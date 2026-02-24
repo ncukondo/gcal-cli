@@ -1,11 +1,7 @@
 import { Command } from "commander";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { ApiError, deleteEvent } from "../lib/api.ts";
-import {
-  formatJsonSuccess,
-  formatJsonError,
-  errorCodeToExitCode,
-} from "../lib/output.ts";
+import { formatJsonSuccess, formatJsonError, errorCodeToExitCode } from "../lib/output.ts";
 import type { CommandResult, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 

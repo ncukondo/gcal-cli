@@ -8,7 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 6: Testing & Polish
 
-18. [017-integration-tests](./017-integration-tests.md) — Integration tests (cross-module)
 19. [018-e2e-tests](./018-e2e-tests.md) — E2E tests (real API calls)
 
 ## In Progress
@@ -16,6 +15,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 (none)
 
 ## Completed
+
+### Phase 6: Testing & Polish
+
+18. [017-integration-tests](./completed/017-integration-tests.md) — Integration tests (cross-module) (#26)
 
 ### Phase 3–5: CLI Framework, API, Read & Write Commands
 

@@ -33,9 +33,7 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
   const { fs, format, quiet, write, force, all, local, requestAuth } = opts;
 
   // Determine output path
-  const configPath = local
-    ? `${process.cwd()}/gcal-cli.toml`
-    : getDefaultConfigPath();
+  const configPath = local ? `${process.cwd()}/gcal-cli.toml` : getDefaultConfigPath();
 
   // Check if file exists (unless --force)
   if (!force && fs.existsSync(configPath)) {

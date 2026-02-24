@@ -12,11 +12,7 @@ import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
-import {
-  getAuthenticatedClient,
-  getClientCredentials,
-  startOAuthFlow,
-} from "../lib/auth.ts";
+import { getAuthenticatedClient, getClientCredentials, startOAuthFlow } from "../lib/auth.ts";
 import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
@@ -119,7 +115,8 @@ export function registerCommands(program: Command): void {
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
 
-      const calendarId = showOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
+      const calendarId =
+        showOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
       let cal: { id: string; name: string };
       if (calendarId) {
         const found = config.calendars.find((c) => c.id === calendarId);
@@ -215,7 +212,12 @@ export function registerCommands(program: Command): void {
   const initCmd = createInitCommand();
   initCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
-    const initOpts = initCmd.opts<{ force?: boolean; all?: boolean; local?: boolean; timezone?: string }>();
+    const initOpts = initCmd.opts<{
+      force?: boolean;
+      all?: boolean;
+      local?: boolean;
+      timezone?: string;
+    }>();
     const write = (msg: string) => process.stdout.write(msg + "\n");
 
     try {
