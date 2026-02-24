@@ -1,12 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { CalendarEvent, AppConfig } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
-import {
-  resolveDateRange,
-  handleList,
-  createListCommand,
-  type ListHandlerDeps,
-} from "./list.ts";
+import { resolveDateRange, handleList, createListCommand, type ListHandlerDeps } from "./list.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -115,11 +110,15 @@ describe("resolveDateRange", () => {
   });
 
   it("--days 0 throws an error", () => {
-    expect(() => resolveDateRange({ days: 0 }, tz, now)).toThrow("--days must be a positive integer");
+    expect(() => resolveDateRange({ days: 0 }, tz, now)).toThrow(
+      "--days must be a positive integer",
+    );
   });
 
   it("--days -1 throws an error", () => {
-    expect(() => resolveDateRange({ days: -1 }, tz, now)).toThrow("--days must be a positive integer");
+    expect(() => resolveDateRange({ days: -1 }, tz, now)).toThrow(
+      "--days must be a positive integer",
+    );
   });
 });
 
@@ -136,10 +135,7 @@ describe("handleList", () => {
     const mockListEvents = vi.fn().mockResolvedValue([]);
     const deps = makeDeps({ listEvents: mockListEvents });
 
-    await handleList(
-      { today: true, format: "text", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "text", quiet: false }, deps);
 
     // Should be called for each enabled calendar
     expect(mockListEvents).toHaveBeenCalledTimes(2);
@@ -181,10 +177,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false, busy: true },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false, busy: true }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toHaveLength(1);
@@ -200,10 +193,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false, free: true },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false, free: true }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toHaveLength(1);
@@ -219,10 +209,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false, confirmed: true },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false, confirmed: true }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toHaveLength(1);
@@ -239,10 +226,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false, includeTentative: true },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false, includeTentative: true }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toHaveLength(2);
@@ -251,17 +235,22 @@ describe("handleList", () => {
 
   it("text output groups events by date with day-of-week header", async () => {
     const events = [
-      makeEvent({ start: "2026-02-23T10:00:00+09:00", end: "2026-02-23T11:00:00+09:00", title: "Morning" }),
-      makeEvent({ start: "2026-02-24T14:00:00+09:00", end: "2026-02-24T15:00:00+09:00", title: "Afternoon" }),
+      makeEvent({
+        start: "2026-02-23T10:00:00+09:00",
+        end: "2026-02-23T11:00:00+09:00",
+        title: "Morning",
+      }),
+      makeEvent({
+        start: "2026-02-24T14:00:00+09:00",
+        end: "2026-02-24T15:00:00+09:00",
+        title: "Afternoon",
+      }),
     ];
     const deps = makeDeps({ listEvents: vi.fn().mockResolvedValue(events) });
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: false, days: 7, format: "text", quiet: false },
-      deps,
-    );
+    await handleList({ today: false, days: 7, format: "text", quiet: false }, deps);
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("2026-02-23 (Mon)");
@@ -271,18 +260,12 @@ describe("handleList", () => {
   });
 
   it("JSON output returns events array with count in envelope", async () => {
-    const events = [
-      makeEvent({ id: "e1" }),
-      makeEvent({ id: "e2" }),
-    ];
+    const events = [makeEvent({ id: "e1" }), makeEvent({ id: "e2" })];
     const deps = makeDeps({ listEvents: vi.fn().mockResolvedValue(events) });
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json).toEqual({
@@ -308,10 +291,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "text", quiet: true },
-      deps,
-    );
+    await handleList({ today: true, format: "text", quiet: true }, deps);
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     // Quiet mode should include date prefix, time and title but not calendar name or tags
@@ -350,10 +330,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { days: 2, format: "text", quiet: true },
-      deps,
-    );
+    await handleList({ days: 2, format: "text", quiet: true }, deps);
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     const lines = output.split("\n");
@@ -384,10 +361,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "text", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "text", quiet: false }, deps);
 
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("No events found");
@@ -398,10 +372,7 @@ describe("handleList", () => {
     const config = makeConfig({ calendars: [{ id: "primary", name: "Main", enabled: true }] });
     deps.loadConfig = vi.fn().mockReturnValue(config);
 
-    await handleList(
-      { today: true, format: "json", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toEqual([]);
@@ -410,19 +381,27 @@ describe("handleList", () => {
 
   it("sorts events by start time across calendars", async () => {
     const deps = makeDeps({
-      listEvents: vi.fn()
+      listEvents: vi
+        .fn()
         .mockResolvedValueOnce([
-          makeEvent({ id: "e2", start: "2026-02-23T14:00:00+09:00", end: "2026-02-23T15:00:00+09:00", calendar_name: "Cal A" }),
+          makeEvent({
+            id: "e2",
+            start: "2026-02-23T14:00:00+09:00",
+            end: "2026-02-23T15:00:00+09:00",
+            calendar_name: "Cal A",
+          }),
         ])
         .mockResolvedValueOnce([
-          makeEvent({ id: "e1", start: "2026-02-23T10:00:00+09:00", end: "2026-02-23T11:00:00+09:00", calendar_name: "Cal B" }),
+          makeEvent({
+            id: "e1",
+            start: "2026-02-23T10:00:00+09:00",
+            end: "2026-02-23T11:00:00+09:00",
+            calendar_name: "Cal B",
+          }),
         ]),
     });
 
-    await handleList(
-      { today: true, format: "json", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "json", quiet: false }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events[0].id).toBe("e1");
@@ -440,10 +419,7 @@ describe("handleList", () => {
     });
     const deps = makeDeps({ listEvents: mockListEvents });
 
-    await handleList(
-      { today: true, format: "text", quiet: false },
-      deps,
-    );
+    await handleList({ today: true, format: "text", quiet: false }, deps);
 
     // Both fetches should be started before either finishes (parallel)
     expect(callOrder[0]).toBe("start:primary");
@@ -452,34 +428,27 @@ describe("handleList", () => {
 
   it("returns partial results when one calendar fails", async () => {
     const events = [makeEvent({ id: "e1", calendar_name: "Main Calendar" })];
-    const mockListEvents = vi.fn()
+    const mockListEvents = vi
+      .fn()
       .mockResolvedValueOnce(events)
       .mockRejectedValueOnce(new Error("API error"));
     const writeErr = vi.fn();
     const deps = makeDeps({ listEvents: mockListEvents, writeErr });
 
-    const result = await handleList(
-      { today: true, format: "json", quiet: false },
-      deps,
-    );
+    const result = await handleList({ today: true, format: "json", quiet: false }, deps);
 
     const json = JSON.parse((deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
     expect(json.data.events).toHaveLength(1);
     expect(json.data.events[0].id).toBe("e1");
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
-    expect(writeErr).toHaveBeenCalledWith(
-      expect.stringContaining("Work"),
-    );
+    expect(writeErr).toHaveBeenCalledWith(expect.stringContaining("Work"));
   });
 
   it("--to without --from emits warning to stderr", async () => {
     const writeErr = vi.fn();
     const deps = makeDeps({ writeErr });
 
-    await handleList(
-      { to: "2026-03-15", format: "text", quiet: false },
-      deps,
-    );
+    await handleList({ to: "2026-03-15", format: "text", quiet: false }, deps);
 
     expect(writeErr).toHaveBeenCalledWith(
       expect.stringContaining("--from not specified, defaulting to today"),
@@ -489,10 +458,7 @@ describe("handleList", () => {
   it("returns exitCode SUCCESS", async () => {
     const deps = makeDeps();
 
-    const result = await handleList(
-      { today: true, format: "text", quiet: false },
-      deps,
-    );
+    const result = await handleList({ today: true, format: "text", quiet: false }, deps);
 
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
   });

@@ -79,7 +79,11 @@ export function resolveDateRange(
 }
 
 export interface ListHandlerDeps {
-  listEvents: (calendarId: string, calendarName: string, options: ListEventsOptions) => Promise<CalendarEvent[]>;
+  listEvents: (
+    calendarId: string,
+    calendarName: string,
+    options: ListEventsOptions,
+  ) => Promise<CalendarEvent[]>;
   loadConfig: () => AppConfig;
   write: (msg: string) => void;
   writeErr?: (msg: string) => void;
@@ -123,7 +127,10 @@ function formatQuietText(events: CalendarEvent[]): string {
   return lines.join("\n");
 }
 
-export async function handleList(options: ListOptions, deps: ListHandlerDeps): Promise<CommandResult> {
+export async function handleList(
+  options: ListOptions,
+  deps: ListHandlerDeps,
+): Promise<CommandResult> {
   const config = deps.loadConfig();
   const timezone = resolveTimezone(options.timezone, config.timezone);
   const nowFn = deps.now ?? (() => new Date());
@@ -188,7 +195,9 @@ export function createListCommand(): Command {
   const cmd = new Command("list").description("List events within a date range");
 
   cmd.option("--today", "Show today's events");
-  cmd.option("--days <n>", "Events for next n days (default: 7)", (v: string) => Number.parseInt(v, 10));
+  cmd.option("--days <n>", "Events for next n days (default: 7)", (v: string) =>
+    Number.parseInt(v, 10),
+  );
   cmd.option("--from <date>", "Start date (ISO 8601 or YYYY-MM-DD)");
   cmd.option("--to <date>", "End date (ISO 8601 or YYYY-MM-DD)");
   cmd.option("--busy", "Show only busy (opaque) events");

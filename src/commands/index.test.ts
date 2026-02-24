@@ -35,4 +35,11 @@ describe("registerCommands", () => {
     const authCmd = program.commands.find((c) => c.name() === "auth");
     expect(authCmd).toBeDefined();
   });
+
+  it("registers the update command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const names = program.commands.map((c) => c.name());
+    expect(names).toContain("update");
+  });
 });
