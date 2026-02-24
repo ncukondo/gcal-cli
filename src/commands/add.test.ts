@@ -243,6 +243,24 @@ describe("handleAdd", () => {
     const result = await handleAdd(baseOptions(), deps);
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
   });
+
+  it("--busy explicitly sets transparency to opaque", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ busy: true }), deps);
+
+    const [, , input] = mockCreate.mock.calls[0]!;
+    expect(input.transparency).toBe("opaque");
+  });
+
+  it("propagates API errors from deps.createEvent", async () => {
+    const deps = makeDeps({
+      createEvent: vi.fn().mockRejectedValue(new Error("API failure")),
+    });
+
+    await expect(handleAdd(baseOptions(), deps)).rejects.toThrow("API failure");
+  });
 });
 
 describe("createAddCommand", () => {

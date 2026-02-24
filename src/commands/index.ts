@@ -116,11 +116,17 @@ export function registerCommands(program: Command): void {
         write: (msg) => process.stdout.write(msg + "\n"),
       };
 
-      const handleOpts = {
-        ...addOpts,
+      const handleOpts: AddOptions = {
+        title: addOpts.title,
+        start: addOpts.start,
+        end: addOpts.end,
+        allDay: addOpts.allDay,
+        description: addOpts.description,
+        busy: addOpts.busy,
+        free: addOpts.free,
         format: globalOpts.format,
-        calendar: globalOpts.calendar?.[0],
-      } as AddOptions;
+      };
+      if (globalOpts.calendar?.[0]) handleOpts.calendar = globalOpts.calendar[0];
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
       const result = await handleAdd(handleOpts, deps);

@@ -47,20 +47,13 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
   const timezone = resolveTimezone(options.timezone, config.timezone);
 
   // Determine target calendar
-  let calendarId: string;
-  let calendarName: string;
-  if (options.calendar) {
-    const calendars = selectCalendars([options.calendar], config);
-    calendarId = calendars[0]!.id;
-    calendarName = calendars[0]!.name;
-  } else {
-    const calendars = selectCalendars(undefined, config);
-    calendarId = calendars[0]!.id;
-    calendarName = calendars[0]!.name;
-  }
+  const calendars = selectCalendars(options.calendar ? [options.calendar] : undefined, config);
+  const { id: calendarId, name: calendarName } = calendars[0]!;
 
   // Build create input
-  const transparency = options.free ? "transparent" as const : "opaque" as const;
+  let transparency: "transparent" | "opaque" = "opaque";
+  if (options.busy) transparency = "opaque";
+  if (options.free) transparency = "transparent";
 
   let start: string;
   let end: string;
