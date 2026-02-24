@@ -111,6 +111,8 @@ describe("handleAuth", () => {
 
   it("handles missing client credentials (text)", async () => {
     vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
 
     const fs = makeFsAdapter();
     const output: string[] = [];
@@ -132,6 +134,8 @@ describe("handleAuth", () => {
 
   it("handles missing client credentials (json)", async () => {
     vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
 
     const fs = makeFsAdapter();
     const output: string[] = [];

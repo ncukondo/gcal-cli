@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import type { Command } from "commander";
+import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } from "./auth.ts";
 import { createSearchCommand } from "./search.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
@@ -12,6 +13,38 @@ import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { ListOptions } from "./list.ts";
 
 export function registerCommands(program: Command): void {
+  const authCmd = createAuthCommand();
+  authCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const authOpts = authCmd.opts();
+    const write = (msg: string) => process.stdout.write(msg + "\n");
+    const handlerOpts = {
+      fs: fsAdapter,
+      format: globalOpts.format,
+      write,
+      fetchFn: globalThis.fetch,
+    };
+
+    try {
+      let result;
+      if (authOpts.logout) {
+        result = await handleAuthLogout(handlerOpts);
+      } else if (authOpts.status) {
+        result = await handleAuthStatus(handlerOpts);
+      } else {
+        result = await handleAuth({
+          ...handlerOpts,
+          openUrl: (url: string) => {
+            write(`Open this URL in your browser:\n${url}`);
+          },
+        });
+      }
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(authCmd);
   const calendarsCmd = createCalendarsCommand();
   calendarsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
