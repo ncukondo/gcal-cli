@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import type { Command } from "commander";
+import { createSearchCommand } from "./search.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
@@ -61,4 +62,6 @@ export function registerCommands(program: Command): void {
     }
   });
   program.addCommand(listCmd);
+
+  program.addCommand(createSearchCommand());
 }

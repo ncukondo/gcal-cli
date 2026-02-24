@@ -21,4 +21,11 @@ describe("registerCommands", () => {
     const listCmd = program.commands.find((c) => c.name() === "list");
     expect(listCmd).toBeDefined();
   });
+
+  it("registers the search command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const names = program.commands.map((c) => c.name());
+    expect(names).toContain("search");
+  });
 });
