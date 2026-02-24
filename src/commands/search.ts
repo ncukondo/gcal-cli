@@ -24,6 +24,7 @@ export interface SearchHandlerOptions {
   confirmed?: boolean;
   includeTentative?: boolean;
   write: (msg: string) => void;
+  writeErr?: (msg: string) => void;
 }
 
 interface CommandResult {
@@ -32,21 +33,49 @@ interface CommandResult {
 
 export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandResult> {
   const { api, query, format, calendars, timezone, write } = opts;
+  const writeErr = opts.writeErr ?? (() => {});
 
   const now = new Date();
-  const timeMin = opts.from
-    ? formatDateTimeInZone(parseDateTimeInZone(opts.from, timezone), timezone)
-    : formatDateTimeInZone(now, timezone);
+  const days = opts.days ?? DEFAULT_SEARCH_DAYS;
+  const isNegativeDays = days < 0;
 
+  let timeMin: string;
   let timeMax: string;
-  if (opts.to) {
+
+  if (opts.from && opts.to) {
+    timeMin = formatDateTimeInZone(parseDateTimeInZone(opts.from, timezone), timezone);
     timeMax = formatDateTimeInZone(parseDateTimeInZone(opts.to + "T23:59:59", timezone), timezone);
-  } else {
-    const days = opts.days ?? DEFAULT_SEARCH_DAYS;
-    const startDate = opts.from ? parseDateTimeInZone(opts.from, timezone) : now;
+  } else if (opts.from) {
+    const startDate = parseDateTimeInZone(opts.from, timezone);
+    timeMin = formatDateTimeInZone(startDate, timezone);
     const endDate = new Date(startDate.getTime());
     endDate.setDate(endDate.getDate() + days);
     timeMax = formatDateTimeInZone(endDate, timezone);
+  } else if (opts.to) {
+    timeMax = formatDateTimeInZone(parseDateTimeInZone(opts.to + "T23:59:59", timezone), timezone);
+    timeMin = formatDateTimeInZone(now, timezone);
+  } else if (isNegativeDays) {
+    // Negative days: search from (now + days) to now (past direction)
+    const pastDate = new Date(now.getTime());
+    pastDate.setDate(pastDate.getDate() + days); // days is negative, so this goes back
+    timeMin = formatDateTimeInZone(pastDate, timezone);
+    timeMax = formatDateTimeInZone(now, timezone);
+  } else {
+    timeMin = formatDateTimeInZone(now, timezone);
+    const endDate = new Date(now.getTime());
+    endDate.setDate(endDate.getDate() + days);
+    timeMax = formatDateTimeInZone(endDate, timezone);
+  }
+
+  // Output search range to stderr
+  const displayFrom = timeMin.slice(0, 10);
+  const displayTo = timeMax.slice(0, 10);
+  writeErr(`Searching: ${displayFrom} to ${displayTo}`);
+
+  const hasExplicitRange =
+    opts.days !== undefined || opts.from !== undefined || opts.to !== undefined;
+  if (!hasExplicitRange) {
+    writeErr("Tip: Use --days <n> or --from/--to to change the search range.");
   }
 
   const results = await Promise.all(

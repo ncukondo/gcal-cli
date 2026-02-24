@@ -130,6 +130,7 @@ export function registerCommands(program: Command): void {
         confirmed: searchOpts.confirmed,
         includeTentative: searchOpts.includeTentative,
         write: (msg) => process.stdout.write(msg + "\n"),
+        writeErr: (msg) => process.stderr.write(msg + "\n"),
       });
       process.exit(result.exitCode);
     } catch (error) {

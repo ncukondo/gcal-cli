@@ -69,6 +69,7 @@ interface SearchOpts {
 
 function runSearch(api: GoogleCalendarApi, opts: SearchOpts) {
   const output: string[] = [];
+  const errOutput: string[] = [];
   const handlerOpts: SearchHandlerOptions = {
     api,
     query: opts.query,
@@ -78,6 +79,9 @@ function runSearch(api: GoogleCalendarApi, opts: SearchOpts) {
     write: (msg: string) => {
       output.push(msg);
     },
+    writeErr: (msg: string) => {
+      errOutput.push(msg);
+    },
   };
   if (opts.days !== undefined) handlerOpts.days = opts.days;
   if (opts.from !== undefined) handlerOpts.from = opts.from;
@@ -86,7 +90,7 @@ function runSearch(api: GoogleCalendarApi, opts: SearchOpts) {
   if (opts.free !== undefined) handlerOpts.free = opts.free;
   if (opts.confirmed !== undefined) handlerOpts.confirmed = opts.confirmed;
   if (opts.includeTentative !== undefined) handlerOpts.includeTentative = opts.includeTentative;
-  return handleSearch(handlerOpts).then((result) => ({ ...result, output }));
+  return handleSearch(handlerOpts).then((result) => ({ ...result, output, errOutput }));
 }
 
 describe("search command", () => {
@@ -284,6 +288,132 @@ describe("search command", () => {
       const api = makeMockApi([]);
       const result = await runSearch(api, { query: "test" });
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe("negative --days", () => {
+    it("--days -30 searches past 30 days (30 days ago to now)", async () => {
+      const api = makeMockApi([]);
+      await runSearch(api, { query: "test", days: -30, timezone: "UTC" });
+
+      const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const timeMin = new Date(call.timeMin);
+      const timeMax = new Date(call.timeMax);
+      // timeMin should be 30 days before timeMax
+      const diffDays = (timeMax.getTime() - timeMin.getTime()) / (1000 * 60 * 60 * 24);
+      expect(diffDays).toBe(30);
+      // timeMax should be close to now (timeMin is in the past)
+      expect(timeMin.getTime()).toBeLessThan(timeMax.getTime());
+    });
+  });
+
+  describe("stderr feedback", () => {
+    it("outputs search range message with default 30 days", async () => {
+      const api = makeMockApi([]);
+      vi.useFakeTimers({ now: new Date("2026-02-24T12:00:00Z") });
+      try {
+        const result = await runSearch(api, { query: "test", timezone: "UTC" });
+        const stderr = result.errOutput.join("\n");
+        expect(stderr).toContain("Searching: 2026-02-24 to 2026-03-26");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("outputs search range message with --days 60", async () => {
+      const api = makeMockApi([]);
+      vi.useFakeTimers({ now: new Date("2026-02-24T12:00:00Z") });
+      try {
+        const result = await runSearch(api, { query: "test", days: 60, timezone: "UTC" });
+        const stderr = result.errOutput.join("\n");
+        expect(stderr).toContain("Searching: 2026-02-24 to 2026-04-25");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("outputs search range message with --days -30 (past direction)", async () => {
+      const api = makeMockApi([]);
+      vi.useFakeTimers({ now: new Date("2026-02-24T12:00:00Z") });
+      try {
+        const result = await runSearch(api, { query: "test", days: -30, timezone: "UTC" });
+        const stderr = result.errOutput.join("\n");
+        expect(stderr).toContain("Searching: 2026-01-25 to 2026-02-24");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("outputs search range message with --from/--to", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, {
+        query: "test",
+        from: "2026-03-01",
+        to: "2026-03-31",
+        timezone: "UTC",
+      });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).toContain("Searching: 2026-03-01 to 2026-03-31");
+    });
+
+    it("outputs hint message when using default range", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).toContain("Tip: Use --days <n> or --from/--to to change the search range.");
+    });
+
+    it("suppresses hint when --days is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", days: 60, timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --from is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", from: "2026-03-01", timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --to is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", to: "2026-03-31", timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --from and --to are specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, {
+        query: "test",
+        from: "2026-03-01",
+        to: "2026-03-31",
+        timezone: "UTC",
+      });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --days is negative", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", days: -30, timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("does not affect stdout output", async () => {
+      const events = [makeEvent({ id: "e1", title: "Team Meeting" })];
+      const api = makeMockApi(events);
+      const result = await runSearch(api, { query: "meeting" });
+
+      // stdout should contain events as before
+      const stdout = result.output.join("\n");
+      expect(stdout).toContain("Team Meeting");
+      // stdout should NOT contain stderr messages
+      expect(stdout).not.toContain("Searching:");
+      expect(stdout).not.toContain("Tip:");
     });
   });
 
