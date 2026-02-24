@@ -21,7 +21,7 @@ export interface HandleInitOptions {
   force: boolean;
   all: boolean;
   local: boolean;
-  timezone?: string;
+  timezone?: string | undefined;
 }
 
 function isAuthRequiredError(error: unknown): boolean {

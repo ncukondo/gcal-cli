@@ -4,11 +4,16 @@ import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } fro
 import { createSearchCommand } from "./search.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
+import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig } from "../lib/config.ts";
-import { getAuthenticatedClient } from "../lib/auth.ts";
-import { listEvents } from "../lib/api.ts";
+import {
+  getAuthenticatedClient,
+  getClientCredentials,
+  startOAuthFlow,
+} from "../lib/auth.ts";
+import { listCalendars, listEvents } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { ListOptions } from "./list.ts";
 
@@ -97,4 +102,60 @@ export function registerCommands(program: Command): void {
   program.addCommand(listCmd);
 
   program.addCommand(createSearchCommand());
+
+  const initCmd = createInitCommand();
+  initCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const initOpts = initCmd.opts<{ force?: boolean; all?: boolean; local?: boolean; timezone?: string }>();
+    const write = (msg: string) => process.stdout.write(msg + "\n");
+
+    try {
+      let apiRef: GoogleCalendarApi | null = null;
+
+      const getApi = async (): Promise<GoogleCalendarApi> => {
+        if (!apiRef) {
+          const oauth2Client = await getAuthenticatedClient(fsAdapter);
+          const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+          apiRef = createGoogleCalendarApi(calendar);
+        }
+        return apiRef;
+      };
+
+      const result = await handleInit({
+        listCalendars: async () => {
+          const api = await getApi();
+          return listCalendars(api);
+        },
+        requestAuth: async () => {
+          apiRef = null;
+          const credentials = getClientCredentials(fsAdapter);
+          const { authUrl, waitForCode, server } = await startOAuthFlow(
+            credentials,
+            fsAdapter,
+            globalThis.fetch,
+          );
+          write(`Not authenticated. Starting OAuth flow...`);
+          write(`Open this URL in your browser:\n${authUrl}`);
+          try {
+            await waitForCode;
+            write("Authentication successful.");
+          } finally {
+            server.close();
+          }
+        },
+        fs: fsAdapter,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write,
+        force: initOpts.force ?? false,
+        all: initOpts.all ?? false,
+        local: initOpts.local ?? false,
+        timezone: initOpts.timezone ?? globalOpts.timezone,
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(initCmd);
 }
