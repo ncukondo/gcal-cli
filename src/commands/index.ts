@@ -6,6 +6,7 @@ import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createUpdateCommand, handleUpdate } from "./update.ts";
 import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
+import { createDeleteCommand, handleDelete } from "./delete.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
@@ -142,6 +143,40 @@ export function registerCommands(program: Command): void {
     }
   });
   program.addCommand(showCmd);
+
+  const deleteCmd = createDeleteCommand();
+  deleteCmd.action(async (eventId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const deleteOpts = deleteCmd.opts();
+    try {
+      const config = loadConfig(fsAdapter);
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const calendarApi = google.calendar({ version: "v3", auth });
+      const api = createGoogleCalendarApi(calendarApi);
+
+      const calendarId = deleteOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
+      let resolvedCalendarId: string;
+      if (calendarId) {
+        resolvedCalendarId = calendarId;
+      } else {
+        const enabled = config.calendars.filter((c) => c.enabled);
+        resolvedCalendarId = enabled[0]?.id ?? "primary";
+      }
+
+      const result = await handleDelete({
+        api,
+        eventId,
+        calendarId: resolvedCalendarId,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(deleteCmd);
 
   const addCmd = createAddCommand();
   addCmd.action(async () => {
