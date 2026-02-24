@@ -4,8 +4,11 @@ import type { AuthFsAdapter, TokenData, PromptFn } from "../lib/auth.ts";
 import {
   AuthError,
   loadTokens,
+  saveTokens,
   getClientCredentials,
   getClientCredentialsOrPrompt,
+  isTokenExpired,
+  refreshAccessToken,
   startOAuthFlow,
   revokeTokens,
 } from "../lib/auth.ts";
@@ -115,8 +118,19 @@ export async function handleAuthStatus(opts: AuthStatusOptions): Promise<Command
     return { exitCode: ExitCode.AUTH };
   }
 
-  const email = await fetchUserEmail(tokens.access_token, fetchFn);
-  const expiresAt = new Date(tokens.expiry_date);
+  let currentTokens = tokens;
+  if (isTokenExpired(tokens.expiry_date)) {
+    try {
+      const credentials = getClientCredentials(fs);
+      currentTokens = await refreshAccessToken(credentials, tokens, fetchFn);
+      saveTokens(fs, currentTokens);
+    } catch {
+      // リフレッシュ失敗時は元のトークンで続行
+    }
+  }
+
+  const email = await fetchUserEmail(currentTokens.access_token, fetchFn);
+  const expiresAt = new Date(currentTokens.expiry_date);
 
   if (format === "json") {
     write(

@@ -286,7 +286,7 @@ describe("handleAuthStatus", () => {
   it("outputs text format with email and token expiry", async () => {
     vi.stubEnv("HOME", "/home/testuser");
 
-    const expiryDate = new Date("2026-01-23T12:00:00Z").getTime();
+    const expiryDate = Date.now() + 3600_000;
     const tokens = makeTokenData({ expiry_date: expiryDate });
     const credPath = "/home/testuser/.config/gcal-cli/credentials.json";
     const clientPath = "/home/testuser/.config/gcal-cli/client_secret.json";
@@ -333,7 +333,7 @@ describe("handleAuthStatus", () => {
   it("outputs JSON with authenticated, email, and expires_at", async () => {
     vi.stubEnv("HOME", "/home/testuser");
 
-    const expiryDate = new Date("2026-01-23T12:00:00Z").getTime();
+    const expiryDate = Date.now() + 3600_000;
     const tokens = makeTokenData({ expiry_date: expiryDate });
     const credPath = "/home/testuser/.config/gcal-cli/credentials.json";
     const clientPath = "/home/testuser/.config/gcal-cli/client_secret.json";
@@ -376,7 +376,142 @@ describe("handleAuthStatus", () => {
     expect(json.success).toBe(true);
     expect(json.data.authenticated).toBe(true);
     expect(json.data.email).toBe("user@example.com");
-    expect(json.data.expires_at).toBe("2026-01-23T12:00:00.000Z");
+    expect(json.data.expires_at).toBe(new Date(expiryDate).toISOString());
+  });
+
+  it("refreshes expired token and displays updated email and expiry", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
+
+    const expiredDate = Date.now() - 3600_000; // 1 hour ago
+    const newExpiryDate = Date.now() + 3600_000; // 1 hour from now
+    const tokens = makeTokenData({ expiry_date: expiredDate });
+    const refreshedTokens = makeTokenData({
+      access_token: "refreshed-access-token",
+      expiry_date: newExpiryDate,
+    });
+
+    const credPath = "/home/testuser/.config/gcal-cli/credentials.json";
+    const clientPath = "/home/testuser/.config/gcal-cli/client_secret.json";
+    const clientSecretJson = JSON.stringify({
+      installed: {
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+
+    let savedTokens: string | undefined;
+    const fs = makeFsAdapter({
+      existsSync: (path: string) => path === credPath || path === clientPath,
+      readFileSync: (path: string) => {
+        if (path === clientPath) return clientSecretJson;
+        if (path === credPath) return JSON.stringify(tokens);
+        throw new Error(`File not found: ${path}`);
+      },
+      writeFileSync: (_path: string, data: string) => {
+        savedTokens = data;
+      },
+    });
+
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const mockFetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              access_token: refreshedTokens.access_token,
+              expires_in: 3600,
+              token_type: "Bearer",
+            }),
+        });
+      }
+      // userinfo endpoint
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ email: "refreshed@example.com" }),
+      });
+    });
+
+    const result = await handleAuthStatus({
+      fs,
+      format: "text",
+      write,
+      fetchFn: mockFetch as unknown as typeof globalThis.fetch,
+      cachedTokens: tokens,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const text = output.join("\n");
+    expect(text).toContain("Authenticated as: refreshed@example.com");
+    // Should have saved refreshed tokens
+    expect(savedTokens).toBeDefined();
+    const parsed = JSON.parse(savedTokens!);
+    expect(parsed.access_token).toBe("refreshed-access-token");
+  });
+
+  it("continues gracefully when token refresh fails", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
+
+    const expiredDate = Date.now() - 3600_000;
+    const tokens = makeTokenData({ expiry_date: expiredDate });
+
+    const credPath = "/home/testuser/.config/gcal-cli/credentials.json";
+    const clientPath = "/home/testuser/.config/gcal-cli/client_secret.json";
+    const clientSecretJson = JSON.stringify({
+      installed: {
+        client_id: "test-client-id",
+        client_secret: "test-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+
+    const fs = makeFsAdapter({
+      existsSync: (path: string) => path === credPath || path === clientPath,
+      readFileSync: (path: string) => {
+        if (path === clientPath) return clientSecretJson;
+        if (path === credPath) return JSON.stringify(tokens);
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const mockFetch = vi.fn().mockImplementation((url: string | URL | Request) => {
+      const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+      if (urlStr.includes("oauth2.googleapis.com/token")) {
+        return Promise.resolve({ ok: false, status: 401 });
+      }
+      // userinfo with expired token will fail
+      return Promise.resolve({
+        ok: false,
+        status: 401,
+      });
+    });
+
+    const result = await handleAuthStatus({
+      fs,
+      format: "text",
+      write,
+      fetchFn: mockFetch as unknown as typeof globalThis.fetch,
+      cachedTokens: tokens,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const text = output.join("\n");
+    expect(text).toContain("Authenticated as: unknown");
   });
 
   it("outputs error when not authenticated (text)", async () => {
