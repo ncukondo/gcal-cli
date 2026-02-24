@@ -42,4 +42,11 @@ describe("registerCommands", () => {
     const showCmd = program.commands.find((c) => c.name() === "show");
     expect(showCmd).toBeDefined();
   });
+
+  it("registers the init command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const initCmd = program.commands.find((c) => c.name() === "init");
+    expect(initCmd).toBeDefined();
+  });
 });
