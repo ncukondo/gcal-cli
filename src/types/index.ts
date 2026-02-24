@@ -61,6 +61,10 @@ export interface ErrorResponse {
   };
 }
 
+export interface CommandResult {
+  exitCode: number;
+}
+
 export const ExitCode = {
   SUCCESS: 0,
   GENERAL: 1,
