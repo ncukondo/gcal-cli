@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { AuthFsAdapter, TokenData } from "../lib/auth.ts";
+import type { AuthFsAdapter, TokenData, PromptFn } from "../lib/auth.ts";
 import { ExitCode } from "../types/index.ts";
 import { handleAuth, handleAuthStatus, handleAuthLogout, createAuthCommand } from "./auth.ts";
 
@@ -152,6 +152,77 @@ describe("handleAuth", () => {
     });
 
     expect(result.exitCode).toBe(ExitCode.AUTH);
+    const json = JSON.parse(output.join(""));
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe("AUTH_REQUIRED");
+  });
+
+  it("prompts for credentials when text format and no creds and promptFn provided", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+
+    const mockServer = { close: vi.fn() };
+    const mockTokens = makeTokenData();
+    const mockStartOAuthFlow = vi.fn().mockResolvedValue({
+      authUrl: "https://accounts.google.com/o/oauth2/auth?test=1",
+      waitForCode: Promise.resolve(mockTokens),
+      server: mockServer,
+    });
+
+    const fs = makeFsAdapter();
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+    const openUrl = vi.fn();
+    const promptFn = vi
+      .fn<PromptFn>()
+      .mockResolvedValueOnce("prompted-client-id")
+      .mockResolvedValueOnce("prompted-client-secret");
+
+    const result = await handleAuth({
+      fs,
+      format: "text",
+      write,
+      openUrl,
+      fetchFn: vi.fn() as unknown as typeof globalThis.fetch,
+      startOAuthFlowFn: mockStartOAuthFlow,
+      promptFn,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(promptFn).toHaveBeenCalledTimes(2);
+    // OAuth flow should have been called with the prompted credentials
+    expect(mockStartOAuthFlow).toHaveBeenCalled();
+    const calledCreds = mockStartOAuthFlow.mock.calls[0]![0];
+    expect(calledCreds.clientId).toBe("prompted-client-id");
+    expect(calledCreds.clientSecret).toBe("prompted-client-secret");
+  });
+
+  it("does NOT prompt when JSON format even if promptFn provided", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+
+    const fs = makeFsAdapter();
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+    const promptFn = vi.fn<PromptFn>();
+
+    const result = await handleAuth({
+      fs,
+      format: "json",
+      write,
+      openUrl: vi.fn(),
+      fetchFn: vi.fn() as unknown as typeof globalThis.fetch,
+      promptFn,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.AUTH);
+    expect(promptFn).not.toHaveBeenCalled();
     const json = JSON.parse(output.join(""));
     expect(json.success).toBe(false);
     expect(json.error.code).toBe("AUTH_REQUIRED");

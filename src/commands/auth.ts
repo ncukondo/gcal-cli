@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import * as z from "zod";
-import type { AuthFsAdapter, TokenData } from "../lib/auth.ts";
+import type { AuthFsAdapter, TokenData, PromptFn } from "../lib/auth.ts";
 import {
   AuthError,
   loadTokens,
   getClientCredentials,
+  getClientCredentialsOrPrompt,
   startOAuthFlow,
   revokeTokens,
 } from "../lib/auth.ts";
@@ -28,6 +29,7 @@ interface AuthHandlerOptions {
 interface HandleAuthOptions extends AuthHandlerOptions {
   openUrl: (url: string) => void;
   startOAuthFlowFn?: typeof startOAuthFlow;
+  promptFn?: PromptFn;
 }
 
 async function fetchUserEmail(
@@ -48,7 +50,15 @@ async function fetchUserEmail(
 }
 
 export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult> {
-  const { fs, format, write, openUrl, fetchFn, startOAuthFlowFn = startOAuthFlow } = opts;
+  const {
+    fs,
+    format,
+    write,
+    openUrl,
+    fetchFn,
+    startOAuthFlowFn = startOAuthFlow,
+    promptFn,
+  } = opts;
 
   const tokens = loadTokens(fs);
 
@@ -58,7 +68,11 @@ export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult
 
   let credentials: ReturnType<typeof getClientCredentials>;
   try {
-    credentials = getClientCredentials(fs);
+    if (promptFn && format === "text") {
+      credentials = await getClientCredentialsOrPrompt(fs, write, promptFn);
+    } else {
+      credentials = getClientCredentials(fs);
+    }
   } catch (err) {
     if (err instanceof AuthError) {
       if (format === "json") {
