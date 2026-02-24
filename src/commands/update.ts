@@ -3,7 +3,7 @@ import type { GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
-import type { OutputFormat } from "../types/index.ts";
+import type { OutputFormat, CommandResult } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
 export interface UpdateHandlerOptions {
@@ -20,10 +20,6 @@ export interface UpdateHandlerOptions {
   description?: string;
   busy?: boolean;
   free?: boolean;
-}
-
-interface CommandResult {
-  exitCode: number;
 }
 
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
@@ -65,11 +61,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     const endStr = opts.end;
     const parsedStart = parseDateTimeInZone(startStr, timezone);
     const parsedEnd = parseDateTimeInZone(endStr, timezone);
-    (input as UpdateEventInput & { start: string; end: string; allDay: boolean }).start =
-      formatDateTimeInZone(parsedStart, timezone);
-    (input as UpdateEventInput & { start: string; end: string; allDay: boolean }).end =
-      formatDateTimeInZone(parsedEnd, timezone);
-    (input as UpdateEventInput & { start: string; end: string; allDay: boolean }).allDay = false;
+    const withTime = input as UpdateEventInput & { start: string; end: string; allDay: boolean };
+    withTime.start = formatDateTimeInZone(parsedStart, timezone);
+    withTime.end = formatDateTimeInZone(parsedEnd, timezone);
+    withTime.allDay = false;
     input.timeZone = timezone;
   }
 
