@@ -77,6 +77,7 @@ interface RunUpdateOpts {
   format?: "text" | "json";
   calendar?: string;
   timezone?: string;
+  dryRun?: boolean;
 }
 
 function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
@@ -98,6 +99,7 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   if (opts.description !== undefined) handlerOpts.description = opts.description;
   if (opts.busy !== undefined) handlerOpts.busy = opts.busy;
   if (opts.free !== undefined) handlerOpts.free = opts.free;
+  if (opts.dryRun !== undefined) handlerOpts.dryRun = opts.dryRun;
   return handleUpdate(handlerOpts).then((result) => ({ ...result, output }));
 }
 
@@ -283,6 +285,89 @@ describe("update command", () => {
       });
 
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe("--dry-run", () => {
+    it("does not call API when dry-run is set", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt123", title: "New Title", dryRun: true });
+
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("outputs preview message in text format with changes list", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt123",
+        title: "New Title",
+        description: "Updated desc",
+        busy: true,
+        dryRun: true,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const text = result.output.join("\n");
+      expect(text).toContain('DRY RUN: Would update event "evt123":');
+      expect(text).toContain('  title: "New Title"');
+      expect(text).toContain('  description: "Updated desc"');
+      expect(text).toContain("  transparency: opaque");
+    });
+
+    it("outputs start/end in text format when provided", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt123",
+        start: "2026-02-24T10:00",
+        end: "2026-02-24T11:00",
+        timezone: "Asia/Tokyo",
+        dryRun: true,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const text = result.output.join("\n");
+      expect(text).toContain('  start: "2026-02-24T10:00:00+09:00"');
+      expect(text).toContain('  end: "2026-02-24T11:00:00+09:00"');
+    });
+
+    it("outputs dry-run data in JSON format", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt123",
+        title: "New Title",
+        busy: true,
+        format: "json",
+        dryRun: true,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data).toEqual({
+        dry_run: true,
+        action: "update",
+        event_id: "evt123",
+        changes: {
+          title: "New Title",
+          transparency: "opaque",
+        },
+      });
+    });
+
+    it("includes start/end/timeZone in JSON changes when provided", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt123",
+        start: "2026-02-24T10:00",
+        end: "2026-02-24T11:00",
+        timezone: "Asia/Tokyo",
+        format: "json",
+        dryRun: true,
+      });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.data.changes.start).toBe("2026-02-24T10:00:00+09:00");
+      expect(json.data.changes.end).toBe("2026-02-24T11:00:00+09:00");
     });
   });
 

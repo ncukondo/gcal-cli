@@ -28,6 +28,7 @@ function runDelete(
     calendarId?: string;
     format?: "text" | "json";
     quiet?: boolean;
+    dryRun?: boolean;
   } = {},
 ) {
   const output: string[] = [];
@@ -37,6 +38,7 @@ function runDelete(
     calendarId: opts.calendarId ?? "primary",
     format: opts.format ?? "text",
     quiet: opts.quiet ?? false,
+    dryRun: opts.dryRun ?? false,
     write: (msg: string) => {
       output.push(msg);
     },
@@ -133,6 +135,48 @@ describe("delete command", () => {
     });
   });
 
+  describe("--dry-run", () => {
+    it("does not call API when dry-run is set", async () => {
+      const api = makeMockApi();
+      await runDelete(api, { eventId: "evt123", calendarId: "primary", dryRun: true });
+
+      expect(api.events.delete).not.toHaveBeenCalled();
+    });
+
+    it("outputs preview message in text format", async () => {
+      const api = makeMockApi();
+      const result = await runDelete(api, {
+        eventId: "evt123",
+        calendarId: "primary",
+        dryRun: true,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const text = result.output.join("\n");
+      expect(text).toContain('DRY RUN: Would delete event "evt123" from calendar "primary"');
+    });
+
+    it("outputs dry-run data in JSON format", async () => {
+      const api = makeMockApi();
+      const result = await runDelete(api, {
+        eventId: "evt123",
+        calendarId: "primary",
+        format: "json",
+        dryRun: true,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data).toEqual({
+        dry_run: true,
+        action: "delete",
+        event_id: "evt123",
+        calendar_id: "primary",
+      });
+    });
+  });
+
   describe("createDeleteCommand", () => {
     it("creates a command named 'delete'", () => {
       const cmd = createDeleteCommand();
@@ -165,6 +209,13 @@ describe("delete command", () => {
       cmd.exitOverride();
       cmd.parse(["node", "delete", "-c", "work@group.calendar.google.com", "abc123"]);
       expect(cmd.opts().calendar).toBe("work@group.calendar.google.com");
+    });
+
+    it("accepts --dry-run option", () => {
+      const cmd = createDeleteCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "delete", "--dry-run", "abc123"]);
+      expect(cmd.opts().dryRun).toBe(true);
     });
   });
 });

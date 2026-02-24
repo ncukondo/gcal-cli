@@ -20,6 +20,7 @@ export interface UpdateHandlerOptions {
   description?: string;
   busy?: boolean;
   free?: boolean;
+  dryRun?: boolean;
 }
 
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
@@ -68,6 +69,36 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     input.timeZone = timezone;
   }
 
+  if (opts.dryRun) {
+    const changes: Record<string, unknown> = {};
+    if (input.title !== undefined) changes.title = input.title;
+    if (input.description !== undefined) changes.description = input.description;
+    if (input.transparency !== undefined) changes.transparency = input.transparency;
+    const withTime = input as UpdateEventInput & { start?: string; end?: string };
+    if (withTime.start !== undefined) changes.start = withTime.start;
+    if (withTime.end !== undefined) changes.end = withTime.end;
+
+    if (format === "json") {
+      write(
+        formatJsonSuccess({
+          dry_run: true,
+          action: "update",
+          event_id: eventId,
+          changes,
+        }),
+      );
+    } else {
+      const lines = [`DRY RUN: Would update event "${eventId}":`];
+      if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
+      if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
+      if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
+      if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
+      if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
+      write(lines.join("\n"));
+    }
+    return { exitCode: ExitCode.SUCCESS };
+  }
+
   const updated = await updateEvent(api, calendarId, calendarName, eventId, input);
 
   if (format === "json") {
@@ -91,6 +122,7 @@ export function createUpdateCommand(): Command {
   cmd.option("-d, --description <text>", "New description");
   cmd.option("--busy", "Mark as busy");
   cmd.option("--free", "Mark as free");
+  cmd.option("--dry-run", "Preview without executing");
 
   const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
   const freeOpt = cmd.options.find((o) => o.long === "--free")!;

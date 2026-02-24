@@ -11,15 +11,32 @@ export interface DeleteHandlerOptions {
   calendarId: string;
   format: OutputFormat;
   quiet: boolean;
+  dryRun: boolean;
   write: (msg: string) => void;
 }
 
 export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandResult> {
-  const { api, eventId, calendarId, format, quiet, write } = opts;
+  const { api, eventId, calendarId, format, quiet, dryRun, write } = opts;
 
   if (!eventId) {
     write(formatJsonError("INVALID_ARGS", "event-id is required"));
     return { exitCode: ExitCode.ARGUMENT };
+  }
+
+  if (dryRun) {
+    if (format === "json") {
+      write(
+        formatJsonSuccess({
+          dry_run: true,
+          action: "delete",
+          event_id: eventId,
+          calendar_id: calendarId,
+        }),
+      );
+    } else {
+      write(`DRY RUN: Would delete event "${eventId}" from calendar "${calendarId}"`);
+    }
+    return { exitCode: ExitCode.SUCCESS };
   }
 
   try {
@@ -51,5 +68,6 @@ export function createDeleteCommand(): Command {
   return new Command("delete")
     .description("Delete a calendar event")
     .argument("<event-id>", "Event ID")
-    .option("-c, --calendar <id>", "Calendar ID to query");
+    .option("-c, --calendar <id>", "Calendar ID to query")
+    .option("--dry-run", "Preview without executing");
 }

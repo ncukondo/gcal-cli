@@ -209,6 +209,7 @@ export function registerCommands(program: Command): void {
         calendarId: resolvedCalendarId,
         format: globalOpts.format,
         quiet: globalOpts.quiet,
+        dryRun: deleteOpts.dryRun ?? false,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
       process.exit(result.exitCode);
