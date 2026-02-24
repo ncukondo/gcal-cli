@@ -512,6 +512,42 @@ describe("handleAuthStatus", () => {
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     const text = output.join("\n");
     expect(text).toContain("Authenticated as: unknown");
+    expect(text).toContain("Run `gcal auth --logout` then `gcal auth` to re-authenticate");
+  });
+
+  it("shows re-auth hint in JSON when email is unavailable", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+
+    const tokens = makeTokenData();
+    const credPath = "/home/testuser/.config/gcal-cli/credentials.json";
+
+    const fs = makeFsAdapter({
+      existsSync: (path: string) => path === credPath,
+      readFileSync: (path: string) => {
+        if (path === credPath) return JSON.stringify(tokens);
+        throw new Error(`File not found: ${path}`);
+      },
+    });
+
+    const output: string[] = [];
+    const write = (msg: string) => {
+      output.push(msg);
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+
+    const result = await handleAuthStatus({
+      fs,
+      format: "json",
+      write,
+      fetchFn: mockFetch as unknown as typeof globalThis.fetch,
+      cachedTokens: tokens,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const json = JSON.parse(output.join(""));
+    expect(json.data.email).toBeNull();
+    expect(json.data.hint).toContain("re-authenticate");
   });
 
   it("outputs error when not authenticated (text)", async () => {

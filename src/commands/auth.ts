@@ -131,6 +131,8 @@ export async function handleAuthStatus(opts: AuthStatusOptions): Promise<Command
 
   const email = await fetchUserEmail(currentTokens.access_token, fetchFn);
   const expiresAt = new Date(currentTokens.expiry_date);
+  const reAuthHint =
+    "Run `gcal auth --logout` then `gcal auth` to re-authenticate with updated permissions.";
 
   if (format === "json") {
     write(
@@ -138,11 +140,15 @@ export async function handleAuthStatus(opts: AuthStatusOptions): Promise<Command
         authenticated: true,
         email,
         expires_at: expiresAt.toISOString(),
+        ...(email == null ? { hint: reAuthHint } : {}),
       }),
     );
   } else {
     write(`Authenticated as: ${email ?? "unknown"}`);
     write(`Token expires: ${expiresAt.toISOString()}`);
+    if (email == null) {
+      write(reAuthHint);
+    }
   }
 
   return { exitCode: ExitCode.SUCCESS };
