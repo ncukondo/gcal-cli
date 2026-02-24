@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     tmux \
     unzip \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Bun
@@ -33,5 +34,11 @@ USER root
 # Copy tmux config
 COPY .tmux.conf /home/vscode/.tmux.conf
 RUN chown vscode:vscode /home/vscode/.tmux.conf
+
+# Copy Claude Code statusline script
+RUN mkdir -p /home/vscode/.claude
+COPY statusline.sh /home/vscode/.claude/statusline.sh
+RUN chmod +x /home/vscode/.claude/statusline.sh && \
+    chown -R vscode:vscode /home/vscode/.claude
 
 USER vscode

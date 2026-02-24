@@ -27,7 +27,7 @@
       }
     }
   },
-  "postCreateCommand": "sudo chown vscode:vscode /workspaces",
+  "postCreateCommand": "sudo chown vscode:vscode /workspaces && bash .devcontainer/setup-claude-settings.sh",
   "postStartCommand": "tmux has-session -t main 2>/dev/null || tmux new-session -d -s main",
   "remoteUser": "vscode"
 }
