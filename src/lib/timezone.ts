@@ -9,11 +9,30 @@ function isValidTimezone(tz: string): boolean {
   }
 }
 
+const COMMON_ABBREVIATIONS: Record<string, string> = {
+  JST: "Asia/Tokyo",
+  EST: "America/New_York",
+  CST: "America/Chicago",
+  MST: "America/Denver",
+  PST: "America/Los_Angeles",
+  GMT: "Etc/GMT",
+  CET: "Europe/Paris",
+  EET: "Europe/Bucharest",
+  IST: "Asia/Kolkata",
+  KST: "Asia/Seoul",
+  CST_CN: "Asia/Shanghai",
+  AEST: "Australia/Sydney",
+};
+
 export function resolveTimezone(cliTz?: string, configTz?: string): string {
   const tz = cliTz ?? configTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (!isValidTimezone(tz)) {
-    throw new Error(`Invalid timezone: ${tz}`);
+    const suggestion = COMMON_ABBREVIATIONS[tz.toUpperCase()];
+    const hint = suggestion
+      ? `Did you mean "${suggestion}"?`
+      : 'Use an IANA timezone name (e.g. "Asia/Tokyo", "America/New_York").';
+    throw new Error(`Invalid timezone: ${tz}. ${hint}`);
   }
 
   return tz;

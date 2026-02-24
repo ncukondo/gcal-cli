@@ -15,12 +15,24 @@ describe("resolveTimezone", () => {
     expect(resolveTimezone(undefined, undefined)).toBe(systemTz);
   });
 
-  it("throws on invalid timezone string", () => {
-    expect(() => resolveTimezone("Invalid/Timezone")).toThrow();
+  it("throws on invalid timezone string with hint", () => {
+    expect(() => resolveTimezone("Invalid/Timezone")).toThrow(
+      /Invalid timezone: Invalid\/Timezone.*IANA.*e\.g\. "Asia\/Tokyo"/,
+    );
   });
 
-  it("throws on invalid config timezone when CLI is undefined", () => {
-    expect(() => resolveTimezone(undefined, "Not/A/Timezone")).toThrow();
+  it("throws on invalid config timezone when CLI is undefined with hint", () => {
+    expect(() => resolveTimezone(undefined, "Not/A/Timezone")).toThrow(
+      /Invalid timezone: Not\/A\/Timezone.*IANA.*e\.g\./,
+    );
+  });
+
+  it("throws on common abbreviation with specific suggestion", () => {
+    expect(() => resolveTimezone("JST")).toThrow(/Invalid timezone: JST.*Asia\/Tokyo/);
+  });
+
+  it("includes IANA hint for unknown timezone without known abbreviation", () => {
+    expect(() => resolveTimezone("FAKE")).toThrow(/Invalid timezone: FAKE.*IANA.*e\.g\./);
   });
 });
 
