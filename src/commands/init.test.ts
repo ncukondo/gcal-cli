@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Calendar } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
+import { ApiError } from "../lib/api.ts";
 import { parseConfig } from "../lib/config.ts";
 import { createInitCommand, handleInit } from "./init.ts";
 import type { HandleInitOptions } from "./init.ts";
@@ -285,7 +286,7 @@ describe("handleInit", () => {
   });
 
   it("returns AUTH exit code when auth fails without requestAuth", async () => {
-    const authError = Object.assign(new Error("Not authenticated"), { code: "AUTH_REQUIRED" });
+    const authError = new ApiError("AUTH_REQUIRED", "Not authenticated");
     const output: string[] = [];
     const opts = makeOpts({
       listCalendars: vi.fn().mockRejectedValue(authError),
@@ -299,7 +300,7 @@ describe("handleInit", () => {
   });
 
   it("auto-authenticates when listCalendars throws AUTH_REQUIRED", async () => {
-    const authError = Object.assign(new Error("Not authenticated"), { code: "AUTH_REQUIRED" });
+    const authError = new ApiError("AUTH_REQUIRED", "Not authenticated");
     let callCount = 0;
     const listCalendars = vi.fn().mockImplementation(() => {
       callCount++;

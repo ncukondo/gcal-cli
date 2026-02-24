@@ -3,6 +3,7 @@ import { Command } from "commander";
 import type { Calendar, CommandResult, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { generateConfigToml, getDefaultConfigPath } from "../lib/config.ts";
+import { isAuthRequiredError } from "../lib/api.ts";
 import { formatJsonSuccess, formatJsonError } from "../lib/output.ts";
 
 export interface InitFsAdapter {
@@ -22,14 +23,6 @@ export interface HandleInitOptions {
   all: boolean;
   local: boolean;
   timezone?: string | undefined;
-}
-
-function isAuthRequiredError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as { code: string }).code === "AUTH_REQUIRED"
-  );
 }
 
 function resolveTimezone(cliTimezone?: string): string {
@@ -91,7 +84,7 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
   const configCalendars = calendars.map((cal) => ({
     id: cal.id,
     name: cal.name,
-    enabled: all ? true : cal.primary,
+    enabled: all || cal.primary,
   }));
 
   // Resolve timezone

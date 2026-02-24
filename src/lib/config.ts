@@ -22,8 +22,7 @@ export function findConfigPath(fs: FindConfigFs): string | null {
     return cwdPath;
   }
 
-  const home = process.env["HOME"] ?? "";
-  const defaultPath = `${home}/.config/gcal-cli/config.toml`;
+  const defaultPath = getDefaultConfigPath();
   if (fs.existsSync(defaultPath)) {
     return defaultPath;
   }
