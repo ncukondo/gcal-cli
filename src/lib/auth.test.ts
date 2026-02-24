@@ -3,6 +3,7 @@ import {
   getClientCredentials,
   loadTokens,
   saveTokens,
+  saveClientCredentials,
   isTokenExpired,
   refreshAccessToken,
   getAuthenticatedClient,
@@ -199,6 +200,54 @@ describe("saveTokens", () => {
     expect(writtenPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
     expect(JSON.parse(writtenData)).toEqual(tokenData);
     expect(chmodPath).toBe("/home/testuser/.config/gcal-cli/credentials.json");
+    expect(chmodMode).toBe(0o600);
+  });
+});
+
+describe("saveClientCredentials", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("writes correct JSON format with installed.client_id and installed.client_secret", () => {
+    vi.stubEnv("HOME", "/home/testuser");
+
+    let writtenPath = "";
+    let writtenData = "";
+    let mkdirPath = "";
+    let chmodPath = "";
+    let chmodMode = 0;
+    const fs = makeFsAdapter({
+      mkdirSync: (path: string) => {
+        mkdirPath = path;
+      },
+      writeFileSync: (path: string, data: string) => {
+        writtenPath = path;
+        writtenData = data;
+      },
+      chmodSync: (path: string, mode: number) => {
+        chmodPath = path;
+        chmodMode = mode;
+      },
+    });
+
+    saveClientCredentials(fs, "my-client-id", "my-client-secret");
+
+    expect(mkdirPath).toBe("/home/testuser/.config/gcal-cli");
+    expect(writtenPath).toBe("/home/testuser/.config/gcal-cli/client_secret.json");
+    const parsed = JSON.parse(writtenData);
+    expect(parsed).toEqual({
+      installed: {
+        client_id: "my-client-id",
+        client_secret: "my-client-secret",
+        redirect_uris: ["http://localhost"],
+      },
+    });
+    expect(chmodPath).toBe("/home/testuser/.config/gcal-cli/client_secret.json");
     expect(chmodMode).toBe(0o600);
   });
 });

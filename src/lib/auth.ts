@@ -80,6 +80,25 @@ function getCredentialsPath(): string {
   return `${getCredentialsDir()}/credentials.json`;
 }
 
+export function saveClientCredentials(
+  fs: AuthFsAdapter,
+  clientId: string,
+  clientSecret: string,
+): void {
+  const dir = getCredentialsDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const clientSecretPath = `${dir}/client_secret.json`;
+  const data = {
+    installed: {
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uris: [DEFAULT_REDIRECT_URI],
+    },
+  };
+  fs.writeFileSync(clientSecretPath, JSON.stringify(data, null, 2));
+  fs.chmodSync(clientSecretPath, 0o600);
+}
+
 export function loadTokens(fs: AuthFsAdapter): TokenData | null {
   const credPath = getCredentialsPath();
   if (!fs.existsSync(credPath)) {
