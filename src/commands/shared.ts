@@ -47,6 +47,17 @@ export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalenda
         const res = await calendar.events.get(p);
         return { data: res.data };
       },
+      insert: async (p) => {
+        const res = await calendar.events.insert(p);
+        return { data: res.data };
+      },
+      patch: async (p) => {
+        const res = await calendar.events.patch(p);
+        return { data: res.data };
+      },
+      delete: async (p) => {
+        await calendar.events.delete(p);
+      },
     },
   };
 }
