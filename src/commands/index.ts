@@ -2,13 +2,14 @@ import { google } from "googleapis";
 import type { Command } from "commander";
 import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } from "./auth.ts";
 import { createSearchCommand } from "./search.ts";
+import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig } from "../lib/config.ts";
 import { getAuthenticatedClient } from "../lib/auth.ts";
-import { listEvents } from "../lib/api.ts";
+import { listEvents, getEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { ListOptions } from "./list.ts";
 
@@ -97,4 +98,34 @@ export function registerCommands(program: Command): void {
   program.addCommand(listCmd);
 
   program.addCommand(createSearchCommand());
+
+  const showCmd = createShowCommand();
+  showCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    try {
+      const config = loadConfig(fsAdapter);
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const calendarApi = google.calendar({ version: "v3", auth });
+      const api = createGoogleCalendarApi(calendarApi);
+
+      const calendars = globalOpts.calendar.length > 0
+        ? config.calendars.filter((c) => globalOpts.calendar.includes(c.id))
+        : config.calendars.filter((c) => c.enabled);
+
+      const cal = calendars[0] ?? { id: "primary", name: "Primary" };
+
+      const result = await handleShow({
+        api,
+        eventId: showCmd.args[0]!,
+        calendarId: cal.id,
+        calendarName: cal.name,
+        format: globalOpts.format,
+        write: (msg) => process.stdout.write(msg + "\n"),
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(showCmd);
 }
