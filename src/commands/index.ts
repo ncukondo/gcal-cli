@@ -154,14 +154,11 @@ export function registerCommands(program: Command): void {
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
 
-      const calendarId = deleteOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
-      let resolvedCalendarId: string;
-      if (calendarId) {
-        resolvedCalendarId = calendarId;
-      } else {
-        const enabled = config.calendars.filter((c) => c.enabled);
-        resolvedCalendarId = enabled[0]?.id ?? "primary";
-      }
+      const calendars = selectCalendars(
+        deleteOpts.calendar ? [deleteOpts.calendar] : globalOpts.calendar,
+        config,
+      );
+      const resolvedCalendarId = calendars[0]?.id ?? "primary";
 
       const result = await handleDelete({
         api,

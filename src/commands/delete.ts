@@ -21,6 +21,11 @@ export interface DeleteHandlerOptions {
 export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandResult> {
   const { api, eventId, calendarId, format, quiet, write } = opts;
 
+  if (!eventId) {
+    write(formatJsonError("INVALID_ARGS", "event-id is required"));
+    return { exitCode: ExitCode.ARGUMENT };
+  }
+
   try {
     await deleteEvent(api, calendarId, eventId);
 

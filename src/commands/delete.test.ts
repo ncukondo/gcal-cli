@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleCalendarApi } from "../lib/api.ts";
+import { ExitCode } from "../types/index.ts";
 import { createDeleteCommand, handleDelete } from "./delete.ts";
 import type { DeleteHandlerOptions } from "./delete.ts";
 
@@ -44,6 +45,15 @@ function runDelete(
 }
 
 describe("delete command", () => {
+  it("missing event-id returns INVALID_ARGS error with exit code 3", async () => {
+    const api = makeMockApi();
+    const result = await runDelete(api, { eventId: "" });
+
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    const output = result.output.join("");
+    expect(output).toContain("INVALID_ARGS");
+  });
+
   describe("API interaction", () => {
     it("calls events.delete with correct calendarId and eventId", async () => {
       const api = makeMockApi();
