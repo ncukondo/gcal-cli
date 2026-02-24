@@ -56,4 +56,11 @@ describe("registerCommands", () => {
     const names = program.commands.map((c) => c.name());
     expect(names).toContain("update");
   });
+
+  it("registers the delete command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const deleteCmd = program.commands.find((c) => c.name() === "delete");
+    expect(deleteCmd).toBeDefined();
+  });
 });
