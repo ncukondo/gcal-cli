@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import type { Command } from "commander";
 import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } from "./auth.ts";
 import { createSearchCommand } from "./search.ts";
+import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
@@ -99,6 +100,41 @@ export function registerCommands(program: Command): void {
   program.addCommand(listCmd);
 
   program.addCommand(createSearchCommand());
+
+  const showCmd = createShowCommand();
+  showCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const showOpts = showCmd.opts();
+    try {
+      const config = loadConfig(fsAdapter);
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const calendarApi = google.calendar({ version: "v3", auth });
+      const api = createGoogleCalendarApi(calendarApi);
+
+      const calendarId = showOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
+      let cal: { id: string; name: string };
+      if (calendarId) {
+        const found = config.calendars.find((c) => c.id === calendarId);
+        cal = found ? { id: found.id, name: found.name } : { id: calendarId, name: calendarId };
+      } else {
+        const enabled = config.calendars.filter((c) => c.enabled);
+        cal = enabled[0] ?? { id: "primary", name: "Primary" };
+      }
+
+      const result = await handleShow({
+        api,
+        eventId: showCmd.args[0]!,
+        calendarId: cal.id,
+        calendarName: cal.name,
+        format: globalOpts.format,
+        write: (msg) => process.stdout.write(msg + "\n"),
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(showCmd);
 
   const addCmd = createAddCommand();
   addCmd.action(async () => {
