@@ -11,6 +11,10 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ncukondo/gcal-cli"
+  },
   "publishConfig": {
     "access": "public"
   },
