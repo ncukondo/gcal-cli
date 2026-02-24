@@ -60,6 +60,23 @@ Use `-f json` for machine-readable output.
 }
 ```
 
+### `gcal init` Text Output
+
+```
+Config file created: ~/.config/gcal-cli/config.toml
+
+Enabled calendars:
+  - Main Calendar (user@gmail.com)
+
+Timezone: Asia/Tokyo
+```
+
+### `gcal init` Quiet Output
+
+```
+~/.config/gcal-cli/config.toml
+```
+
 ### Error Codes
 
 | Code | Description |
@@ -179,6 +196,24 @@ All datetime fields include timezone offset (ISO 8601).
   "data": {
     "deleted_id": "abc123",
     "message": "Event deleted"
+  }
+}
+```
+
+### `gcal init -f json`
+
+```json
+{
+  "success": true,
+  "data": {
+    "path": "~/.config/gcal-cli/config.toml",
+    "timezone": "Asia/Tokyo",
+    "calendars": [
+      { "id": "user@gmail.com", "name": "Main Calendar", "enabled": true },
+      { "id": "family@group.calendar.google.com", "name": "Family", "enabled": false }
+    ],
+    "enabled_count": 1,
+    "total_count": 2
   }
 }
 ```

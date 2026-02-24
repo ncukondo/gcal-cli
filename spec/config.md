@@ -56,10 +56,10 @@ Priority order:
 
 ## Calendar Discovery
 
-On first run (or with `gcal calendars --discover`):
+`gcal init` generates the initial config file:
 1. Fetch all calendars from Google Calendar API
-2. Filter calendars containing "main" (case-insensitive)
-3. Generate initial config.toml with discovered calendars
+2. Enable only the primary calendar by default (use `--all` to enable all)
+3. Write config.toml to default or `--local` location
 
 ## Environment Variables
 

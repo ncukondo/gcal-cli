@@ -10,6 +10,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 14. [013-show-command](./013-show-command.md) — `gcal show` command (deps: 008, 009a, 005)
 
+### Setup & Config
+
+20. [019-init-command](./019-init-command.md) — `gcal init` command (deps: 007, 009a, 003)
+
 ### Phase 5: Write Commands
 
 15. [014-add-command](./014-add-command.md) — `gcal add` command

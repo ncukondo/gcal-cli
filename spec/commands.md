@@ -158,3 +158,31 @@ gcal auth              # Start OAuth flow
 gcal auth --status     # Check authentication status
 gcal auth --logout     # Remove stored credentials
 ```
+
+### `gcal init`
+
+Initialize config file with calendars from Google Calendar.
+
+```bash
+gcal init [options]
+
+Options:
+  --force              Overwrite existing config file
+  --all                Enable all calendars (default: primary only)
+  --local              Create ./gcal-cli.toml in current directory
+  --timezone <zone>    Set timezone (default: system timezone)
+```
+
+If not authenticated, automatically starts the OAuth flow before proceeding.
+
+Default output: `~/.config/gcal-cli/config.toml`
+With `--local`: `./gcal-cli.toml`
+
+Examples:
+```bash
+gcal init                          # Primary calendar only → ~/.config/gcal-cli/config.toml
+gcal init --all                    # All calendars enabled
+gcal init --local                  # Create ./gcal-cli.toml
+gcal init --force --timezone Asia/Tokyo
+gcal init -f json
+```
