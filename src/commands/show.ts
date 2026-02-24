@@ -48,5 +48,6 @@ export async function handleShow(opts: ShowHandlerOptions): Promise<CommandResul
 export function createShowCommand(): Command {
   return new Command("show")
     .description("Show event details")
-    .argument("<event-id>", "Event ID");
+    .argument("<event-id>", "Event ID")
+    .option("-c, --calendar <id>", "Calendar ID to query");
 }

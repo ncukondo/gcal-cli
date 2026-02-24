@@ -228,5 +228,20 @@ describe("show command", () => {
       cmd.parse(["node", "show", "abc123"]);
       expect(cmd.args[0]).toBe("abc123");
     });
+
+    it("accepts a --calendar option", () => {
+      const cmd = createShowCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "show", "--calendar", "work@group.calendar.google.com", "abc123"]);
+      expect(cmd.opts().calendar).toBe("work@group.calendar.google.com");
+      expect(cmd.args[0]).toBe("abc123");
+    });
+
+    it("accepts -c shorthand for calendar", () => {
+      const cmd = createShowCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "show", "-c", "work@group.calendar.google.com", "abc123"]);
+      expect(cmd.opts().calendar).toBe("work@group.calendar.google.com");
+    });
   });
 });

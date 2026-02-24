@@ -102,17 +102,22 @@ export function registerCommands(program: Command): void {
   const showCmd = createShowCommand();
   showCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
+    const showOpts = showCmd.opts();
     try {
       const config = loadConfig(fsAdapter);
       const auth = await getAuthenticatedClient(fsAdapter);
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
 
-      const calendars = globalOpts.calendar.length > 0
-        ? config.calendars.filter((c) => globalOpts.calendar.includes(c.id))
-        : config.calendars.filter((c) => c.enabled);
-
-      const cal = calendars[0] ?? { id: "primary", name: "Primary" };
+      const calendarId = showOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
+      let cal: { id: string; name: string };
+      if (calendarId) {
+        const found = config.calendars.find((c) => c.id === calendarId);
+        cal = found ? { id: found.id, name: found.name } : { id: calendarId, name: calendarId };
+      } else {
+        const enabled = config.calendars.filter((c) => c.enabled);
+        cal = enabled[0] ?? { id: "primary", name: "Primary" };
+      }
 
       const result = await handleShow({
         api,
