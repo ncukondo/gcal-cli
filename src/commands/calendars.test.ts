@@ -194,9 +194,7 @@ describe("handleCalendars", () => {
   it("handles API error gracefully", async () => {
     const api: GoogleCalendarApi = {
       calendarList: {
-        list: vi.fn().mockRejectedValue(
-          Object.assign(new Error("Unauthorized"), { code: 401 }),
-        ),
+        list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
       events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
@@ -217,9 +215,7 @@ describe("handleCalendars", () => {
   it("handles API error in JSON format", async () => {
     const api: GoogleCalendarApi = {
       calendarList: {
-        list: vi.fn().mockRejectedValue(
-          Object.assign(new Error("Unauthorized"), { code: 401 }),
-        ),
+        list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
       events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };

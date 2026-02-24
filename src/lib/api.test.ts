@@ -198,14 +198,16 @@ function createMockApi(responses: Record<string, unknown>): GoogleCalendarApi {
       patch: vi.fn().mockImplementation(async () => {
         return { data: responses["patched"] ?? responses["default"] };
       }),
-      delete: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string }) => {
-        const key = params.eventId;
-        if (responses[key] === "not_found") {
-          const error = new Error("Not Found") as Error & { code: number };
-          error.code = 404;
-          throw error;
-        }
-      }),
+      delete: vi
+        .fn()
+        .mockImplementation(async (params: { calendarId: string; eventId: string }) => {
+          const key = params.eventId;
+          if (responses[key] === "not_found") {
+            const error = new Error("Not Found") as Error & { code: number };
+            error.code = 404;
+            throw error;
+          }
+        }),
     },
   };
 }
@@ -798,7 +800,10 @@ describe("updateEvent", () => {
   it("throws when start and end provided without allDay", async () => {
     const api = createMockApi({});
 
-    const input = { start: "2024-03-15T09:00:00Z", end: "2024-03-15T10:00:00Z" } as UpdateEventInput;
+    const input = {
+      start: "2024-03-15T09:00:00Z",
+      end: "2024-03-15T10:00:00Z",
+    } as UpdateEventInput;
 
     await expect(updateEvent(api, "cal1", "Cal", "evt1", input)).rejects.toThrow(
       "start, end, and allDay must all be provided together",
@@ -807,9 +812,7 @@ describe("updateEvent", () => {
   });
 
   it("maps API errors correctly", async () => {
-    const patchFn = vi
-      .fn()
-      .mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 }));
+    const patchFn = vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 }));
     const api: GoogleCalendarApi = {
       calendarList: { list: vi.fn() },
       events: {

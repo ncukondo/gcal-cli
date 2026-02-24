@@ -4,12 +4,13 @@ import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } fro
 import { createSearchCommand } from "./search.ts";
 import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
+import { createUpdateCommand, handleUpdate } from "./update.ts";
 import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
-import { loadConfig } from "../lib/config.ts";
+import { loadConfig, selectCalendars } from "../lib/config.ts";
 import {
   getAuthenticatedClient,
   getClientCredentials,
@@ -17,6 +18,7 @@ import {
 } from "../lib/auth.ts";
 import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
+import { resolveTimezone } from "../lib/timezone.ts";
 import type { ListOptions } from "./list.ts";
 import type { AddOptions } from "./add.ts";
 
@@ -233,4 +235,35 @@ export function registerCommands(program: Command): void {
     }
   });
   program.addCommand(initCmd);
+
+  const updateCmd = createUpdateCommand();
+  updateCmd.action(async (eventId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const updateOpts = updateCmd.opts();
+
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+      const api = createGoogleCalendarApi(calendar);
+      const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
+      const calendars = selectCalendars(globalOpts.calendar, config);
+      const cal = calendars[0]!;
+
+      const result = await handleUpdate({
+        api,
+        eventId,
+        calendarId: cal.id,
+        calendarName: cal.name,
+        format: globalOpts.format,
+        timezone,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        ...updateOpts,
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(updateCmd);
 }

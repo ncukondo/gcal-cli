@@ -302,7 +302,10 @@ export async function updateEvent(
       requestBody.transparency = input.transparency;
     }
     if (start !== undefined && end !== undefined && allDay !== undefined) {
-      Object.assign(requestBody, buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone));
+      Object.assign(
+        requestBody,
+        buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone),
+      );
     }
     const response = await api.events.patch({ calendarId, eventId, requestBody });
     return normalizeEvent(response.data, calendarId, calendarName);

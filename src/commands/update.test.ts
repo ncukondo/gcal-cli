@@ -1,0 +1,312 @@
+import { describe, expect, it, vi } from "vitest";
+import type { GoogleCalendarApi } from "../lib/api.ts";
+import type { CalendarEvent } from "../types/index.ts";
+import { createUpdateCommand, handleUpdate } from "./update.ts";
+import type { UpdateHandlerOptions } from "./update.ts";
+
+function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
+  return {
+    id: "evt1",
+    title: "Original Meeting",
+    description: "Original description",
+    start: "2026-02-01T10:00:00+09:00",
+    end: "2026-02-01T11:00:00+09:00",
+    all_day: false,
+    calendar_id: "primary",
+    calendar_name: "Main Calendar",
+    html_link: "https://calendar.google.com/event?eid=evt1",
+    status: "confirmed",
+    transparency: "opaque",
+    created: "2026-01-01T00:00:00Z",
+    updated: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeMockApi(
+  opts: {
+    patchReturn?: CalendarEvent;
+    patchError?: Error;
+  } = {},
+): GoogleCalendarApi {
+  const patchFn = opts.patchError
+    ? vi.fn().mockRejectedValue(opts.patchError)
+    : vi.fn().mockResolvedValue({
+        data: opts.patchReturn
+          ? {
+              id: opts.patchReturn.id,
+              summary: opts.patchReturn.title,
+              description: opts.patchReturn.description,
+              start: opts.patchReturn.all_day
+                ? { date: opts.patchReturn.start }
+                : { dateTime: opts.patchReturn.start },
+              end: opts.patchReturn.all_day
+                ? { date: opts.patchReturn.end }
+                : { dateTime: opts.patchReturn.end },
+              htmlLink: opts.patchReturn.html_link,
+              status: opts.patchReturn.status,
+              transparency: opts.patchReturn.transparency,
+              created: opts.patchReturn.created,
+              updated: opts.patchReturn.updated,
+            }
+          : {},
+      });
+
+  return {
+    calendarList: {
+      list: vi.fn().mockResolvedValue({ data: { items: [] } }),
+    },
+    events: {
+      list: vi.fn().mockResolvedValue({ data: { items: [] } }),
+      get: vi.fn(),
+      insert: vi.fn(),
+      patch: patchFn,
+      delete: vi.fn(),
+    },
+  };
+}
+
+interface RunUpdateOpts {
+  eventId: string;
+  title?: string;
+  start?: string;
+  end?: string;
+  description?: string;
+  busy?: boolean;
+  free?: boolean;
+  format?: "text" | "json";
+  calendar?: string;
+  timezone?: string;
+}
+
+function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
+  const output: string[] = [];
+  const handlerOpts: UpdateHandlerOptions = {
+    api,
+    eventId: opts.eventId,
+    calendarId: opts.calendar ?? "primary",
+    calendarName: "Main Calendar",
+    format: opts.format ?? "text",
+    timezone: opts.timezone ?? "Asia/Tokyo",
+    write: (msg: string) => {
+      output.push(msg);
+    },
+  };
+  if (opts.title !== undefined) handlerOpts.title = opts.title;
+  if (opts.start !== undefined) handlerOpts.start = opts.start;
+  if (opts.end !== undefined) handlerOpts.end = opts.end;
+  if (opts.description !== undefined) handlerOpts.description = opts.description;
+  if (opts.busy !== undefined) handlerOpts.busy = opts.busy;
+  if (opts.free !== undefined) handlerOpts.free = opts.free;
+  return handleUpdate(handlerOpts).then((result) => ({ ...result, output }));
+}
+
+describe("update command", () => {
+  describe("argument validation", () => {
+    it("event ID is required as positional argument", () => {
+      const cmd = createUpdateCommand();
+      cmd.exitOverride();
+      expect(() => cmd.parse(["node", "update"])).toThrow();
+    });
+
+    it("at least one update option must be provided", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1" }).catch((e: unknown) => e);
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("at least one");
+    });
+  });
+
+  describe("--title updates event title only", () => {
+    it("sends only summary in patch request", async () => {
+      const updatedEvent = makeEvent({ title: "New Title" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, { eventId: "evt1", title: "New Title" });
+
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        requestBody: {
+          summary: "New Title",
+        },
+      });
+    });
+  });
+
+  describe("--start and --end update event times in resolved timezone", () => {
+    it("parses start/end in given timezone and sends formatted times", async () => {
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T14:00:00+09:00",
+        end: "2026-02-01T15:00:00+09:00",
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-02-01T14:00",
+        end: "2026-02-01T15:00",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        requestBody: {
+          start: { dateTime: "2026-02-01T14:00:00+09:00", timeZone: "Asia/Tokyo" },
+          end: { dateTime: "2026-02-01T15:00:00+09:00", timeZone: "Asia/Tokyo" },
+        },
+      });
+    });
+
+    it("requires both --start and --end together", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-02-01T14:00",
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain(
+        "start, end, and allDay must all be provided together",
+      );
+    });
+  });
+
+  describe("--description updates event description", () => {
+    it("sends only description in patch request", async () => {
+      const updatedEvent = makeEvent({ description: "New description" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, { eventId: "evt1", description: "New description" });
+
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        requestBody: {
+          description: "New description",
+        },
+      });
+    });
+  });
+
+  describe("--busy / --free updates transparency", () => {
+    it("--busy sets transparency to opaque", async () => {
+      const updatedEvent = makeEvent({ transparency: "opaque" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, { eventId: "evt1", busy: true });
+
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        requestBody: {
+          transparency: "opaque",
+        },
+      });
+    });
+
+    it("--free sets transparency to transparent", async () => {
+      const updatedEvent = makeEvent({ transparency: "transparent" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, { eventId: "evt1", free: true });
+
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        requestBody: {
+          transparency: "transparent",
+        },
+      });
+    });
+  });
+
+  describe("non-existent event returns NOT_FOUND error", () => {
+    it("throws NOT_FOUND for missing event", async () => {
+      const notFoundError = Object.assign(new Error("Not Found"), { code: 404 });
+      const api = makeMockApi({ patchError: notFoundError });
+
+      const error = await runUpdate(api, {
+        eventId: "missing",
+        title: "New Title",
+      }).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error & { code: string }).code).toBe("NOT_FOUND");
+    });
+  });
+
+  describe("text output shows confirmation with updated event details", () => {
+    it("shows updated event in text format", async () => {
+      const updatedEvent = makeEvent({ title: "Updated Meeting" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Updated Meeting",
+        format: "text",
+      });
+
+      const text = result.output.join("\n");
+      expect(text).toContain("Updated Meeting");
+      expect(text).toContain("Main Calendar");
+    });
+  });
+
+  describe("JSON output returns updated event in success envelope", () => {
+    it("returns success envelope with event data", async () => {
+      const updatedEvent = makeEvent({ title: "Updated Meeting" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Updated Meeting",
+        format: "json",
+      });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data.event.title).toBe("Updated Meeting");
+      expect(json.data.event.id).toBe("evt1");
+    });
+  });
+
+  describe("exit code", () => {
+    it("returns exit code 0 on success", async () => {
+      const updatedEvent = makeEvent({ title: "Updated" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Updated",
+      });
+
+      expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe("option conflicts", () => {
+    function parseUpdate(args: string[]): { error: string | null } {
+      const cmd = createUpdateCommand();
+      cmd.exitOverride();
+      try {
+        cmd.parse(["node", "update", ...args]);
+        return { error: null };
+      } catch (e: unknown) {
+        return { error: (e as Error).message };
+      }
+    }
+
+    it("rejects --busy and --free together", () => {
+      const result = parseUpdate(["evt1", "--busy", "--free"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("accepts event ID with --title", () => {
+      const result = parseUpdate(["evt1", "-t", "New Title"]);
+      expect(result.error).toBeNull();
+    });
+  });
+});

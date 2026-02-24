@@ -50,9 +50,7 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
   }
 
   const results = await Promise.all(
-    calendars.map((cal) =>
-      listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query }),
-    ),
+    calendars.map((cal) => listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query })),
   );
   const allEvents = results.flat();
 

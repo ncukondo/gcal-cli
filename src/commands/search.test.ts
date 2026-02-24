@@ -35,9 +35,7 @@ function makeMockApi(events: CalendarEvent[] = []): GoogleCalendarApi {
             id: e.id,
             summary: e.title,
             description: e.description,
-            start: e.all_day
-              ? { date: e.start }
-              : { dateTime: e.start },
+            start: e.all_day ? { date: e.start } : { dateTime: e.start },
             end: e.all_day ? { date: e.end } : { dateTime: e.end },
             htmlLink: e.html_link,
             status: e.status,
@@ -97,9 +95,7 @@ describe("search command", () => {
       const api = makeMockApi([]);
       await runSearch(api, { query: "meeting" });
 
-      expect(api.events.list).toHaveBeenCalledWith(
-        expect.objectContaining({ q: "meeting" }),
-      );
+      expect(api.events.list).toHaveBeenCalledWith(expect.objectContaining({ q: "meeting" }));
     });
   });
 
@@ -171,12 +167,8 @@ describe("search command", () => {
       });
 
       expect(api.events.list).toHaveBeenCalledTimes(2);
-      expect(api.events.list).toHaveBeenCalledWith(
-        expect.objectContaining({ calendarId: "cal1" }),
-      );
-      expect(api.events.list).toHaveBeenCalledWith(
-        expect.objectContaining({ calendarId: "cal2" }),
-      );
+      expect(api.events.list).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal1" }));
+      expect(api.events.list).toHaveBeenCalledWith(expect.objectContaining({ calendarId: "cal2" }));
     });
 
     it("fetches calendars in parallel", async () => {
@@ -212,9 +204,24 @@ describe("search command", () => {
   describe("filtering", () => {
     it("filters by transparency and status", async () => {
       const events = [
-        makeEvent({ id: "e1", title: "Confirmed Meeting", transparency: "opaque", status: "confirmed" }),
-        makeEvent({ id: "e2", title: "Cancelled Meeting", transparency: "transparent", status: "confirmed" }),
-        makeEvent({ id: "e3", title: "Tentative Meeting", transparency: "opaque", status: "tentative" }),
+        makeEvent({
+          id: "e1",
+          title: "Confirmed Meeting",
+          transparency: "opaque",
+          status: "confirmed",
+        }),
+        makeEvent({
+          id: "e2",
+          title: "Cancelled Meeting",
+          transparency: "transparent",
+          status: "confirmed",
+        }),
+        makeEvent({
+          id: "e3",
+          title: "Tentative Meeting",
+          transparency: "opaque",
+          status: "tentative",
+        }),
       ];
       const api = makeMockApi(events);
       const result = await runSearch(api, { query: "meeting", busy: true });
