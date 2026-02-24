@@ -3,6 +3,7 @@ import { enum as zenum } from "zod";
 import type { ErrorCode, OutputFormat } from "./types/index.ts";
 import { ExitCode } from "./types/index.ts";
 import { formatJsonError, errorCodeToExitCode } from "./lib/output.ts";
+import pkg from "../package.json";
 
 const FormatSchema = zenum(["text", "json"]);
 
@@ -23,7 +24,7 @@ export function createProgram(): Command {
   program
     .name("gcal")
     .description("CLI tool for managing Google Calendar events")
-    .version("0.1.0")
+    .version(pkg.version)
     .option("-f, --format <format>", "Output format: text | json", "text")
     .option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, [])
     .option("-q, --quiet", "Minimal output", false)
