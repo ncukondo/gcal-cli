@@ -6,10 +6,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 5: Write Commands (remaining)
-
-17. [016-delete-command](./016-delete-command.md) — `gcal delete` command
-
 ### Phase 6: Testing & Polish
 
 18. [017-integration-tests](./017-integration-tests.md) — Integration tests (cross-module)
@@ -32,6 +28,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 14. [013-show-command](./completed/013-show-command.md) — `gcal show` command (#22)
 15. [014-add-command](./completed/014-add-command.md) — `gcal add` command (#21)
 16. [015-update-command](./completed/015-update-command.md) — `gcal update` command (#23)
+17. [016-delete-command](./completed/016-delete-command.md) — `gcal delete` command (#25)
 20. [019-init-command](./completed/019-init-command.md) — `gcal init` command (#24)
 
 ### Phase 2: Auth
