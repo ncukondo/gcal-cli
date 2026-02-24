@@ -43,33 +43,30 @@ Users need to create OAuth credentials in Google Cloud Console:
 1. Create project at https://console.cloud.google.com
 2. Enable Google Calendar API
 3. Create OAuth 2.0 credentials (Desktop app)
-4. Download client configuration
+4. Copy the **Client ID** and **Client Secret** from the credentials page
 
 ### Client Configuration
 
-Store as `~/.config/gcal-cli/client_secret.json`:
+When running `gcal auth` or `gcal init` without credentials, the CLI will
+interactively prompt for Client ID and Client Secret, then save them
+automatically to `~/.config/gcal-cli/client_secret.json`.
 
-```json
-{
-  "installed": {
-    "client_id": "...",
-    "client_secret": "...",
-    "redirect_uris": ["http://localhost"]
-  }
-}
-```
-
-Or set environment variables:
+Alternatively, set environment variables:
 ```bash
 export GOOGLE_CLIENT_ID="..."
 export GOOGLE_CLIENT_SECRET="..."
 ```
+
+Note: Interactive prompting only occurs in text format. JSON format
+(`--format json`) returns an error instead, preserving automation behavior.
 
 ## Auth Commands
 
 ### `gcal auth`
 
 Initiates OAuth flow. If already authenticated, shows current status.
+If no client credentials are configured, interactively prompts for
+Client ID and Client Secret (text format only).
 
 ### `gcal auth --status`
 
