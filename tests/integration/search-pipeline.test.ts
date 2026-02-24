@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { handleSearch } from "../../src/commands/search.ts";
 import { loadConfig, selectCalendars } from "../../src/lib/config.ts";
 import { resolveTimezone } from "../../src/lib/timezone.ts";
@@ -11,6 +11,15 @@ import {
 } from "./helpers.ts";
 
 describe("search command pipeline: config → API → filter → output", () => {
+  beforeEach(() => {
+    vi.stubEnv("HOME", "/home/test");
+    vi.stubEnv("GCAL_CLI_CONFIG", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("searches across multiple enabled calendars and returns combined results", async () => {
     const mockApi = createMockApi({
       events: {
@@ -21,8 +30,6 @@ describe("search command pipeline: config → API → filter → output", () => 
       },
     });
     const mockFs = createMockFs(SAMPLE_CONFIG_TOML);
-    vi.stubEnv("HOME", "/home/test");
-    vi.stubEnv("GCAL_CLI_CONFIG", "");
 
     const config = loadConfig(mockFs);
     const calendars = selectCalendars(undefined, config);
@@ -49,8 +56,6 @@ describe("search command pipeline: config → API → filter → output", () => 
     for (const call of listFn.mock.calls) {
       expect(call[0].q).toBe("Meeting");
     }
-
-    vi.unstubAllEnvs();
   });
 
   it("applies --busy filter in search results", async () => {

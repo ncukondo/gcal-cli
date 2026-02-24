@@ -185,7 +185,3 @@ export function captureWrite(): { write: (msg: string) => void; output: () => st
     output: () => messages.join("\n"),
   };
 }
-
-export function parseJsonOutput(output: string): unknown {
-  return JSON.parse(output.split("\n")[0]!);
-}
