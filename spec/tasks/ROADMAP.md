@@ -6,9 +6,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 6: Testing & Polish
-
-19. [018-e2e-tests](./018-e2e-tests.md) — E2E tests (real API calls)
+(none)
 
 ## In Progress
 
@@ -19,6 +17,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ### Phase 6: Testing & Polish
 
 18. [017-integration-tests](./completed/017-integration-tests.md) — Integration tests (cross-module) (#26)
+19. [018-e2e-tests](./completed/018-e2e-tests.md) — E2E tests (real API calls) (#27)
 
 ### Phase 3–5: CLI Framework, API, Read & Write Commands
 
