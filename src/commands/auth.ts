@@ -50,15 +50,7 @@ async function fetchUserEmail(
 }
 
 export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult> {
-  const {
-    fs,
-    format,
-    write,
-    openUrl,
-    fetchFn,
-    startOAuthFlowFn = startOAuthFlow,
-    promptFn,
-  } = opts;
+  const { fs, format, write, openUrl, fetchFn, startOAuthFlowFn = startOAuthFlow, promptFn } = opts;
 
   const tokens = loadTokens(fs);
 

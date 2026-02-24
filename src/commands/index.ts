@@ -12,7 +12,13 @@ import { createInitCommand, handleInit } from "./init.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
-import { getAuthenticatedClient, getClientCredentials, startOAuthFlow } from "../lib/auth.ts";
+import {
+  getAuthenticatedClient,
+  getClientCredentials,
+  getClientCredentialsOrPrompt,
+  startOAuthFlow,
+} from "../lib/auth.ts";
+import { createReadlinePrompt } from "../lib/prompt.ts";
 import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
@@ -45,6 +51,7 @@ export function registerCommands(program: Command): void {
           openUrl: (url: string) => {
             write(`Open this URL in your browser:\n${url}`);
           },
+          promptFn: createReadlinePrompt(),
         });
       }
       process.exit(result.exitCode);
@@ -286,7 +293,11 @@ export function registerCommands(program: Command): void {
         },
         requestAuth: async () => {
           apiRef = null;
-          const credentials = getClientCredentials(fsAdapter);
+          const promptFn = createReadlinePrompt();
+          const credentials =
+            globalOpts.format === "text"
+              ? await getClientCredentialsOrPrompt(fsAdapter, write, promptFn)
+              : getClientCredentials(fsAdapter);
           const { authUrl, waitForCode, server } = await startOAuthFlow(
             credentials,
             fsAdapter,
