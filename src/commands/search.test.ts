@@ -48,6 +48,9 @@ function makeMockApi(events: CalendarEvent[] = []): GoogleCalendarApi {
         },
       }),
       get: vi.fn(),
+      insert: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
     },
   };
 }
