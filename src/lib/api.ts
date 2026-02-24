@@ -1,5 +1,6 @@
 import * as z from "zod";
 import type { Calendar, CalendarEvent, ErrorCode, Transparency } from "../types/index.ts";
+import { AuthError } from "./auth.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -343,7 +344,10 @@ function isGoogleApiError(error: unknown): error is Error & { code: number } {
 }
 
 export function isAuthRequiredError(error: unknown): boolean {
-  return error instanceof ApiError && error.code === "AUTH_REQUIRED";
+  return (
+    (error instanceof ApiError || error instanceof AuthError) &&
+    (error.code === "AUTH_REQUIRED" || error.code === "AUTH_EXPIRED")
+  );
 }
 
 function mapApiError(error: unknown): never {
