@@ -3,14 +3,16 @@ import type { Command } from "commander";
 import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } from "./auth.ts";
 import { createSearchCommand } from "./search.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
+import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig } from "../lib/config.ts";
 import { getAuthenticatedClient } from "../lib/auth.ts";
-import { listEvents } from "../lib/api.ts";
+import { listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { ListOptions } from "./list.ts";
+import type { AddOptions } from "./add.ts";
 
 export function registerCommands(program: Command): void {
   const authCmd = createAuthCommand();
@@ -97,4 +99,35 @@ export function registerCommands(program: Command): void {
   program.addCommand(listCmd);
 
   program.addCommand(createSearchCommand());
+
+  const addCmd = createAddCommand();
+  addCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const addOpts = addCmd.opts();
+
+    try {
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const api = createGoogleCalendarApi(google.calendar({ version: "v3", auth }));
+
+      const deps: AddHandlerDeps = {
+        createEvent: (calendarId, calendarName, input) =>
+          createEvent(api, calendarId, calendarName, input),
+        loadConfig: () => loadConfig(fsAdapter),
+        write: (msg) => process.stdout.write(msg + "\n"),
+      };
+
+      const handleOpts = {
+        ...addOpts,
+        format: globalOpts.format,
+        calendar: globalOpts.calendar?.[0],
+      } as AddOptions;
+      if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
+
+      const result = await handleAdd(handleOpts, deps);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(addCmd);
 }
