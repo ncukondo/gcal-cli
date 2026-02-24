@@ -36,6 +36,13 @@ describe("registerCommands", () => {
     expect(authCmd).toBeDefined();
   });
 
+  it("registers the show command", () => {
+    const program = new Command();
+    registerCommands(program);
+    const showCmd = program.commands.find((c) => c.name() === "show");
+    expect(showCmd).toBeDefined();
+  });
+
   it("registers the init command", () => {
     const program = new Command();
     registerCommands(program);
