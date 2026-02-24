@@ -84,6 +84,7 @@ export function createUpdateCommand(): Command {
     .description("Update an existing event")
     .argument("<event-id>", "Event ID to update");
 
+  cmd.option("-c, --calendar <id>", "Calendar ID");
   cmd.option("-t, --title <title>", "New title");
   cmd.option("-s, --start <datetime>", "New start datetime");
   cmd.option("-e, --end <datetime>", "New end datetime");

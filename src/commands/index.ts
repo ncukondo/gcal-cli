@@ -16,6 +16,7 @@ import { getAuthenticatedClient, getClientCredentials, startOAuthFlow } from "..
 import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
+import { resolveEventCalendar } from "../lib/resolve-calendar.ts";
 import type { ListOptions } from "./list.ts";
 import type { AddOptions } from "./add.ts";
 
@@ -156,8 +157,9 @@ export function registerCommands(program: Command): void {
         const found = config.calendars.find((c) => c.id === calendarId);
         cal = found ? { id: found.id, name: found.name } : { id: calendarId, name: calendarId };
       } else {
-        const enabled = config.calendars.filter((c) => c.enabled);
-        cal = enabled[0] ?? { id: "primary", name: "Primary" };
+        const calendars = selectCalendars(undefined, config);
+        const resolved = await resolveEventCalendar(api, showCmd.args[0]!, calendars);
+        cal = resolved;
       }
 
       const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
@@ -188,11 +190,18 @@ export function registerCommands(program: Command): void {
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
 
-      const calendars = selectCalendars(
-        deleteOpts.calendar ? [deleteOpts.calendar] : globalOpts.calendar,
-        config,
-      );
-      const resolvedCalendarId = calendars[0]?.id ?? "primary";
+      let resolvedCalendarId: string;
+      if (deleteOpts.calendar || globalOpts.calendar.length > 0) {
+        const calendars = selectCalendars(
+          deleteOpts.calendar ? [deleteOpts.calendar] : globalOpts.calendar,
+          config,
+        );
+        resolvedCalendarId = calendars[0]?.id ?? "primary";
+      } else {
+        const calendars = selectCalendars(undefined, config);
+        const resolved = await resolveEventCalendar(api, eventId, calendars);
+        resolvedCalendarId = resolved.id;
+      }
 
       const result = await handleDelete({
         api,
@@ -318,8 +327,19 @@ export function registerCommands(program: Command): void {
       const calendar = google.calendar({ version: "v3", auth: oauth2Client });
       const api = createGoogleCalendarApi(calendar);
       const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
-      const calendars = selectCalendars(globalOpts.calendar, config);
-      const cal = calendars[0]!;
+      const updateOpsCalendar = updateOpts.calendar as string | undefined;
+      let cal: { id: string; name: string };
+      if (updateOpsCalendar || globalOpts.calendar.length > 0) {
+        const calendars = selectCalendars(
+          updateOpsCalendar ? [updateOpsCalendar] : globalOpts.calendar,
+          config,
+        );
+        cal = calendars[0]!;
+      } else {
+        const calendars = selectCalendars(undefined, config);
+        const resolved = await resolveEventCalendar(api, eventId, calendars);
+        cal = resolved;
+      }
 
       const result = await handleUpdate({
         api,
