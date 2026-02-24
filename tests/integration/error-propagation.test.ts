@@ -25,7 +25,9 @@ describe("error propagation: API errors → command handler → output", () => {
 
   describe("401/403 errors map to AUTH_REQUIRED", () => {
     function makeAuthError(): Error & { code: number } {
-      const err = new Error("Request had invalid authentication credentials") as Error & { code: number };
+      const err = new Error("Request had invalid authentication credentials") as Error & {
+        code: number;
+      };
       err.code = 401;
       return err;
     }

@@ -301,9 +301,19 @@ describe("text output formatting consistency across list/search", () => {
 
     // Both should have the same fields
     const expectedFields = [
-      "id", "title", "description", "start", "end", "all_day",
-      "calendar_id", "calendar_name", "html_link", "status",
-      "transparency", "created", "updated",
+      "id",
+      "title",
+      "description",
+      "start",
+      "end",
+      "all_day",
+      "calendar_id",
+      "calendar_name",
+      "html_link",
+      "status",
+      "transparency",
+      "created",
+      "updated",
     ];
 
     for (const field of expectedFields) {

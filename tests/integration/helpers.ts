@@ -47,51 +47,59 @@ export function createMockApi(data: MockApiData = {}): GoogleCalendarApi {
         }
         return { data: event };
       }),
-      insert: vi.fn().mockImplementation(async (params: { calendarId: string; requestBody: unknown }) => {
-        if (data.errors?.insertEvent) throw data.errors.insertEvent;
-        const body = params.requestBody as Record<string, unknown>;
-        const event: GoogleEvent = {
-          id: `new-event-${String(insertedEvents.length + 1)}`,
-          summary: body.summary as string,
-          description: (body.description as string) ?? null,
-          start: (body.start as GoogleEvent["start"]) ?? null,
-          end: (body.end as GoogleEvent["end"]) ?? null,
-          transparency: (body.transparency as string) ?? "opaque",
-          status: "confirmed",
-          htmlLink: "https://calendar.google.com/event/new-event",
-          created: "2026-01-01T00:00:00Z",
-          updated: "2026-01-01T00:00:00Z",
-        };
-        insertedEvents.push(event);
-        return { data: event };
-      }),
-      patch: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string; requestBody: unknown }) => {
-        if (data.errors?.patchEvent) throw data.errors.patchEvent;
-        const events = data.events?.[params.calendarId] ?? [];
-        const existing = events.find((e) => e.id === params.eventId);
-        if (!existing) {
-          const err = new Error("Not Found") as Error & { code: number };
-          err.code = 404;
-          throw err;
-        }
-        const body = params.requestBody as Record<string, unknown>;
-        const merged = {
-          ...existing,
-          ...(body.summary !== undefined ? { summary: body.summary } : {}),
-          ...(body.description !== undefined ? { description: body.description } : {}),
-          ...(body.start !== undefined ? { start: body.start } : {}),
-          ...(body.end !== undefined ? { end: body.end } : {}),
-          ...(body.transparency !== undefined ? { transparency: body.transparency } : {}),
-          updated: "2026-02-01T00:00:00Z",
-        };
-        const updated = merged as GoogleEvent;
-        patchedEvents.push(updated);
-        return { data: updated };
-      }),
-      delete: vi.fn().mockImplementation(async (params: { calendarId: string; eventId: string }) => {
-        if (data.errors?.deleteEvent) throw data.errors.deleteEvent;
-        deletedEvents.push({ calendarId: params.calendarId, eventId: params.eventId });
-      }),
+      insert: vi
+        .fn()
+        .mockImplementation(async (params: { calendarId: string; requestBody: unknown }) => {
+          if (data.errors?.insertEvent) throw data.errors.insertEvent;
+          const body = params.requestBody as Record<string, unknown>;
+          const event: GoogleEvent = {
+            id: `new-event-${String(insertedEvents.length + 1)}`,
+            summary: body.summary as string,
+            description: (body.description as string) ?? null,
+            start: (body.start as GoogleEvent["start"]) ?? null,
+            end: (body.end as GoogleEvent["end"]) ?? null,
+            transparency: (body.transparency as string) ?? "opaque",
+            status: "confirmed",
+            htmlLink: "https://calendar.google.com/event/new-event",
+            created: "2026-01-01T00:00:00Z",
+            updated: "2026-01-01T00:00:00Z",
+          };
+          insertedEvents.push(event);
+          return { data: event };
+        }),
+      patch: vi
+        .fn()
+        .mockImplementation(
+          async (params: { calendarId: string; eventId: string; requestBody: unknown }) => {
+            if (data.errors?.patchEvent) throw data.errors.patchEvent;
+            const events = data.events?.[params.calendarId] ?? [];
+            const existing = events.find((e) => e.id === params.eventId);
+            if (!existing) {
+              const err = new Error("Not Found") as Error & { code: number };
+              err.code = 404;
+              throw err;
+            }
+            const body = params.requestBody as Record<string, unknown>;
+            const merged = {
+              ...existing,
+              ...(body.summary !== undefined ? { summary: body.summary } : {}),
+              ...(body.description !== undefined ? { description: body.description } : {}),
+              ...(body.start !== undefined ? { start: body.start } : {}),
+              ...(body.end !== undefined ? { end: body.end } : {}),
+              ...(body.transparency !== undefined ? { transparency: body.transparency } : {}),
+              updated: "2026-02-01T00:00:00Z",
+            };
+            const updated = merged as GoogleEvent;
+            patchedEvents.push(updated);
+            return { data: updated };
+          },
+        ),
+      delete: vi
+        .fn()
+        .mockImplementation(async (params: { calendarId: string; eventId: string }) => {
+          if (data.errors?.deleteEvent) throw data.errors.deleteEvent;
+          deletedEvents.push({ calendarId: params.calendarId, eventId: params.eventId });
+        }),
     },
   };
 }

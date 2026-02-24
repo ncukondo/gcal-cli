@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { handleDelete } from "../../src/commands/delete.ts";
-import {
-  createMockApi,
-  captureWrite,
-} from "./helpers.ts";
+import { createMockApi, captureWrite } from "./helpers.ts";
 
 describe("delete command pipeline: API → output", () => {
   it("deletes event and outputs JSON success response", async () => {

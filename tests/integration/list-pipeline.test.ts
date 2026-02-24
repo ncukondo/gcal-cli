@@ -29,7 +29,12 @@ describe("list command pipeline: config → API → filter → output", () => {
       events: {
         primary: [makeGoogleEvent({ id: "e1", summary: "Morning Standup" })],
         "work@group.calendar.google.com": [
-          makeGoogleEvent({ id: "e2", summary: "Design Review", start: { dateTime: "2026-02-23T14:00:00+09:00" }, end: { dateTime: "2026-02-23T15:00:00+09:00" } }),
+          makeGoogleEvent({
+            id: "e2",
+            summary: "Design Review",
+            start: { dateTime: "2026-02-23T14:00:00+09:00" },
+            end: { dateTime: "2026-02-23T15:00:00+09:00" },
+          }),
         ],
       },
     });
@@ -77,7 +82,9 @@ describe("list command pipeline: config → API → filter → output", () => {
 
     // API should only be called for primary and work (enabled), not hobby (disabled)
     const listFn = mockApi.events.list as ReturnType<typeof vi.fn>;
-    const calendarIds = listFn.mock.calls.map((c: unknown[]) => (c[0] as { calendarId: string }).calendarId);
+    const calendarIds = listFn.mock.calls.map(
+      (c: unknown[]) => (c[0] as { calendarId: string }).calendarId,
+    );
     expect(calendarIds).toContain("primary");
     expect(calendarIds).toContain("work@group.calendar.google.com");
     expect(calendarIds).not.toContain("hobby@group.calendar.google.com");

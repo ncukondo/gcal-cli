@@ -136,7 +136,9 @@ describe("auth flow + API client creation integration", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     // Verify tokens were saved
     expect(fs.writeFileSync).toHaveBeenCalled();
-    const savedData = JSON.parse((fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string) as TokenData;
+    const savedData = JSON.parse(
+      (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string,
+    ) as TokenData;
     expect(savedData.access_token).toBe("refreshed-access-token");
     expect(savedData.refresh_token).toBe("valid-refresh-token");
   });
@@ -163,8 +165,8 @@ describe("auth flow + API client creation integration", () => {
 
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
 
-    await expect(
-      getAuthenticatedClient(fs, mockFetch as unknown as typeof fetch),
-    ).rejects.toThrow(AuthError);
+    await expect(getAuthenticatedClient(fs, mockFetch as unknown as typeof fetch)).rejects.toThrow(
+      AuthError,
+    );
   });
 });

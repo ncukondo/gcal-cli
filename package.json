@@ -2,8 +2,17 @@
   "name": "@ncukondo/gcal-cli",
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "bin": {
-    "gcal": "./src/index.ts"
+    "gcal": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
@@ -18,7 +27,8 @@
     "format": "oxfmt src tests",
     "format:check": "oxfmt --check src tests",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "commander": "^12.0.0",

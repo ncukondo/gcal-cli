@@ -1,18 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleUpdate } from "../../src/commands/update.ts";
-import {
-  createMockApi,
-  makeGoogleEvent,
-  captureWrite,
-} from "./helpers.ts";
+import { createMockApi, makeGoogleEvent, captureWrite } from "./helpers.ts";
 
 describe("update command pipeline: API → normalize → output", () => {
   it("updates event title and returns updated event details", async () => {
     const mockApi = createMockApi({
       events: {
-        primary: [
-          makeGoogleEvent({ id: "evt-1", summary: "Old Title" }),
-        ],
+        primary: [makeGoogleEvent({ id: "evt-1", summary: "Old Title" })],
       },
     });
     const out = captureWrite();
