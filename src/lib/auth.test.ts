@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   getClientCredentials,
+  getClientCredentialsOrPrompt,
   loadTokens,
   saveTokens,
   saveClientCredentials,
@@ -307,6 +308,79 @@ describe("promptForClientCredentials", () => {
       .mockResolvedValueOnce("   ");
 
     await expect(promptForClientCredentials(write, promptFn)).rejects.toThrow(AuthError);
+  });
+});
+
+describe("getClientCredentialsOrPrompt", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns existing credentials without prompting", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "env-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "env-secret");
+
+    const fs = makeFsAdapter();
+    const write = vi.fn();
+    const promptFn = vi.fn<PromptFn>();
+
+    const result = await getClientCredentialsOrPrompt(fs, write, promptFn);
+
+    expect(result.clientId).toBe("env-id");
+    expect(result.clientSecret).toBe("env-secret");
+    expect(promptFn).not.toHaveBeenCalled();
+  });
+
+  it("prompts and saves when no credentials exist", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+
+    let writtenData = "";
+    const fs = makeFsAdapter({
+      writeFileSync: (_path: string, data: string) => {
+        writtenData = data;
+      },
+    });
+    const write = vi.fn();
+    const promptFn = vi
+      .fn<PromptFn>()
+      .mockResolvedValueOnce("prompted-id")
+      .mockResolvedValueOnce("prompted-secret");
+
+    const result = await getClientCredentialsOrPrompt(fs, write, promptFn);
+
+    expect(result.clientId).toBe("prompted-id");
+    expect(result.clientSecret).toBe("prompted-secret");
+    expect(result.redirectUri).toBe("http://localhost");
+    expect(promptFn).toHaveBeenCalledTimes(2);
+    // Verify credentials were saved
+    const saved = JSON.parse(writtenData);
+    expect(saved.installed.client_id).toBe("prompted-id");
+  });
+
+  it("propagates non-AuthError", async () => {
+    vi.stubEnv("HOME", "/home/testuser");
+    vi.stubEnv("GOOGLE_CLIENT_ID", "");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+
+    const fs = makeFsAdapter({
+      existsSync: () => {
+        throw new Error("filesystem error");
+      },
+    });
+    const write = vi.fn();
+    const promptFn = vi.fn<PromptFn>();
+
+    await expect(getClientCredentialsOrPrompt(fs, write, promptFn)).rejects.toThrow(
+      "filesystem error",
+    );
+    expect(promptFn).not.toHaveBeenCalled();
   });
 });
 

@@ -78,6 +78,27 @@ export function getClientCredentials(fs: AuthFsAdapter): ClientCredentials {
   );
 }
 
+export async function getClientCredentialsOrPrompt(
+  fs: AuthFsAdapter,
+  write: (msg: string) => void,
+  promptFn: PromptFn,
+): Promise<ClientCredentials> {
+  try {
+    return getClientCredentials(fs);
+  } catch (err) {
+    if (!(err instanceof AuthError)) {
+      throw err;
+    }
+    const { clientId, clientSecret } = await promptForClientCredentials(write, promptFn);
+    saveClientCredentials(fs, clientId, clientSecret);
+    return {
+      clientId,
+      clientSecret,
+      redirectUri: DEFAULT_REDIRECT_URI,
+    };
+  }
+}
+
 function getCredentialsPath(): string {
   return `${getCredentialsDir()}/credentials.json`;
 }
