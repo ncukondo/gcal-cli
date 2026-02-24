@@ -27,11 +27,17 @@ describe("resolveTimezone", () => {
     );
   });
 
-  it("throws on common abbreviation with specific suggestion", () => {
-    expect(() => resolveTimezone("JST")).toThrow(/Invalid timezone: JST.*Asia\/Tokyo/);
+  it("resolves common abbreviation to canonical IANA name", () => {
+    expect(resolveTimezone("JST")).toBe("Asia/Tokyo");
+    expect(resolveTimezone("EST")).toBe("America/New_York");
+    expect(resolveTimezone("PST")).toBe("America/Los_Angeles");
   });
 
-  it("includes IANA hint for unknown timezone without known abbreviation", () => {
+  it("resolves abbreviation case-insensitively", () => {
+    expect(resolveTimezone("jst")).toBe("Asia/Tokyo");
+  });
+
+  it("throws on unknown timezone with IANA hint", () => {
     expect(() => resolveTimezone("FAKE")).toThrow(/Invalid timezone: FAKE.*IANA.*e\.g\./);
   });
 });

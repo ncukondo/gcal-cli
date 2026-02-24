@@ -27,11 +27,14 @@ const COMMON_ABBREVIATIONS: Record<string, string> = {
 export function resolveTimezone(cliTz?: string, configTz?: string): string {
   const tz = cliTz ?? configTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  // If tz is a known abbreviation, resolve to canonical IANA name
+  const canonical = COMMON_ABBREVIATIONS[tz.toUpperCase()];
+  if (canonical && !tz.includes("/")) {
+    return canonical;
+  }
+
   if (!isValidTimezone(tz)) {
-    const suggestion = COMMON_ABBREVIATIONS[tz.toUpperCase()];
-    const hint = suggestion
-      ? `Did you mean "${suggestion}"?`
-      : 'Use an IANA timezone name (e.g. "Asia/Tokyo", "America/New_York").';
+    const hint = 'Use an IANA timezone name (e.g. "Asia/Tokyo", "America/New_York").';
     throw new Error(`Invalid timezone: ${tz}. ${hint}`);
   }
 
