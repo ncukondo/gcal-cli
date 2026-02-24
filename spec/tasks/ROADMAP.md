@@ -6,18 +6,8 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 3–4: Read Commands (remaining)
+### Phase 5: Write Commands (remaining)
 
-14. [013-show-command](./013-show-command.md) — `gcal show` command (deps: 008, 009a, 005)
-
-### Setup & Config
-
-20. [019-init-command](./019-init-command.md) — `gcal init` command (deps: 007, 009a, 003)
-
-### Phase 5: Write Commands
-
-15. [014-add-command](./014-add-command.md) — `gcal add` command
-16. [015-update-command](./015-update-command.md) — `gcal update` command
 17. [016-delete-command](./016-delete-command.md) — `gcal delete` command
 
 ### Phase 6: Testing & Polish
@@ -31,7 +21,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Completed
 
-### Phase 3–4: CLI Framework, API & Read Commands
+### Phase 3–5: CLI Framework, API, Read & Write Commands
 
 8. [008-cli-entry](./completed/008-cli-entry.md) — CLI entry point, global options, command registration (#15)
 9. [009a-api-read](./completed/009a-api-read.md) — Google Calendar API wrapper: read operations (#16)
@@ -39,6 +29,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 11. [010-calendars-command](./completed/010-calendars-command.md) — `gcal calendars` command (#19)
 12. [011-list-command](./completed/011-list-command.md) — `gcal list` command (#20)
 13. [012-search-command](./completed/012-search-command.md) — `gcal search` command (#18)
+14. [013-show-command](./completed/013-show-command.md) — `gcal show` command (#22)
+15. [014-add-command](./completed/014-add-command.md) — `gcal add` command (#21)
+16. [015-update-command](./completed/015-update-command.md) — `gcal update` command (#23)
+20. [019-init-command](./completed/019-init-command.md) — `gcal init` command (#24)
 
 ### Phase 2: Auth
 
