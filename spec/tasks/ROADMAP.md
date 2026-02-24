@@ -6,7 +6,9 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-(none)
+### Phase 7: UX Improvements
+
+21. [020-search-range-feedback](./020-search-range-feedback.md) — Search range stderr feedback & negative --days
 
 ## In Progress
 

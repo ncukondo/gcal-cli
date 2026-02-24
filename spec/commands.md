@@ -63,7 +63,7 @@ gcal search <query> [options]
 Options:
   --from <date>     Start date for search range
   --to <date>       End date for search range
-  --days <n>        Search within next n days (default: 30)
+  --days <n>        Search within next n days (default: 30). Negative values search past days.
 
 Filtering:
   --busy            Show only busy (opaque) events
@@ -79,6 +79,13 @@ gcal search "review" --days 60
 gcal search "project" --from 2026-01-01 --to 2026-03-31
 gcal search "meeting" -f json
 gcal search "meeting" --confirmed --busy
+gcal search "meeting" --days -30
+```
+
+Stderr output:
+```
+Searching: 2026-01-25 to 2026-02-24
+Tip: Use --days <n> or --from/--to to change the search range.
 ```
 
 ### `gcal add`
