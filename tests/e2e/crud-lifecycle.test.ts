@@ -4,8 +4,10 @@ import {
   runCliJson,
   testEventTitle,
   todayAt,
+  todayDate,
   TestCleanup,
   hasCredentials,
+  retryUntil,
 } from "./helpers.ts";
 
 describe.runIf(hasCredentials())("E2E: CRUD lifecycle", () => {
@@ -85,19 +87,21 @@ describe.runIf(hasCredentials())("E2E: CRUD lifecycle", () => {
     expect(found!.title).toBe(title);
   });
 
-  it("search finds the created event by title", async () => {
+  it("search finds the created event by title", { timeout: 30000 }, async () => {
     expect(eventId).toBeTruthy();
 
-    const { json, result } = await runCliJson("search", title);
+    await retryUntil(async () => {
+      const { json, result } = await runCliJson("search", "--from", todayDate(), title);
 
-    expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(0);
 
-    const data = json as { success: boolean; data: { events: { id: string; title: string }[] } };
-    expect(data.success).toBe(true);
+      const data = json as { success: boolean; data: { events: { id: string; title: string }[] } };
+      expect(data.success).toBe(true);
 
-    const found = data.data.events.find((e) => e.id === eventId);
-    expect(found).toBeTruthy();
-    expect(found!.title).toBe(title);
+      const found = data.data.events.find((e) => e.id === eventId);
+      expect(found).toBeTruthy();
+      expect(found!.title).toBe(title);
+    });
   });
 
   it("update modifies the event title", async () => {
@@ -136,15 +140,24 @@ describe.runIf(hasCredentials())("E2E: CRUD lifecycle", () => {
     expect(data.data.deleted_id).toBe(eventId);
   });
 
-  it("show returns NOT_FOUND after deletion", async () => {
+  it("show returns NOT_FOUND or cancelled after deletion", { timeout: 30000 }, async () => {
     expect(eventId).toBeTruthy();
 
-    const { json, result } = await runCliJson("show", eventId);
+    await retryUntil(async () => {
+      const { json, result } = await runCliJson("show", eventId);
 
-    expect(result.exitCode).not.toBe(0);
+      // Google Calendar API may return NOT_FOUND (404) or the event with status "cancelled"
+      type ShowResult =
+        | { success: false; error: { code: string } }
+        | { success: true; data: { event: { status: string } } };
+      const data = json as ShowResult;
 
-    const data = json as { success: boolean; error: { code: string } };
-    expect(data.success).toBe(false);
-    expect(data.error.code).toBe("NOT_FOUND");
+      if (data.success) {
+        expect(data.data.event.status).toBe("cancelled");
+      } else {
+        expect(result.exitCode).not.toBe(0);
+        expect(data.error.code).toBe("NOT_FOUND");
+      }
+    });
   });
 });

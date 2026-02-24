@@ -88,6 +88,25 @@ export function todayAt(hour: number, minute = 0): string {
 }
 
 /**
+ * Retry an async assertion until it passes or retries are exhausted.
+ * Useful for Google Calendar API eventual consistency.
+ */
+export async function retryUntil(
+  fn: () => Promise<void>,
+  { retries = 5, delayMs = 2000 } = {},
+): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await fn();
+      return;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
+
+/**
  * Delete a test event by ID (best-effort cleanup).
  */
 export async function deleteTestEvent(eventId: string): Promise<void> {
