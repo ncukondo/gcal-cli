@@ -16,14 +16,15 @@ export interface ShowHandlerOptions {
   calendarId: string;
   calendarName: string;
   format: OutputFormat;
+  timezone?: string;
   write: (msg: string) => void;
 }
 
 export async function handleShow(opts: ShowHandlerOptions): Promise<CommandResult> {
-  const { api, eventId, calendarId, calendarName, format, write } = opts;
+  const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
 
   try {
-    const event = await getEvent(api, calendarId, calendarName, eventId);
+    const event = await getEvent(api, calendarId, calendarName, eventId, timezone);
 
     if (format === "json") {
       write(formatJsonSuccess({ event }));

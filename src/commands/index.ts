@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import type { Command } from "commander";
 import { createAuthCommand, handleAuth, handleAuthStatus, handleAuthLogout } from "./auth.ts";
-import { createSearchCommand } from "./search.ts";
+import { createSearchCommand, handleSearch } from "./search.ts";
 import { createShowCommand, handleShow } from "./show.ts";
 import { createListCommand, handleList, type ListHandlerDeps } from "./list.ts";
 import { createUpdateCommand, handleUpdate } from "./update.ts";
@@ -103,7 +103,40 @@ export function registerCommands(program: Command): void {
   });
   program.addCommand(listCmd);
 
-  program.addCommand(createSearchCommand());
+  const searchCmd = createSearchCommand();
+  searchCmd.action(async (query: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const searchOpts = searchCmd.opts();
+
+    try {
+      const config = loadConfig(fsAdapter);
+      const auth = await getAuthenticatedClient(fsAdapter);
+      const calendarApi = google.calendar({ version: "v3", auth });
+      const api = createGoogleCalendarApi(calendarApi);
+      const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
+      const calendars = selectCalendars(globalOpts.calendar, config);
+
+      const result = await handleSearch({
+        api,
+        query,
+        format: globalOpts.format,
+        calendars,
+        timezone,
+        days: searchOpts.days,
+        from: searchOpts.from,
+        to: searchOpts.to,
+        busy: searchOpts.busy,
+        free: searchOpts.free,
+        confirmed: searchOpts.confirmed,
+        includeTentative: searchOpts.includeTentative,
+        write: (msg) => process.stdout.write(msg + "\n"),
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(searchCmd);
 
   const showCmd = createShowCommand();
   showCmd.action(async () => {
@@ -126,12 +159,15 @@ export function registerCommands(program: Command): void {
         cal = enabled[0] ?? { id: "primary", name: "Primary" };
       }
 
+      const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
+
       const result = await handleShow({
         api,
         eventId: showCmd.args[0]!,
         calendarId: cal.id,
         calendarName: cal.name,
         format: globalOpts.format,
+        timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
       process.exit(result.exitCode);

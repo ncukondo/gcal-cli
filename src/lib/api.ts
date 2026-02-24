@@ -225,9 +225,17 @@ export async function getEvent(
   calendarId: string,
   calendarName: string,
   eventId: string,
+  timeZone?: string,
 ): Promise<CalendarEvent> {
   try {
-    const response = await api.events.get({ calendarId, eventId });
+    const params: { calendarId: string; eventId: string; timeZone?: string } = {
+      calendarId,
+      eventId,
+    };
+    if (timeZone) {
+      params.timeZone = timeZone;
+    }
+    const response = await api.events.get(params);
     return normalizeEvent(response.data, calendarId, calendarName);
   } catch (error: unknown) {
     mapApiError(error);

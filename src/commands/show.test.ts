@@ -62,6 +62,7 @@ function runShow(
     calendarId?: string;
     calendarName?: string;
     format?: "text" | "json";
+    timezone?: string;
   } = {},
 ) {
   const output: string[] = [];
@@ -71,6 +72,7 @@ function runShow(
     calendarId: opts.calendarId ?? "primary",
     calendarName: opts.calendarName ?? "Main Calendar",
     format: opts.format ?? "text",
+    timezone: opts.timezone,
     write: (msg: string) => {
       output.push(msg);
     },
@@ -198,6 +200,31 @@ describe("show command", () => {
       const json = JSON.parse(result.output.join(""));
       expect(json.success).toBe(false);
       expect(json.error.code).toBe("NOT_FOUND");
+    });
+  });
+
+  describe("timezone", () => {
+    it("passes timeZone parameter to API when timezone is provided", async () => {
+      const event = makeEvent();
+      const api = makeMockApi(event);
+      await runShow(api, { eventId: "evt1", calendarId: "primary", timezone: "America/New_York" });
+
+      expect(api.events.get).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        timeZone: "America/New_York",
+      });
+    });
+
+    it("does not pass timeZone when timezone is undefined", async () => {
+      const event = makeEvent();
+      const api = makeMockApi(event);
+      await runShow(api, { eventId: "evt1" });
+
+      expect(api.events.get).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+      });
     });
   });
 
