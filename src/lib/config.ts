@@ -91,6 +91,34 @@ export function calendarIdToName(id: string): string {
   return atIndex > 0 ? id.substring(0, atIndex) : id;
 }
 
+export function getDefaultConfigPath(): string {
+  const home = process.env["HOME"] ?? "";
+  return `${home}/.config/gcal-cli/config.toml`;
+}
+
+function escapeTomlString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+export function generateConfigToml(calendars: CalendarConfig[], timezone?: string): string {
+  const lines: string[] = [];
+
+  if (timezone) {
+    lines.push(`timezone = "${escapeTomlString(timezone)}"`);
+    lines.push("");
+  }
+
+  for (const cal of calendars) {
+    lines.push("[[calendars]]");
+    lines.push(`id = "${escapeTomlString(cal.id)}"`);
+    lines.push(`name = "${escapeTomlString(cal.name)}"`);
+    lines.push(`enabled = ${String(cal.enabled)}`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
 export function selectCalendars(
   cliCalendars: string[] | undefined,
   config: AppConfig,
