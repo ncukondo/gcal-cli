@@ -163,6 +163,141 @@ describe("handleInit", () => {
     expect(parsed.timezone).toBeDefined();
   });
 
+  it("--all enables all calendars", async () => {
+    const fs = makeFs();
+    const opts = makeOpts({ fs, all: true });
+
+    await handleInit(opts);
+
+    const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    const parsed = parseConfig(writtenToml);
+    expect(parsed.calendars.every((c) => c.enabled)).toBe(true);
+  });
+
+  it("--force overwrites existing config file", async () => {
+    const fs = makeFs({
+      existsSync: vi.fn().mockReturnValue(true),
+    });
+    const opts = makeOpts({ fs, force: true });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(fs.writeFileSync).toHaveBeenCalled();
+  });
+
+  it("errors when config exists without --force", async () => {
+    const fs = makeFs({
+      existsSync: vi.fn().mockReturnValue(true),
+    });
+    const output: string[] = [];
+    const opts = makeOpts({ fs, write: (msg) => output.push(msg) });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.GENERAL);
+    expect(output.join("\n")).toContain("already exists");
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it("errors when config exists without --force (JSON)", async () => {
+    const fs = makeFs({
+      existsSync: vi.fn().mockReturnValue(true),
+    });
+    const output: string[] = [];
+    const opts = makeOpts({ fs, format: "json", write: (msg) => output.push(msg) });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.GENERAL);
+    const json = JSON.parse(output[0]!);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe("CONFIG_ERROR");
+  });
+
+  it("--local writes to ./gcal-cli.toml", async () => {
+    const fs = makeFs();
+    const opts = makeOpts({ fs, local: true });
+
+    await handleInit(opts);
+
+    const writtenPath = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+    expect(writtenPath).toContain("gcal-cli.toml");
+    expect(writtenPath).not.toContain(".config");
+  });
+
+  it("--timezone overrides timezone in config", async () => {
+    const fs = makeFs();
+    const opts = makeOpts({ fs, timezone: "America/New_York" });
+
+    await handleInit(opts);
+
+    const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    const parsed = parseConfig(writtenToml);
+    expect(parsed.timezone).toBe("America/New_York");
+  });
+
+  it("--timezone appears in text output", async () => {
+    const output: string[] = [];
+    const opts = makeOpts({ timezone: "Asia/Tokyo", write: (msg) => output.push(msg) });
+
+    await handleInit(opts);
+
+    expect(output.join("\n")).toContain("Asia/Tokyo");
+  });
+
+  it("errors when no calendars found", async () => {
+    const output: string[] = [];
+    const opts = makeOpts({
+      listCalendars: vi.fn().mockResolvedValue([]),
+      write: (msg) => output.push(msg),
+    });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.GENERAL);
+    expect(output.join("\n")).toContain("No calendars found");
+  });
+
+  it("errors when no calendars found (JSON)", async () => {
+    const output: string[] = [];
+    const opts = makeOpts({
+      listCalendars: vi.fn().mockResolvedValue([]),
+      format: "json",
+      write: (msg) => output.push(msg),
+    });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.GENERAL);
+    const json = JSON.parse(output[0]!);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe("API_ERROR");
+  });
+
+  it("propagates non-auth API errors", async () => {
+    const apiError = Object.assign(new Error("Server error"), { code: 500 });
+    const opts = makeOpts({
+      listCalendars: vi.fn().mockRejectedValue(apiError),
+    });
+
+    await expect(handleInit(opts)).rejects.toThrow("Server error");
+  });
+
+  it("returns AUTH exit code when auth fails without requestAuth", async () => {
+    const authError = Object.assign(new Error("Not authenticated"), { code: "AUTH_REQUIRED" });
+    const output: string[] = [];
+    const opts = makeOpts({
+      listCalendars: vi.fn().mockRejectedValue(authError),
+      write: (msg) => output.push(msg),
+    });
+
+    const result = await handleInit(opts);
+
+    expect(result.exitCode).toBe(ExitCode.AUTH);
+    expect(output.join("\n")).toContain("Not authenticated");
+  });
+
   it("auto-authenticates when listCalendars throws AUTH_REQUIRED", async () => {
     const authError = Object.assign(new Error("Not authenticated"), { code: "AUTH_REQUIRED" });
     let callCount = 0;

@@ -63,6 +63,14 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
     if (isAuthRequiredError(error) && requestAuth) {
       await requestAuth();
       calendars = await opts.listCalendars();
+    } else if (isAuthRequiredError(error)) {
+      const msg = "Not authenticated. Run `gcal auth` to authenticate.";
+      if (format === "json") {
+        write(formatJsonError("AUTH_REQUIRED", msg));
+      } else {
+        write(msg);
+      }
+      return { exitCode: ExitCode.AUTH };
     } else {
       throw error;
     }
