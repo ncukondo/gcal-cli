@@ -21,6 +21,9 @@ function makeApi(calendars: Partial<Calendar>[]): GoogleCalendarApi {
     events: {
       list: vi.fn(),
       get: vi.fn(),
+      insert: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
     },
   };
 }
@@ -195,7 +198,7 @@ describe("handleCalendars", () => {
           Object.assign(new Error("Unauthorized"), { code: 401 }),
         ),
       },
-      events: { list: vi.fn(), get: vi.fn() },
+      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
     const { output, write } = makeOutput();
 
@@ -218,7 +221,7 @@ describe("handleCalendars", () => {
           Object.assign(new Error("Unauthorized"), { code: 401 }),
         ),
       },
-      events: { list: vi.fn(), get: vi.fn() },
+      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
     const { output, write } = makeOutput();
 
