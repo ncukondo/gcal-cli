@@ -11,12 +11,12 @@ export interface DeleteHandlerOptions {
   calendarId: string;
   format: OutputFormat;
   quiet: boolean;
-  dryRun: boolean;
+  dryRun?: boolean;
   write: (msg: string) => void;
 }
 
 export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandResult> {
-  const { api, eventId, calendarId, format, quiet, dryRun, write } = opts;
+  const { api, eventId, calendarId, format, quiet, dryRun = false, write } = opts;
 
   if (!eventId) {
     write(formatJsonError("INVALID_ARGS", "event-id is required"));
