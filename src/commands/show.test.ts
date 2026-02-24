@@ -72,7 +72,7 @@ function runShow(
     calendarId: opts.calendarId ?? "primary",
     calendarName: opts.calendarName ?? "Main Calendar",
     format: opts.format ?? "text",
-    timezone: opts.timezone,
+    ...(opts.timezone !== undefined && { timezone: opts.timezone }),
     write: (msg: string) => {
       output.push(msg);
     },
