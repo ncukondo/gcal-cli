@@ -71,7 +71,12 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
   const displayFrom = timeMin.slice(0, 10);
   const displayTo = timeMax.slice(0, 10);
   writeErr(`Searching: ${displayFrom} to ${displayTo}`);
-  writeErr("Tip: Use --days <n> or --from/--to to change the search range.");
+
+  const hasExplicitRange =
+    opts.days !== undefined || opts.from !== undefined || opts.to !== undefined;
+  if (!hasExplicitRange) {
+    writeErr("Tip: Use --days <n> or --from/--to to change the search range.");
+  }
 
   const results = await Promise.all(
     calendars.map((cal) => listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query })),

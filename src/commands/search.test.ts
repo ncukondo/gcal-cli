@@ -356,11 +356,51 @@ describe("search command", () => {
       expect(stderr).toContain("Searching: 2026-03-01 to 2026-03-31");
     });
 
-    it("always outputs hint message", async () => {
+    it("outputs hint message when using default range", async () => {
       const api = makeMockApi([]);
       const result = await runSearch(api, { query: "test", timezone: "UTC" });
       const stderr = result.errOutput.join("\n");
       expect(stderr).toContain("Tip: Use --days <n> or --from/--to to change the search range.");
+    });
+
+    it("suppresses hint when --days is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", days: 60, timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --from is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", from: "2026-03-01", timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --to is specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", to: "2026-03-31", timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --from and --to are specified", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, {
+        query: "test",
+        from: "2026-03-01",
+        to: "2026-03-31",
+        timezone: "UTC",
+      });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
+    });
+
+    it("suppresses hint when --days is negative", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", days: -30, timezone: "UTC" });
+      const stderr = result.errOutput.join("\n");
+      expect(stderr).not.toContain("Tip:");
     });
 
     it("does not affect stdout output", async () => {
