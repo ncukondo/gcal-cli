@@ -6,15 +6,17 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 8: UX Improvements (cont.)
-
-21. [021-add-command-ux](./021-add-command-ux.md) — gcal add UX改善: 全日イベント自動判定・end省略・duration対応
+(none)
 
 ## In Progress
 
 (none)
 
 ## Completed
+
+### Phase 8: UX Improvements (cont.)
+
+21. [021-add-command-ux](./completed/021-add-command-ux.md) — gcal add UX改善: 全日イベント自動判定・end省略・duration対応 (#30)
 
 ### Phase 7: UX Improvements
 
