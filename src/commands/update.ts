@@ -61,6 +61,119 @@ function resolveAllDayEvent(startStr: string, endStr: string): ResolvedTime {
   };
 }
 
+function resolveStartAndEnd(
+  startStr: string,
+  endStr: string,
+  allDay: boolean,
+  timezone: string,
+): ResolvedTime {
+  if (allDay) {
+    return resolveAllDayEvent(startStr, endStr);
+  }
+  return resolveTimedEvent(startStr, endStr, timezone);
+}
+
+function resolveStartAndDuration(
+  startStr: string,
+  durationMs: number,
+  allDay: boolean,
+  timezone: string,
+): ResolvedTime {
+  if (allDay) {
+    const days = durationMs / MS_PER_DAY;
+    return {
+      start: startStr,
+      end: addDaysToDateString(startStr, days),
+      allDay: true,
+    };
+  }
+  const parsedStart = parseDateTimeInZone(startStr, timezone);
+  const endDate = new Date(parsedStart.getTime() + durationMs);
+  return {
+    start: formatDateTimeInZone(parsedStart, timezone),
+    end: formatDateTimeInZone(endDate, timezone),
+    allDay: false,
+  };
+}
+
+function resolveStartOnly(
+  startStr: string,
+  existing: CalendarEvent,
+  allDay: boolean,
+  timezone: string,
+): ResolvedTime {
+  if (allDay) {
+    const existingStartMs = new Date(existing.start).getTime();
+    const existingEndMs = new Date(existing.end).getTime();
+    const durationDays = Math.round((existingEndMs - existingStartMs) / MS_PER_DAY);
+    return {
+      start: startStr,
+      end: addDaysToDateString(startStr, durationDays),
+      allDay: true,
+      existingEvent: existing,
+    };
+  }
+  const existingStartMs = new Date(existing.start).getTime();
+  const existingEndMs = new Date(existing.end).getTime();
+  const durationMs = existingEndMs - existingStartMs;
+  const parsedStart = parseDateTimeInZone(startStr, timezone);
+  const endDate = new Date(parsedStart.getTime() + durationMs);
+  return {
+    start: formatDateTimeInZone(parsedStart, timezone),
+    end: formatDateTimeInZone(endDate, timezone),
+    allDay: false,
+    existingEvent: existing,
+  };
+}
+
+function resolveEndOnly(
+  endStr: string,
+  existing: CalendarEvent,
+  allDay: boolean,
+  timezone: string,
+): ResolvedTime {
+  if (allDay) {
+    return {
+      start: existing.start,
+      end: addDaysToDateString(endStr, 1),
+      allDay: true,
+      existingEvent: existing,
+    };
+  }
+  const parsedEnd = parseDateTimeInZone(endStr, timezone);
+  return {
+    start: existing.start,
+    end: formatDateTimeInZone(parsedEnd, timezone),
+    allDay: false,
+    existingEvent: existing,
+  };
+}
+
+function resolveDurationOnly(
+  durationMs: number,
+  existing: CalendarEvent,
+  allDay: boolean,
+  timezone: string,
+): ResolvedTime {
+  if (allDay) {
+    const days = durationMs / MS_PER_DAY;
+    return {
+      start: existing.start,
+      end: addDaysToDateString(existing.start, days),
+      allDay: true,
+      existingEvent: existing,
+    };
+  }
+  const existingStartMs = new Date(existing.start).getTime();
+  const endDate = new Date(existingStartMs + durationMs);
+  return {
+    start: existing.start,
+    end: formatDateTimeInZone(endDate, timezone),
+    allDay: false,
+    existingEvent: existing,
+  };
+}
+
 async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTime | null> {
   const { timezone, calendarId, calendarName, eventId, getEvent } = opts;
   const hasStart = opts.start !== undefined;
@@ -68,6 +181,9 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   const hasDuration = opts.duration !== undefined;
 
   if (!hasStart && !hasEnd && !hasDuration) return null;
+
+  // Parse duration once when present
+  const durationMs = hasDuration ? parseDuration(opts.duration!) : undefined;
 
   // Determine if we need to fetch the existing event
   const needExisting =
@@ -78,14 +194,7 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   }
 
   // Determine allDay from start format, or from existing event
-  let allDay: boolean;
-  if (hasStart) {
-    allDay = isDateOnly(opts.start!);
-  } else if (existing) {
-    allDay = existing.all_day;
-  } else {
-    allDay = false;
-  }
+  const allDay = hasStart ? isDateOnly(opts.start!) : existing!.all_day;
 
   // Validate start/end type consistency
   if (hasStart && hasEnd) {
@@ -117,8 +226,7 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   }
 
   // Validate all-day duration
-  if (hasDuration && allDay) {
-    const durationMs = parseDuration(opts.duration!);
+  if (durationMs !== undefined && allDay) {
     if (durationMs % MS_PER_DAY !== 0) {
       throw new ApiError(
         "INVALID_ARGS",
@@ -127,99 +235,24 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
     }
   }
 
-  // Case: --start + --end
   if (hasStart && hasEnd) {
-    if (allDay) {
-      return resolveAllDayEvent(opts.start!, opts.end!);
-    }
-    return resolveTimedEvent(opts.start!, opts.end!, timezone);
+    return resolveStartAndEnd(opts.start!, opts.end!, allDay, timezone);
   }
 
-  // Case: --start + --duration
-  if (hasStart && hasDuration) {
-    const durationMs = parseDuration(opts.duration!);
-    if (allDay) {
-      const days = durationMs / MS_PER_DAY;
-      return {
-        start: opts.start!,
-        end: addDaysToDateString(opts.start!, days),
-        allDay: true,
-      };
-    }
-    const parsedStart = parseDateTimeInZone(opts.start!, timezone);
-    const endDate = new Date(parsedStart.getTime() + durationMs);
-    return {
-      start: formatDateTimeInZone(parsedStart, timezone),
-      end: formatDateTimeInZone(endDate, timezone),
-      allDay: false,
-    };
+  if (hasStart && durationMs !== undefined) {
+    return resolveStartAndDuration(opts.start!, durationMs, allDay, timezone);
   }
 
-  // Case: --start only (preserve existing duration)
-  if (hasStart && !hasEnd && !hasDuration) {
-    if (allDay) {
-      const existingStartMs = new Date(existing!.start).getTime();
-      const existingEndMs = new Date(existing!.end).getTime();
-      const durationDays = Math.round((existingEndMs - existingStartMs) / MS_PER_DAY);
-      return {
-        start: opts.start!,
-        end: addDaysToDateString(opts.start!, durationDays),
-        allDay: true,
-        existingEvent: existing!,
-      };
-    }
-    const existingStartMs = new Date(existing!.start).getTime();
-    const existingEndMs = new Date(existing!.end).getTime();
-    const durationMs = existingEndMs - existingStartMs;
-    const parsedStart = parseDateTimeInZone(opts.start!, timezone);
-    const endDate = new Date(parsedStart.getTime() + durationMs);
-    return {
-      start: formatDateTimeInZone(parsedStart, timezone),
-      end: formatDateTimeInZone(endDate, timezone),
-      allDay: false,
-      existingEvent: existing!,
-    };
+  if (hasStart) {
+    return resolveStartOnly(opts.start!, existing!, allDay, timezone);
   }
 
-  // Case: --end only (preserve existing start)
-  if (hasEnd && !hasStart) {
-    if (allDay) {
-      return {
-        start: existing!.start,
-        end: addDaysToDateString(opts.end!, 1),
-        allDay: true,
-        existingEvent: existing!,
-      };
-    }
-    const parsedEnd = parseDateTimeInZone(opts.end!, timezone);
-    return {
-      start: existing!.start,
-      end: formatDateTimeInZone(parsedEnd, timezone),
-      allDay: false,
-      existingEvent: existing!,
-    };
+  if (hasEnd) {
+    return resolveEndOnly(opts.end!, existing!, allDay, timezone);
   }
 
-  // Case: --duration only (preserve existing start)
-  if (hasDuration && !hasStart) {
-    const durationMs = parseDuration(opts.duration!);
-    if (allDay) {
-      const days = durationMs / MS_PER_DAY;
-      return {
-        start: existing!.start,
-        end: addDaysToDateString(existing!.start, days),
-        allDay: true,
-        existingEvent: existing!,
-      };
-    }
-    const existingStartMs = new Date(existing!.start).getTime();
-    const endDate = new Date(existingStartMs + durationMs);
-    return {
-      start: existing!.start,
-      end: formatDateTimeInZone(endDate, timezone),
-      allDay: false,
-      existingEvent: existing!,
-    };
+  if (durationMs !== undefined) {
+    return resolveDurationOnly(durationMs, existing!, allDay, timezone);
   }
 
   return null;
