@@ -97,9 +97,14 @@ gcal add [options]
 
 Options:
   --title, -t <title>           Event title (required)
-  --start, -s <datetime>        Start datetime (required, ISO 8601)
-  --end, -e <datetime>          End datetime (required, ISO 8601)
-  --all-day                     Create all-day event (use date only)
+  --start, -s <datetime>        Start date or datetime (required, ISO 8601).
+                                Date-only (YYYY-MM-DD) creates all-day event.
+                                Datetime creates timed event.
+  --end, -e <datetime>          End date or datetime.
+                                Optional. Default: same day (all-day) or +1h (timed).
+                                All-day end is inclusive (last day of event).
+  --duration <duration>         Duration instead of --end (e.g. 30m, 1h, 2d).
+                                Mutually exclusive with --end.
   --description, -d <text>      Event description
   --calendar, -c <id>           Target calendar (uses first enabled if omitted)
   --busy                        Mark as busy (default)
@@ -108,12 +113,28 @@ Options:
 
 Datetime is interpreted in the configured timezone (or --tz override).
 
+Event type detection:
+- `--start` が日付のみ (`YYYY-MM-DD`) → 全日イベント
+- `--start` が日時 (`YYYY-MM-DDTHH:MM`) → 時間指定イベント
+- `--start` と `--end` の型は一致する必要がある（日付と日時の混在はエラー）
+
+End date behavior (all-day):
+- `--end` は inclusive（最終日を指定する）。CLI内部でGoogle Calendar APIのexclusive形式（+1日）に変換する。
+- 省略時は `--start` と同日の1日イベント。
+
+End time behavior (timed):
+- 省略時は `--start` + 1時間。
+
 Examples:
 ```bash
-gcal add -t "Meeting" -s "2026-01-24T10:00" -e "2026-01-24T11:00"
-gcal add -t "Vacation" -s "2026-01-24" -e "2026-01-26" --all-day
-gcal add -t "Focus Time" -s "2026-01-24T09:00" -e "2026-01-24T12:00" --free
-gcal add -t "Call" -s "2026-01-24T09:00" -e "2026-01-24T10:00" --tz America/New_York
+gcal add -t "祝日" -s "2026-01-24"                                      # All-day, 1 day
+gcal add -t "Vacation" -s "2026-01-24" -e "2026-01-26"                  # All-day, 3 days (inclusive)
+gcal add -t "合宿" -s "2026-01-24" --duration 2d                        # All-day, 2 days
+gcal add -t "Meeting" -s "2026-01-24T10:00"                             # Timed, 1h default
+gcal add -t "Meeting" -s "2026-01-24T10:00" -e "2026-01-24T11:30"      # Timed, explicit end
+gcal add -t "Standup" -s "2026-01-24T10:00" --duration 30m             # Timed, 30 min
+gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, free
+gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, with timezone
 ```
 
 ### `gcal show`
