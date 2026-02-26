@@ -246,7 +246,7 @@ export function registerCommands(program: Command): void {
         title: addOpts.title,
         start: addOpts.start,
         end: addOpts.end,
-        allDay: addOpts.allDay,
+        duration: addOpts.duration,
         description: addOpts.description,
         busy: addOpts.busy,
         free: addOpts.free,
