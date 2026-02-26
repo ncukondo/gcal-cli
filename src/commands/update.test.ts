@@ -589,7 +589,51 @@ describe("update command", () => {
   });
 
   describe("type conversion warning", () => {
-    it("warns on stderr when changing from timed to all-day", async () => {
+    it("warns on stderr when changing from timed to all-day (--start only)", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+        all_day: false,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(result.stderrOutput.join("\n")).toContain("Event type changed from timed to all-day");
+    });
+
+    it("warns on stderr when changing from all-day to timed (--start only)", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-03-01T10:00:00+09:00",
+        end: "2026-03-01T11:00:00+09:00",
+        all_day: false,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01T10:00",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(result.stderrOutput.join("\n")).toContain("Event type changed from all-day to timed");
+    });
+
+    it("no warning when both --start and --end are provided (skips fetch)", async () => {
       const existingEvent = makeEvent({
         start: "2026-02-01T10:00:00+09:00",
         end: "2026-02-01T11:00:00+09:00",
@@ -609,30 +653,9 @@ describe("update command", () => {
         timezone: "Asia/Tokyo",
       });
 
-      expect(result.stderrOutput.join("\n")).toContain("Event type changed from timed to all-day");
-    });
-
-    it("warns on stderr when changing from all-day to timed", async () => {
-      const existingEvent = makeEvent({
-        start: "2026-03-01",
-        end: "2026-03-02",
-        all_day: true,
-      });
-      const updatedEvent = makeEvent({
-        start: "2026-03-01T10:00:00+09:00",
-        end: "2026-03-01T11:00:00+09:00",
-        all_day: false,
-      });
-      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
-
-      const result = await runUpdate(api, {
-        eventId: "evt1",
-        start: "2026-03-01T10:00",
-        end: "2026-03-01T11:00",
-        timezone: "Asia/Tokyo",
-      });
-
-      expect(result.stderrOutput.join("\n")).toContain("Event type changed from all-day to timed");
+      // When both start and end are provided, existing event is not fetched,
+      // so type conversion warning is not emitted
+      expect(result.stderrOutput).toHaveLength(0);
     });
 
     it("no warning when type stays the same", async () => {
@@ -651,7 +674,6 @@ describe("update command", () => {
       const result = await runUpdate(api, {
         eventId: "evt1",
         start: "2026-02-01T14:00",
-        end: "2026-02-01T15:00",
         timezone: "Asia/Tokyo",
       });
 

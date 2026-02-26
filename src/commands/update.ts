@@ -8,6 +8,8 @@ import { parseDuration } from "../lib/duration.ts";
 import type { OutputFormat, CommandResult, CalendarEvent } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export interface UpdateHandlerOptions {
   api: GoogleCalendarApi;
   eventId: string;
@@ -97,10 +99,26 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
     }
   }
 
+  // Validate --end only format matches existing event type
+  if (hasEnd && !hasStart && existing) {
+    const endIsDateOnly = isDateOnly(opts.end!);
+    if (existing.all_day && !endIsDateOnly) {
+      throw new ApiError(
+        "INVALID_ARGS",
+        "--end format (datetime) does not match existing event type (all-day). Use date-only format (YYYY-MM-DD) or provide --start to change event type.",
+      );
+    }
+    if (!existing.all_day && endIsDateOnly) {
+      throw new ApiError(
+        "INVALID_ARGS",
+        "--end format (date-only) does not match existing event type (timed). Use datetime format (YYYY-MM-DDTHH:MM) or provide --start to change event type.",
+      );
+    }
+  }
+
   // Validate all-day duration
   if (hasDuration && allDay) {
     const durationMs = parseDuration(opts.duration!);
-    const MS_PER_DAY = 24 * 60 * 60 * 1000;
     if (durationMs % MS_PER_DAY !== 0) {
       throw new ApiError(
         "INVALID_ARGS",
@@ -121,7 +139,6 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   if (hasStart && hasDuration) {
     const durationMs = parseDuration(opts.duration!);
     if (allDay) {
-      const MS_PER_DAY = 24 * 60 * 60 * 1000;
       const days = durationMs / MS_PER_DAY;
       return {
         start: opts.start!,
@@ -143,7 +160,7 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
     if (allDay) {
       const existingStartMs = new Date(existing!.start).getTime();
       const existingEndMs = new Date(existing!.end).getTime();
-      const durationDays = Math.round((existingEndMs - existingStartMs) / (24 * 60 * 60 * 1000));
+      const durationDays = Math.round((existingEndMs - existingStartMs) / MS_PER_DAY);
       return {
         start: opts.start!,
         end: addDaysToDateString(opts.start!, durationDays),
@@ -187,7 +204,6 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   if (hasDuration && !hasStart) {
     const durationMs = parseDuration(opts.duration!);
     if (allDay) {
-      const MS_PER_DAY = 24 * 60 * 60 * 1000;
       const days = durationMs / MS_PER_DAY;
       return {
         start: existing!.start,
@@ -249,14 +265,14 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     withTime.allDay = timeResult.allDay;
     input.timeZone = timezone;
 
-    // Type conversion warning
-    const existing =
-      timeResult.existingEvent ??
-      (await opts.getEvent(calendarId, calendarName, eventId, timezone));
-    if (existing.all_day && !timeResult.allDay) {
-      opts.writeStderr("\u26A0 Event type changed from all-day to timed");
-    } else if (!existing.all_day && timeResult.allDay) {
-      opts.writeStderr("\u26A0 Event type changed from timed to all-day");
+    // Type conversion warning (only fetch existing if not already available)
+    if (timeResult.existingEvent) {
+      const existing = timeResult.existingEvent;
+      if (existing.all_day && !timeResult.allDay) {
+        opts.writeStderr("\u26A0 Event type changed from all-day to timed");
+      } else if (!existing.all_day && timeResult.allDay) {
+        opts.writeStderr("\u26A0 Event type changed from timed to all-day");
+      }
     }
   }
 

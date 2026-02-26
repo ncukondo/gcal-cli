@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleUpdate } from "../../src/commands/update.ts";
 import { getEvent } from "../../src/lib/api.ts";
-import { createMockApi, makeGoogleEvent, captureWrite } from "./helpers.ts";
+import { createMockApi, makeGoogleEvent, makeAllDayGoogleEvent, captureWrite } from "./helpers.ts";
 
 function makeGetEvent(mockApi: ReturnType<typeof createMockApi>) {
   return (calId: string, calName: string, evtId: string, tz?: string) =>
@@ -174,5 +174,79 @@ describe("update command pipeline: API → normalize → output", () => {
     const body = patchFn.mock.calls[0]![0].requestBody;
     expect(body.start.dateTime).toContain("14:00:00");
     expect(body.end.dateTime).toContain("15:00:00");
+  });
+
+  it("errors when --end datetime is used on an all-day event", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [makeAllDayGoogleEvent({ id: "evt-allday-1" })],
+      },
+    });
+    const out = captureWrite();
+
+    await expect(
+      handleUpdate({
+        api: mockApi,
+        eventId: "evt-allday-1",
+        calendarId: "primary",
+        calendarName: "Main Calendar",
+        format: "json",
+        timezone: "Asia/Tokyo",
+        write: out.write,
+        writeStderr: vi.fn(),
+        getEvent: makeGetEvent(mockApi),
+        end: "2026-03-01T12:00",
+      }),
+    ).rejects.toThrow("--end format (datetime) does not match existing event type (all-day)");
+  });
+
+  it("errors when --end date-only is used on a timed event", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [makeGoogleEvent({ id: "evt-1" })],
+      },
+    });
+    const out = captureWrite();
+
+    await expect(
+      handleUpdate({
+        api: mockApi,
+        eventId: "evt-1",
+        calendarId: "primary",
+        calendarName: "Main Calendar",
+        format: "json",
+        timezone: "Asia/Tokyo",
+        write: out.write,
+        writeStderr: vi.fn(),
+        getEvent: makeGetEvent(mockApi),
+        end: "2026-03-01",
+      }),
+    ).rejects.toThrow("--end format (date-only) does not match existing event type (timed)");
+  });
+
+  it("does not fetch existing event for type warning when --start and --end are both provided", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [makeGoogleEvent({ id: "evt-1" })],
+      },
+    });
+    const out = captureWrite();
+
+    await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
+      start: "2026-03-01T14:00",
+      end: "2026-03-01T15:00",
+    });
+
+    // getEvent should NOT be called when both start and end are provided
+    expect(mockApi.events.get).not.toHaveBeenCalled();
   });
 });
