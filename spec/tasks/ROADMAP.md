@@ -6,15 +6,17 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 9: Command Consistency
-
-22. [022-update-command-duration](./022-update-command-duration.md) — gcal update に --duration サポートと --start/--end 単独指定を追加
+(none)
 
 ## In Progress
 
 (none)
 
 ## Completed
+
+### Phase 9: Command Consistency
+
+22. [022-update-command-duration](./completed/022-update-command-duration.md) — gcal update に --duration サポートと --start/--end 単独指定を追加 (#31)
 
 ### Phase 8: UX Improvements (cont.)
 
