@@ -53,7 +53,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
     expect(body.end.dateTime).toContain("+09:00");
   });
 
-  it("creates an all-day event with date-only fields", async () => {
+  it("creates an all-day event auto-detected from date-only start", async () => {
     const mockApi = createMockApi();
     const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
     const out = captureWrite();
@@ -69,7 +69,6 @@ describe("add command pipeline: config → timezone → API → output", () => {
         title: "Vacation",
         start: "2026-03-01",
         end: "2026-03-03",
-        allDay: true,
         format: "json",
       },
       deps,
@@ -80,8 +79,88 @@ describe("add command pipeline: config → timezone → API → output", () => {
     const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
     const body = insertFn.mock.calls[0]![0].requestBody;
     expect(body.start.date).toBe("2026-03-01");
-    expect(body.end.date).toBe("2026-03-03");
+    // User end "2026-03-03" (inclusive) → API end "2026-03-04" (exclusive)
+    expect(body.end.date).toBe("2026-03-04");
     expect(body.start.dateTime).toBeUndefined();
+  });
+
+  it("defaults to 1-day all-day event when end omitted", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    await handleAdd(
+      {
+        title: "Holiday",
+        start: "2026-03-01",
+        format: "json",
+      },
+      deps,
+    );
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const body = insertFn.mock.calls[0]![0].requestBody;
+    expect(body.start.date).toBe("2026-03-01");
+    expect(body.end.date).toBe("2026-03-02"); // exclusive: same day + 1
+  });
+
+  it("defaults to +1h timed event when end omitted", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    await handleAdd(
+      {
+        title: "Quick Meeting",
+        start: "2026-03-01T10:00",
+        format: "json",
+      },
+      deps,
+    );
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const body = insertFn.mock.calls[0]![0].requestBody;
+    expect(body.start.dateTime).toContain("10:00");
+    expect(body.end.dateTime).toContain("11:00");
+  });
+
+  it("--duration computes end for timed event", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    await handleAdd(
+      {
+        title: "Standup",
+        start: "2026-03-01T10:00",
+        duration: "30m",
+        format: "json",
+      },
+      deps,
+    );
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const body = insertFn.mock.calls[0]![0].requestBody;
+    expect(body.start.dateTime).toContain("10:00");
+    expect(body.end.dateTime).toContain("10:30");
   });
 
   it("timezone override (--tz) applies to the created event's datetime", async () => {
@@ -207,12 +286,36 @@ describe("add command pipeline: config → timezone → API → output", () => {
       {
         title: "",
         start: "2026-03-01T10:00",
-        end: "2026-03-01T11:00",
         format: "json",
       },
       deps,
     );
 
     expect(result.exitCode).toBe(3); // ExitCode.ARGUMENT
+  });
+
+  it("rejects start/end type mismatch (date + datetime)", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      {
+        title: "Bad Event",
+        start: "2026-03-01",
+        end: "2026-03-01T11:00",
+        format: "json",
+      },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(3);
+    expect(out.output()).toContain("INVALID_ARGS");
   });
 });
