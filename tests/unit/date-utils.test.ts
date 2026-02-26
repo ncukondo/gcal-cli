@@ -18,6 +18,14 @@ describe("isDateOnly", () => {
     expect(isDateOnly("not-a-date")).toBe(false);
     expect(isDateOnly("2026-3-1")).toBe(false);
   });
+
+  it("returns false for semantically invalid dates", () => {
+    expect(isDateOnly("2026-02-30")).toBe(false);
+    expect(isDateOnly("2026-13-01")).toBe(false);
+    expect(isDateOnly("2026-00-01")).toBe(false);
+    expect(isDateOnly("2026-01-00")).toBe(false);
+    expect(isDateOnly("2026-99-45")).toBe(false);
+  });
 });
 
 describe("addDaysToDateString", () => {

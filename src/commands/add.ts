@@ -83,13 +83,24 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
   let end: string;
 
   if (allDay) {
-    start = options.start.slice(0, 10);
+    start = options.start;
 
     if (options.end) {
       // Inclusive end → exclusive (+1 day for API)
       end = addDaysToDateString(options.end, 1);
     } else if (options.duration) {
-      const durationMs = parseDuration(options.duration);
+      let durationMs: number;
+      try {
+        durationMs = parseDuration(options.duration);
+      } catch {
+        deps.write(
+          formatJsonError(
+            "INVALID_ARGS",
+            `Invalid duration: "${options.duration}". Use formats like 30m, 1h, 2d, 1h30m.`,
+          ),
+        );
+        return { exitCode: ExitCode.ARGUMENT };
+      }
       const MS_PER_DAY = 24 * 60 * 60 * 1000;
       if (durationMs % MS_PER_DAY !== 0) {
         deps.write(
@@ -115,7 +126,18 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
       const endDate = parseDateTimeInZone(options.end, timezone);
       end = formatDateTimeInZone(endDate, timezone);
     } else if (options.duration) {
-      const durationMs = parseDuration(options.duration);
+      let durationMs: number;
+      try {
+        durationMs = parseDuration(options.duration);
+      } catch {
+        deps.write(
+          formatJsonError(
+            "INVALID_ARGS",
+            `Invalid duration: "${options.duration}". Use formats like 30m, 1h, 2d, 1h30m.`,
+          ),
+        );
+        return { exitCode: ExitCode.ARGUMENT };
+      }
       const endDate = new Date(startDate.getTime() + durationMs);
       end = formatDateTimeInZone(endDate, timezone);
     } else {

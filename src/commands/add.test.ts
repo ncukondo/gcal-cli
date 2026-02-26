@@ -267,6 +267,25 @@ describe("handleAdd", () => {
     expect(output).toContain("INVALID_ARGS");
   });
 
+  it("returns INVALID_ARGS for invalid duration string (timed event)", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(
+      baseOptions({ start: "2026-03-01T10:00", duration: "abc" }),
+      deps,
+    );
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("INVALID_ARGS");
+  });
+
+  it("returns INVALID_ARGS for invalid duration string (all-day event)", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ start: "2026-03-01", duration: "xyz" }), deps);
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("INVALID_ARGS");
+  });
+
   it("allows day-unit duration for all-day events (e.g. 3d)", async () => {
     const mockCreate = vi
       .fn()
