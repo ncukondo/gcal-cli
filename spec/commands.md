@@ -154,18 +154,56 @@ gcal update <event-id> [options]
 
 Options:
   --title, -t <title>           New title
-  --start, -s <datetime>        New start datetime
-  --end, -e <datetime>          New end datetime
+  --start, -s <datetime>        New start date or datetime.
+                                Date-only (YYYY-MM-DD) → all-day event.
+                                Datetime (YYYY-MM-DDTHH:MM) → timed event.
+                                Can be specified alone (preserves existing duration).
+  --end, -e <datetime>          New end date or datetime.
+                                Can be specified alone (preserves existing start).
+                                All-day end is inclusive (last day of event).
+  --duration <duration>         Duration instead of --end (e.g. 30m, 1h, 2d, 1h30m).
+                                Mutually exclusive with --end.
+                                Can be specified alone (preserves existing start).
   --description, -d <text>      New description
   --busy                        Mark as busy
   --free                        Mark as free
+  --dry-run                     Preview without executing
 ```
+
+Datetime is interpreted in the configured timezone (or --tz override).
+
+Event type detection (same as `gcal add`):
+- `--start` が日付のみ (`YYYY-MM-DD`) → 全日イベント
+- `--start` が日時 (`YYYY-MM-DDTHH:MM`) → 時間指定イベント
+- `--start` と `--end` の型は一致する必要がある（日付と日時の混在はエラー）
+
+Type conversion warning:
+- 既存イベントの型と異なる型に変換される場合、stderr に警告を表示する
+  - `⚠ Event type changed from timed to all-day`
+  - `⚠ Event type changed from all-day to timed`
+
+Partial time update:
+- `--start` のみ: 既存イベントの duration を維持して end を自動算出
+- `--end` のみ: 既存の start を維持して end のみ更新
+- `--duration` のみ: 既存の start を維持して start + duration → 新 end
+- `--start` + `--end`: 両方を明示的に更新
+- `--start` + `--duration`: start + duration → end を算出
+
+End date behavior (all-day):
+- `--end` は inclusive（最終日を指定する）。CLI内部でGoogle Calendar APIのexclusive形式（+1日）に変換する。
 
 Examples:
 ```bash
-gcal update abc123 -t "Updated Meeting"
-gcal update abc123 -s "2026-01-24T11:00" -e "2026-01-24T12:00"
-gcal update abc123 --free
+gcal update abc123 -t "Updated Meeting"                                    # Title only
+gcal update abc123 -s "2026-01-24T11:00"                                   # Start only, keep duration
+gcal update abc123 -e "2026-01-24T12:00"                                   # End only, keep start
+gcal update abc123 --duration 2h                                           # Duration only, keep start
+gcal update abc123 -s "2026-01-24T11:00" -e "2026-01-24T12:30"            # Start + end
+gcal update abc123 -s "2026-01-24T10:00" --duration 30m                   # Start + duration
+gcal update abc123 -s "2026-03-01" -e "2026-03-03"                        # All-day, 3 days (inclusive)
+gcal update abc123 -s "2026-03-01" --duration 2d                          # All-day, 2 days
+gcal update abc123 --free                                                  # Transparency only
+gcal update abc123 --dry-run -t "Preview"                                  # Dry run
 ```
 
 ### `gcal delete`
