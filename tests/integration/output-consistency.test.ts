@@ -114,6 +114,11 @@ describe("JSON output envelope consistency across all commands", () => {
       format: "json",
       timezone: "Asia/Tokyo",
       write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: async (calId, calName, evtId, tz) => {
+        const { getEvent } = await import("../../src/lib/api.ts");
+        return getEvent(mockApi, calId, calName, evtId, tz);
+      },
       title: "Updated",
     });
     const json = JSON.parse(out.output());

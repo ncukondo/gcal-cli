@@ -27,6 +27,7 @@ function makeMockApi(
   opts: {
     patchReturn?: CalendarEvent;
     patchError?: Error;
+    getReturn?: CalendarEvent;
   } = {},
 ): GoogleCalendarApi {
   const patchFn = opts.patchError
@@ -52,13 +53,29 @@ function makeMockApi(
           : {},
       });
 
+  const getReturn = opts.getReturn ?? makeEvent();
+  const getFn = vi.fn().mockResolvedValue({
+    data: {
+      id: getReturn.id,
+      summary: getReturn.title,
+      description: getReturn.description,
+      start: getReturn.all_day ? { date: getReturn.start } : { dateTime: getReturn.start },
+      end: getReturn.all_day ? { date: getReturn.end } : { dateTime: getReturn.end },
+      htmlLink: getReturn.html_link,
+      status: getReturn.status,
+      transparency: getReturn.transparency,
+      created: getReturn.created,
+      updated: getReturn.updated,
+    },
+  });
+
   return {
     calendarList: {
       list: vi.fn().mockResolvedValue({ data: { items: [] } }),
     },
     events: {
       list: vi.fn().mockResolvedValue({ data: { items: [] } }),
-      get: vi.fn(),
+      get: getFn,
       insert: vi.fn(),
       patch: patchFn,
       delete: vi.fn(),
@@ -71,6 +88,7 @@ interface RunUpdateOpts {
   title?: string;
   start?: string;
   end?: string;
+  duration?: string;
   description?: string;
   busy?: boolean;
   free?: boolean;
@@ -78,10 +96,12 @@ interface RunUpdateOpts {
   calendar?: string;
   timezone?: string;
   dryRun?: boolean;
+  getReturn?: CalendarEvent;
 }
 
 function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   const output: string[] = [];
+  const stderrOutput: string[] = [];
   const handlerOpts: UpdateHandlerOptions = {
     api,
     eventId: opts.eventId,
@@ -92,15 +112,23 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
     write: (msg: string) => {
       output.push(msg);
     },
+    writeStderr: (msg: string) => {
+      stderrOutput.push(msg);
+    },
+    getEvent: async (calendarId, calendarName, eventId, timezone) => {
+      const { getEvent } = await import("../lib/api.ts");
+      return getEvent(api, calendarId, calendarName, eventId, timezone);
+    },
   };
   if (opts.title !== undefined) handlerOpts.title = opts.title;
   if (opts.start !== undefined) handlerOpts.start = opts.start;
   if (opts.end !== undefined) handlerOpts.end = opts.end;
+  if (opts.duration !== undefined) handlerOpts.duration = opts.duration;
   if (opts.description !== undefined) handlerOpts.description = opts.description;
   if (opts.busy !== undefined) handlerOpts.busy = opts.busy;
   if (opts.free !== undefined) handlerOpts.free = opts.free;
   if (opts.dryRun !== undefined) handlerOpts.dryRun = opts.dryRun;
-  return handleUpdate(handlerOpts).then((result) => ({ ...result, output }));
+  return handleUpdate(handlerOpts).then((result) => ({ ...result, output, stderrOutput }));
 }
 
 describe("update command", () => {
@@ -160,18 +188,104 @@ describe("update command", () => {
         },
       });
     });
+  });
 
-    it("requires both --start and --end together", async () => {
-      const api = makeMockApi();
-      const result = await runUpdate(api, {
+  describe("--start only preserves existing duration", () => {
+    it("fetches existing event, computes new end from existing duration", async () => {
+      // Existing event: 10:00-11:00 (1h duration)
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T14:00:00+09:00",
+        end: "2026-02-01T15:00:00+09:00",
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      await runUpdate(api, {
         eventId: "evt1",
         start: "2026-02-01T14:00",
-      }).catch((e: unknown) => e);
+        timezone: "Asia/Tokyo",
+      });
 
-      expect(result).toBeInstanceOf(Error);
-      expect((result as Error).message).toContain(
-        "start, end, and allDay must all be provided together",
-      );
+      // Should call getEvent to fetch existing
+      expect(api.events.get).toHaveBeenCalled();
+      // New end = new start (14:00) + existing duration (1h) = 15:00
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.dateTime).toBe("2026-02-01T14:00:00+09:00");
+      expect(patchCall.requestBody.end.dateTime).toBe("2026-02-01T15:00:00+09:00");
+    });
+  });
+
+  describe("--end only preserves existing start", () => {
+    it("keeps existing start, updates end only", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T12:00:00+09:00",
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        end: "2026-02-01T12:00",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(api.events.get).toHaveBeenCalled();
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.dateTime).toBe("2026-02-01T10:00:00+09:00");
+      expect(patchCall.requestBody.end.dateTime).toBe("2026-02-01T12:00:00+09:00");
+    });
+  });
+
+  describe("--duration only preserves existing start", () => {
+    it("keeps existing start, computes new end from duration", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T12:00:00+09:00",
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        duration: "2h",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(api.events.get).toHaveBeenCalled();
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.dateTime).toBe("2026-02-01T10:00:00+09:00");
+      expect(patchCall.requestBody.end.dateTime).toBe("2026-02-01T12:00:00+09:00");
+    });
+  });
+
+  describe("--start + --duration computes end", () => {
+    it("calculates end = start + duration", async () => {
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T14:00:00+09:00",
+        end: "2026-02-01T14:30:00+09:00",
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-02-01T14:00",
+        duration: "30m",
+        timezone: "Asia/Tokyo",
+      });
+
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.dateTime).toBe("2026-02-01T14:00:00+09:00");
+      expect(patchCall.requestBody.end.dateTime).toBe("2026-02-01T14:30:00+09:00");
     });
   });
 
@@ -371,6 +485,180 @@ describe("update command", () => {
     });
   });
 
+  describe("all-day event support", () => {
+    it("--start with date-only creates all-day event", async () => {
+      const existingEvent = makeEvent({
+        id: "evt1",
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-03-05",
+        end: "2026-03-06",
+        all_day: true,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-05",
+        timezone: "Asia/Tokyo",
+      });
+
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.date).toBe("2026-03-05");
+      expect(patchCall.requestBody.end.date).toBe("2026-03-06");
+    });
+
+    it("--start + --end with date-only uses inclusive end (adds 1 day)", async () => {
+      const updatedEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-04",
+        all_day: true,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        end: "2026-03-03",
+        timezone: "Asia/Tokyo",
+      });
+
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.date).toBe("2026-03-01");
+      // inclusive 03-03 → exclusive 03-04
+      expect(patchCall.requestBody.end.date).toBe("2026-03-04");
+    });
+
+    it("--start + --duration with day units for all-day event", async () => {
+      const updatedEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-03",
+        all_day: true,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        duration: "2d",
+        timezone: "Asia/Tokyo",
+      });
+
+      const patchCall = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(patchCall.requestBody.start.date).toBe("2026-03-01");
+      expect(patchCall.requestBody.end.date).toBe("2026-03-03");
+    });
+
+    it("all-day --duration with sub-day units throws error", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const api = makeMockApi({ getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        duration: "2h",
+        timezone: "Asia/Tokyo",
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("day-unit duration");
+    });
+  });
+
+  describe("start/end type validation", () => {
+    it("rejects mismatched types (date-only start with datetime end)", async () => {
+      const api = makeMockApi();
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        end: "2026-03-01T12:00",
+        timezone: "Asia/Tokyo",
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("same type");
+    });
+  });
+
+  describe("type conversion warning", () => {
+    it("warns on stderr when changing from timed to all-day", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+        all_day: false,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01",
+        end: "2026-03-01",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(result.stderrOutput.join("\n")).toContain("Event type changed from timed to all-day");
+    });
+
+    it("warns on stderr when changing from all-day to timed", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-03-01",
+        end: "2026-03-02",
+        all_day: true,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-03-01T10:00:00+09:00",
+        end: "2026-03-01T11:00:00+09:00",
+        all_day: false,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-03-01T10:00",
+        end: "2026-03-01T11:00",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(result.stderrOutput.join("\n")).toContain("Event type changed from all-day to timed");
+    });
+
+    it("no warning when type stays the same", async () => {
+      const existingEvent = makeEvent({
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+        all_day: false,
+      });
+      const updatedEvent = makeEvent({
+        start: "2026-02-01T14:00:00+09:00",
+        end: "2026-02-01T15:00:00+09:00",
+        all_day: false,
+      });
+      const api = makeMockApi({ patchReturn: updatedEvent, getReturn: existingEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        start: "2026-02-01T14:00",
+        end: "2026-02-01T15:00",
+        timezone: "Asia/Tokyo",
+      });
+
+      expect(result.stderrOutput).toHaveLength(0);
+    });
+  });
+
   describe("option conflicts", () => {
     function parseUpdate(args: string[]): { error: string | null } {
       const cmd = createUpdateCommand();
@@ -389,9 +677,30 @@ describe("update command", () => {
       expect(result.error).toContain("cannot be used with");
     });
 
+    it("rejects --end and --duration together", () => {
+      const result = parseUpdate(["evt1", "-e", "2026-03-01T12:00", "--duration", "1h"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
     it("accepts event ID with --title", () => {
       const result = parseUpdate(["evt1", "-t", "New Title"]);
       expect(result.error).toBeNull();
+    });
+
+    it("accepts --duration option", () => {
+      const result = parseUpdate(["evt1", "--duration", "1h"]);
+      expect(result.error).toBeNull();
+    });
+  });
+
+  describe("help text", () => {
+    it("includes Examples section in help", () => {
+      const cmd = createUpdateCommand();
+      let helpOutput = "";
+      cmd.configureOutput({ writeOut: (str) => (helpOutput += str) });
+      cmd.outputHelp();
+      expect(helpOutput).toContain("Examples:");
     });
   });
 });

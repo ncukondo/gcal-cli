@@ -137,6 +137,11 @@ describe("error propagation: API errors → command handler → output", () => {
           format: "json",
           timezone: "Asia/Tokyo",
           write: vi.fn(),
+          writeStderr: vi.fn(),
+          getEvent: async (calId, calName, evtId, tz) => {
+            const { getEvent } = await import("../../src/lib/api.ts");
+            return getEvent(mockApi, calId, calName, evtId, tz);
+          },
           title: "Updated",
         }),
       ).rejects.toThrow();

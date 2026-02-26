@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleUpdate } from "../../src/commands/update.ts";
+import { getEvent } from "../../src/lib/api.ts";
 import { createMockApi, makeGoogleEvent, captureWrite } from "./helpers.ts";
+
+function makeGetEvent(mockApi: ReturnType<typeof createMockApi>) {
+  return (calId: string, calName: string, evtId: string, tz?: string) =>
+    getEvent(mockApi, calId, calName, evtId, tz);
+}
 
 describe("update command pipeline: API → normalize → output", () => {
   it("updates event title and returns updated event details", async () => {
@@ -19,6 +25,8 @@ describe("update command pipeline: API → normalize → output", () => {
       format: "json",
       timezone: "Asia/Tokyo",
       write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
       title: "New Title",
     });
 
@@ -49,6 +57,8 @@ describe("update command pipeline: API → normalize → output", () => {
       format: "json",
       timezone: "America/New_York",
       write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
       start: "2026-03-01T14:00",
       end: "2026-03-01T15:00",
     });
@@ -75,6 +85,8 @@ describe("update command pipeline: API → normalize → output", () => {
       format: "json",
       timezone: "Asia/Tokyo",
       write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
       free: true,
     });
 
@@ -98,6 +110,8 @@ describe("update command pipeline: API → normalize → output", () => {
       format: "text",
       timezone: "Asia/Tokyo",
       write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
       title: "Updated Title",
     });
 
@@ -121,27 +135,44 @@ describe("update command pipeline: API → normalize → output", () => {
         format: "json",
         timezone: "Asia/Tokyo",
         write: out.write,
+        writeStderr: vi.fn(),
+        getEvent: makeGetEvent(mockApi),
       }),
     ).rejects.toThrow("at least one update option must be provided");
   });
 
-  it("throws when only start is provided without end", async () => {
+  it("start-only fetches existing event and preserves duration", async () => {
     const mockApi = createMockApi({
-      events: { primary: [makeGoogleEvent({ id: "evt-1" })] },
+      events: {
+        primary: [
+          makeGoogleEvent({
+            id: "evt-1",
+            start: { dateTime: "2026-02-23T10:00:00+09:00" },
+            end: { dateTime: "2026-02-23T11:00:00+09:00" },
+          }),
+        ],
+      },
     });
     const out = captureWrite();
 
-    await expect(
-      handleUpdate({
-        api: mockApi,
-        eventId: "evt-1",
-        calendarId: "primary",
-        calendarName: "Main Calendar",
-        format: "json",
-        timezone: "Asia/Tokyo",
-        write: out.write,
-        start: "2026-03-01T10:00",
-      }),
-    ).rejects.toThrow("start, end, and allDay must all be provided together");
+    await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
+      start: "2026-02-23T14:00",
+    });
+
+    // Should fetch existing event to get duration
+    expect(mockApi.events.get).toHaveBeenCalled();
+    const patchFn = mockApi.events.patch as ReturnType<typeof vi.fn>;
+    const body = patchFn.mock.calls[0]![0].requestBody;
+    expect(body.start.dateTime).toContain("14:00:00");
+    expect(body.end.dateTime).toContain("15:00:00");
   });
 });

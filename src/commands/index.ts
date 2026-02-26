@@ -19,7 +19,7 @@ import {
   startOAuthFlow,
 } from "../lib/auth.ts";
 import { createReadlinePrompt } from "../lib/prompt.ts";
-import { listCalendars, listEvents, createEvent } from "../lib/api.ts";
+import { listCalendars, listEvents, createEvent, getEvent } from "../lib/api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
 import { resolveEventCalendar } from "../lib/resolve-calendar.ts";
@@ -361,6 +361,8 @@ export function registerCommands(program: Command): void {
         format: globalOpts.format,
         timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
+        writeStderr: (msg) => process.stderr.write(msg + "\n"),
+        getEvent: (calId, calName, evtId, tz) => getEvent(api, calId, calName, evtId, tz),
         ...updateOpts,
       });
       process.exit(result.exitCode);
