@@ -127,6 +127,49 @@ describe("handleAdd", () => {
     expect(input.end).toContain("11:00");
   });
 
+  // --- TZ safety for all-day events ---
+
+  it("all-day date calculations are TZ-safe (uses UTC internally, no local TZ dependency)", async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(makeEvent({ all_day: true, start: "2026-03-01", end: "2026-03-02" }));
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    // This test verifies the fix for the bug where new Date(date + "T00:00:00")
+    // interpreted dates in local TZ but .toISOString() extracted UTC date,
+    // causing off-by-one errors in UTC+ timezones (e.g. Asia/Tokyo).
+    await handleAdd(baseOptions({ start: "2026-03-01" }), deps);
+
+    const [, , input] = mockCreate.mock.calls[0]!;
+    expect(input.start).toBe("2026-03-01");
+    expect(input.end).toBe("2026-03-02");
+  });
+
+  it("inclusive end conversion is TZ-safe for all-day events", async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(makeEvent({ all_day: true, start: "2026-03-01", end: "2026-03-04" }));
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ start: "2026-03-01", end: "2026-03-03" }), deps);
+
+    const [, , input] = mockCreate.mock.calls[0]!;
+    // Inclusive "2026-03-03" → exclusive "2026-03-04"
+    expect(input.end).toBe("2026-03-04");
+  });
+
+  it("duration calculation is TZ-safe for all-day events", async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(makeEvent({ all_day: true, start: "2026-03-01", end: "2026-03-03" }));
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ start: "2026-03-01", duration: "2d" }), deps);
+
+    const [, , input] = mockCreate.mock.calls[0]!;
+    expect(input.end).toBe("2026-03-03");
+  });
+
   // --- Inclusive end for all-day events ---
 
   it("converts inclusive --end to exclusive for all-day events (+1 day)", async () => {
@@ -205,6 +248,35 @@ describe("handleAdd", () => {
     expect(result.exitCode).toBe(ExitCode.ARGUMENT);
     const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(output).toContain("INVALID_ARGS");
+  });
+
+  it("rejects sub-day duration for all-day events (e.g. 2h)", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ start: "2026-03-01", duration: "2h" }), deps);
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("INVALID_ARGS");
+    expect(output).toContain("day-unit duration");
+  });
+
+  it("rejects mixed day+hour duration for all-day events (e.g. 1d2h)", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ start: "2026-03-01", duration: "1d2h" }), deps);
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("INVALID_ARGS");
+  });
+
+  it("allows day-unit duration for all-day events (e.g. 3d)", async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(makeEvent({ all_day: true, start: "2026-03-01", end: "2026-03-04" }));
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    const result = await handleAdd(baseOptions({ start: "2026-03-01", duration: "3d" }), deps);
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const [, , input] = mockCreate.mock.calls[0]!;
+    expect(input.end).toBe("2026-03-04");
   });
 
   // --- Existing behavior preserved ---
@@ -344,18 +416,20 @@ describe("createAddCommand", () => {
     expect(cmd.name()).toBe("add");
   });
 
-  it("has --title, -t option", () => {
+  it("has --title, -t as required option", () => {
     const cmd = createAddCommand();
     const opt = cmd.options.find((o) => o.long === "--title");
     expect(opt).toBeDefined();
     expect(opt!.short).toBe("-t");
+    expect(opt!.required).toBe(true);
   });
 
-  it("has --start, -s option", () => {
+  it("has --start, -s as required option", () => {
     const cmd = createAddCommand();
     const opt = cmd.options.find((o) => o.long === "--start");
     expect(opt).toBeDefined();
     expect(opt!.short).toBe("-s");
+    expect(opt!.required).toBe(true);
   });
 
   it("has --end, -e option", () => {

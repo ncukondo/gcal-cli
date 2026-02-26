@@ -5,9 +5,8 @@ import type { CreateEventInput } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
 import { formatJsonSuccess, formatJsonError, formatEventDetailText } from "../lib/output.ts";
-import { isDateOnly } from "../lib/date-utils.ts";
+import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
 import { parseDuration } from "../lib/duration.ts";
-import { addDays } from "date-fns";
 
 export interface AddOptions {
   title: string;
@@ -88,19 +87,24 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
 
     if (options.end) {
       // Inclusive end → exclusive (+1 day for API)
-      const endDate = new Date(options.end + "T00:00:00");
-      const exclusiveEnd = addDays(endDate, 1);
-      end = exclusiveEnd.toISOString().slice(0, 10);
+      end = addDaysToDateString(options.end, 1);
     } else if (options.duration) {
       const durationMs = parseDuration(options.duration);
-      const startDate = new Date(options.start + "T00:00:00");
-      const endDate = new Date(startDate.getTime() + durationMs);
-      end = endDate.toISOString().slice(0, 10);
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
+      if (durationMs % MS_PER_DAY !== 0) {
+        deps.write(
+          formatJsonError(
+            "INVALID_ARGS",
+            "All-day events require day-unit duration (e.g. 1d, 2d). Sub-day durations like hours or minutes are not allowed.",
+          ),
+        );
+        return { exitCode: ExitCode.ARGUMENT };
+      }
+      const days = durationMs / MS_PER_DAY;
+      end = addDaysToDateString(options.start, days);
     } else {
       // Default: same day → exclusive end is +1 day
-      const startDate = new Date(options.start + "T00:00:00");
-      const exclusiveEnd = addDays(startDate, 1);
-      end = exclusiveEnd.toISOString().slice(0, 10);
+      end = addDaysToDateString(options.start, 1);
     }
   } else {
     // Timed events
@@ -149,10 +153,10 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
 export function createAddCommand(): Command {
   const cmd = new Command("add").description("Create a new event");
 
-  cmd.option("-t, --title <title>", "Event title (required)");
-  cmd.option(
+  cmd.requiredOption("-t, --title <title>", "Event title");
+  cmd.requiredOption(
     "-s, --start <datetime>",
-    "Start date or datetime (required). Date-only (YYYY-MM-DD) creates all-day event. Datetime (YYYY-MM-DDTHH:MM) creates timed event.",
+    "Start date or datetime. Date-only (YYYY-MM-DD) creates all-day event. Datetime (YYYY-MM-DDTHH:MM) creates timed event.",
   );
   cmd.option(
     "-e, --end <datetime>",
