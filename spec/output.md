@@ -35,6 +35,47 @@ Calendars:
   [ ] work@group...     Work Main (disabled)
 ```
 
+## Quiet Output (`--quiet`, `-q`)
+
+Minimal output for scripting and piping. JSON mode (`-f json`) is unaffected by `--quiet`.
+
+| Command | Quiet Output | Example |
+|---------|-------------|---------|
+| list | `MM/DD HH:MM-HH:MM Title` per line | `01/24 10:00-11:00 Team Meeting` |
+| search | Same as list quiet | `01/24 10:00-11:00 Team Meeting` |
+| show | `Title\tStart\tEnd` (TSV, 1 line) | `Team Meeting\t2026-01-24T10:00:00+09:00\t2026-01-24T11:00:00+09:00` |
+| add | Event ID only | `abc123` |
+| update | Event ID only | `abc123` |
+| delete | (no output) | |
+| calendars | Calendar ID per line | `primary` |
+| init | Config file path only | `~/.config/gcal-cli/config.toml` |
+
+### `gcal search` Quiet Output
+
+```
+01/24 10:00-11:00  Team Meeting
+01/28 09:00-10:00  Project Meeting
+02/01 14:00-15:00  Review Meeting
+```
+
+### `gcal show` Quiet Output
+
+```
+Team Meeting	2026-01-24T10:00:00+09:00	2026-01-24T11:00:00+09:00
+```
+
+### `gcal add` Quiet Output
+
+```
+abc123
+```
+
+### `gcal update` Quiet Output
+
+```
+abc123
+```
+
 ## JSON Output
 
 Use `-f json` for machine-readable output.
