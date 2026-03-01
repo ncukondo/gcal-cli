@@ -15,9 +15,13 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
-23. [023-option-conflict-fixes](./023-option-conflict-fixes.md) — オプション conflict 修正とコマンド間の軽微な不整合修正 (#32)
+(none)
 
 ## Completed
+
+### Phase 10: コマンド一貫性改善
+
+23. [023-option-conflict-fixes](./completed/023-option-conflict-fixes.md) — オプション conflict 修正とコマンド間の軽微な不整合修正 (#32)
 
 ### Phase 9: Command Consistency
 
