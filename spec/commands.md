@@ -58,7 +58,7 @@ gcal list --today --busy
 gcal list --days 7 --confirmed
 ```
 
-Quiet mode (`-q`): Same compact format as `list` (`MM/DD HH:MM-HH:MM Title`). Stderr messages suppressed.
+Quiet mode (`-q`): Compact one-line format: `MM/DD HH:MM-HH:MM Title`. Stderr messages suppressed.
 
 ### `gcal search`
 
