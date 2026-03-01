@@ -6,9 +6,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 10: コマンド一貫性改善
-
-27. [027-quiet-mode-universal](./027-quiet-mode-universal.md) — --quiet を全コマンドで動作するように拡張 (#36)
+(none)
 
 ## In Progress
 
@@ -18,6 +16,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 10: コマンド一貫性改善
 
+27. [027-quiet-mode-universal](./completed/027-quiet-mode-universal.md) — --quiet を全コマンドで動作するように拡張 (#36)
 26. [026-write-command-output-consistency](./completed/026-write-command-output-consistency.md) — 書き込み系コマンドの出力と dry-run を統一 (#35)
 25. [025-error-handling-unification](./completed/025-error-handling-unification.md) — エラー処理パターンを throw 方式に統一 (#34)
 24. [024-calendar-option-refactor](./completed/024-calendar-option-refactor.md) — calendar option (-c) をコマンドレベルに移動 (#33)
