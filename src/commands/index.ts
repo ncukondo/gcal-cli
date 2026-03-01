@@ -85,7 +85,7 @@ export function registerCommands(program: Command): void {
 
     try {
       const auth = await getAuthenticatedClient(fsAdapter);
-      const api = google.calendar({ version: "v3", auth }) as unknown as GoogleCalendarApi;
+      const api = createGoogleCalendarApi(google.calendar({ version: "v3", auth }));
 
       const deps: ListHandlerDeps = {
         listEvents: (calendarId, calendarName, options) =>
@@ -148,7 +148,7 @@ export function registerCommands(program: Command): void {
   program.addCommand(searchCmd);
 
   const showCmd = createShowCommand();
-  showCmd.action(async () => {
+  showCmd.action(async (eventId: string) => {
     const globalOpts = resolveGlobalOptions(program);
     const showOpts = showCmd.opts();
     try {
@@ -165,7 +165,7 @@ export function registerCommands(program: Command): void {
         cal = found ? { id: found.id, name: found.name } : { id: calendarId, name: calendarId };
       } else {
         const calendars = selectCalendars(undefined, config);
-        const resolved = await resolveEventCalendar(api, showCmd.args[0]!, calendars);
+        const resolved = await resolveEventCalendar(api, eventId, calendars);
         cal = resolved;
       }
 
@@ -173,7 +173,7 @@ export function registerCommands(program: Command): void {
 
       const result = await handleShow({
         api,
-        eventId: showCmd.args[0]!,
+        eventId,
         calendarId: cal.id,
         calendarName: cal.name,
         format: globalOpts.format,
