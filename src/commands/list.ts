@@ -212,9 +212,12 @@ export function createListCommand(): Command {
   const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
   const freeOpt = cmd.options.find((o) => o.long === "--free")!;
 
+  const toOpt = cmd.options.find((o) => o.long === "--to")!;
+
   todayOpt.conflicts(["days", "from"]);
-  daysOpt.conflicts(["today", "from"]);
+  daysOpt.conflicts(["today", "from", "to"]);
   fromOpt.conflicts(["today", "days"]);
+  toOpt.conflicts(["days"]);
   busyOpt.conflicts(["free"]);
   freeOpt.conflicts(["busy"]);
 

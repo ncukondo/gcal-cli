@@ -555,4 +555,18 @@ describe("createListCommand", () => {
     expect(freeOpt).toBeDefined();
     expect(freeOpt.conflictsWith).toContain("busy");
   });
+
+  it("--days conflicts with --to", () => {
+    const cmd = createListCommand();
+    const daysOpt = cmd.options.find((o) => o.long === "--days") as any;
+    expect(daysOpt).toBeDefined();
+    expect(daysOpt.conflictsWith).toContain("to");
+  });
+
+  it("--to conflicts with --days", () => {
+    const cmd = createListCommand();
+    const toOpt = cmd.options.find((o) => o.long === "--to") as any;
+    expect(toOpt).toBeDefined();
+    expect(toOpt.conflictsWith).toContain("days");
+  });
 });
