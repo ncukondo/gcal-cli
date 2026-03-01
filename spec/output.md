@@ -188,6 +188,44 @@ All datetime fields include timezone offset (ISO 8601).
 }
 ```
 
+### `gcal add --dry-run`
+
+Text output:
+```
+DRY RUN: Would create event:
+  title: "Meeting"
+  start: "2026-03-01T10:00:00+09:00"
+  end: "2026-03-01T11:00:00+09:00"
+```
+
+JSON output (`-f json`):
+```json
+{
+  "success": true,
+  "data": {
+    "dry_run": true,
+    "action": "add",
+    "event": {
+      "title": "Meeting",
+      "start": "2026-03-01T10:00:00+09:00",
+      "end": "2026-03-01T11:00:00+09:00"
+    }
+  }
+}
+```
+
+### `gcal update -f json`
+
+```json
+{
+  "success": true,
+  "data": {
+    "event": { ... },
+    "message": "Event updated"
+  }
+}
+```
+
 ### `gcal delete -f json`
 
 ```json
