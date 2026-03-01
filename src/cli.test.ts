@@ -37,25 +37,10 @@ describe("global options", () => {
     });
   });
 
-  describe("--calendar / -c", () => {
-    it("defaults to empty array", () => {
+  describe("--calendar / -c removed from global", () => {
+    it("does not have calendar property", () => {
       const opts = parseArgs([]);
-      expect(opts.calendar).toEqual([]);
-    });
-
-    it("accepts single --calendar value", () => {
-      const opts = parseArgs(["--calendar", "primary"]);
-      expect(opts.calendar).toEqual(["primary"]);
-    });
-
-    it("accepts -c shorthand", () => {
-      const opts = parseArgs(["-c", "work@group.calendar.google.com"]);
-      expect(opts.calendar).toEqual(["work@group.calendar.google.com"]);
-    });
-
-    it("can be specified multiple times", () => {
-      const opts = parseArgs(["-c", "cal1", "-c", "cal2", "-c", "cal3"]);
-      expect(opts.calendar).toEqual(["cal1", "cal2", "cal3"]);
+      expect(opts).not.toHaveProperty("calendar");
     });
   });
 

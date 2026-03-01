@@ -9,13 +9,8 @@ const FormatSchema = zenum(["text", "json"]);
 
 export interface GlobalOptions {
   format: "text" | "json";
-  calendar: string[];
   timezone?: string;
   quiet: boolean;
-}
-
-function collect(value: string, previous: string[]): string[] {
-  return [...previous, value];
 }
 
 export function createProgram(): Command {
@@ -26,7 +21,6 @@ export function createProgram(): Command {
     .description("CLI tool for managing Google Calendar events")
     .version(pkg.version)
     .option("-f, --format <format>", "Output format: text | json", "text")
-    .option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, [])
     .option("-q, --quiet", "Minimal output", false)
     .option("--tz, --timezone <zone>", "Timezone (e.g., Asia/Tokyo)");
 
@@ -51,7 +45,6 @@ export function resolveGlobalOptions(program: Command): GlobalOptions {
 
   return {
     format: formatResult.data,
-    calendar: raw.calendar,
     timezone: raw.timezone,
     quiet: raw.quiet,
   };

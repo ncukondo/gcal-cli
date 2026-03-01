@@ -4,6 +4,7 @@ import { listEvents } from "../lib/api.ts";
 import { applyFilters } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
 import { formatJsonSuccess, formatSearchResultText } from "../lib/output.ts";
+import { collect } from "./shared.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { addDays } from "date-fns";
 import type { CalendarConfig, OutputFormat } from "../types/index.ts";
@@ -110,6 +111,7 @@ export function createSearchCommand(): Command {
     .description("Search events by keyword")
     .argument("<query>", "Search query string");
 
+  cmd.option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, []);
   cmd.option("--from <date>", "Start date for search range");
   cmd.option("--to <date>", "End date for search range");
   cmd.option("--days <n>", "Search within next n days (default: 30)", (v: string) =>

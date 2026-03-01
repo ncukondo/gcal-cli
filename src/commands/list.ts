@@ -6,6 +6,7 @@ import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../l
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters } from "../lib/filter.ts";
 import { formatEventListText, formatJsonSuccess, formatTimeRange } from "../lib/output.ts";
+import { collect } from "./shared.ts";
 import { addDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
@@ -147,7 +148,10 @@ export async function handleList(
     deps.writeErr(dateRange.warning);
   }
 
-  const calendars = selectCalendars(options.calendar, config);
+  const calendars = selectCalendars(
+    options.calendar && options.calendar.length > 0 ? options.calendar : undefined,
+    config,
+  );
   const apiOptions: ListEventsOptions = {
     timeMin: dateRange.timeMin,
     timeMax: dateRange.timeMax,
@@ -194,6 +198,7 @@ export async function handleList(
 export function createListCommand(): Command {
   const cmd = new Command("list").description("List events within a date range");
 
+  cmd.option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, []);
   cmd.option("--today", "Show today's events");
   cmd.option("--days <n>", "Events for next n days (default: 7)", (v: string) =>
     Number.parseInt(v, 10),

@@ -4,7 +4,6 @@
 
 ```
 --format, -f <format>     Output format: text (default) | json
---calendar, -c <id>       Target calendar ID (can be specified multiple times)
 --timezone, --tz <zone>   Timezone (e.g., Asia/Tokyo). Overrides config
 --quiet, -q               Minimal output (only essential data)
 --help, -h                Show help
@@ -29,6 +28,7 @@ List events within a date range. Includes both timed and all-day events.
 gcal list [options]
 
 Options:
+  --calendar, -c <id>  Target calendar ID (repeatable, multiple calendars)
   --from <date>     Start date (ISO 8601 or YYYY-MM-DD)
   --to <date>       End date (ISO 8601 or YYYY-MM-DD)
   --today           Shorthand for today's events
@@ -66,6 +66,7 @@ Search events by keyword.
 gcal search <query> [options]
 
 Options:
+  --calendar, -c <id>  Target calendar ID (repeatable, multiple calendars)
   --from <date>     Start date for search range
   --to <date>       End date for search range
   --days <n>        Search within next n days (default: 30). Negative values search past days.
@@ -153,7 +154,10 @@ gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, 
 Show event details.
 
 ```bash
-gcal show <event-id>
+gcal show <event-id> [options]
+
+Options:
+  --calendar, -c <id>  Calendar ID to query (single)
 ```
 
 ### `gcal update`
@@ -222,8 +226,10 @@ gcal update abc123 --dry-run -t "Preview"                                  # Dry
 Delete an event.
 
 ```bash
-gcal delete <event-id>
-gcal delete <event-id> --quiet
+gcal delete <event-id> [options]
+
+Options:
+  --calendar, -c <id>  Calendar ID to query (single)
 ```
 
 ### `gcal auth`
