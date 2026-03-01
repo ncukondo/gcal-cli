@@ -34,6 +34,11 @@ Options:
   --today           Shorthand for today's events
   --days <n>        Events for next n days (default: 7)
 
+  Mutual exclusivity:
+    --today, --days, --from are mutually exclusive
+    --days and --to are mutually exclusive
+    --busy and --free are mutually exclusive
+
 Filtering:
   --busy            Show only busy (opaque) events
   --free            Show only free (transparent) events
@@ -64,6 +69,11 @@ Options:
   --from <date>     Start date for search range
   --to <date>       End date for search range
   --days <n>        Search within next n days (default: 30). Negative values search past days.
+
+  Mutual exclusivity:
+    --days and --from are mutually exclusive
+    --days and --to are mutually exclusive
+    --busy and --free are mutually exclusive
 
 Filtering:
   --busy            Show only busy (opaque) events

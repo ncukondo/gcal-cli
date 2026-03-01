@@ -5,6 +5,7 @@ import { applyFilters } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
 import { formatJsonSuccess, formatSearchResultText } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
+import { addDays } from "date-fns";
 import type { CalendarConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
@@ -44,7 +45,7 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
 
   if (opts.from && opts.to) {
     timeMin = formatDateTimeInZone(parseDateTimeInZone(opts.from, timezone), timezone);
-    timeMax = formatDateTimeInZone(parseDateTimeInZone(opts.to + "T23:59:59", timezone), timezone);
+    timeMax = formatDateTimeInZone(addDays(parseDateTimeInZone(opts.to, timezone), 1), timezone);
   } else if (opts.from) {
     const startDate = parseDateTimeInZone(opts.from, timezone);
     timeMin = formatDateTimeInZone(startDate, timezone);
@@ -52,7 +53,7 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
     endDate.setDate(endDate.getDate() + days);
     timeMax = formatDateTimeInZone(endDate, timezone);
   } else if (opts.to) {
-    timeMax = formatDateTimeInZone(parseDateTimeInZone(opts.to + "T23:59:59", timezone), timezone);
+    timeMax = formatDateTimeInZone(addDays(parseDateTimeInZone(opts.to, timezone), 1), timezone);
     timeMin = formatDateTimeInZone(now, timezone);
   } else if (isNegativeDays) {
     // Negative days: search from (now + days) to now (past direction)
@@ -67,9 +68,9 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
     timeMax = formatDateTimeInZone(endDate, timezone);
   }
 
-  // Output search range to stderr
+  // Output search range to stderr (show user-facing inclusive dates, not API exclusive boundaries)
   const displayFrom = timeMin.slice(0, 10);
-  const displayTo = timeMax.slice(0, 10);
+  const displayTo = opts.to ?? timeMax.slice(0, 10);
   writeErr(`Searching: ${displayFrom} to ${displayTo}`);
 
   const hasExplicitRange =
@@ -111,7 +112,9 @@ export function createSearchCommand(): Command {
 
   cmd.option("--from <date>", "Start date for search range");
   cmd.option("--to <date>", "End date for search range");
-  cmd.option("--days <n>", "Search within next n days (default: 30)", Number.parseInt);
+  cmd.option("--days <n>", "Search within next n days (default: 30)", (v: string) =>
+    Number.parseInt(v, 10),
+  );
 
   // --days is mutually exclusive with --from and --to
   const daysOpt = cmd.options.find((o) => o.long === "--days")!;
@@ -124,7 +127,12 @@ export function createSearchCommand(): Command {
   cmd.option("--busy", "Show only busy (opaque) events");
   cmd.option("--free", "Show only free (transparent) events");
   cmd.option("--confirmed", "Show only confirmed events");
-  cmd.option("--include-tentative", "Include tentative events");
+  cmd.option("--include-tentative", "Include tentative events (excluded by default)");
+
+  const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
+  const freeOpt = cmd.options.find((o) => o.long === "--free")!;
+  busyOpt.conflicts(["free"]);
+  freeOpt.conflicts(["busy"]);
 
   return cmd;
 }

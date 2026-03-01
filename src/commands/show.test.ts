@@ -256,6 +256,17 @@ describe("show command", () => {
       expect(cmd.args[0]).toBe("abc123");
     });
 
+    it("passes event-id as action parameter (not via cmd.args)", () => {
+      const cmd = createShowCommand();
+      cmd.exitOverride();
+      let receivedEventId: string | undefined;
+      cmd.action((eventId: string) => {
+        receivedEventId = eventId;
+      });
+      cmd.parse(["node", "show", "abc123"]);
+      expect(receivedEventId).toBe("abc123");
+    });
+
     it("accepts a --calendar option", () => {
       const cmd = createShowCommand();
       cmd.exitOverride();
