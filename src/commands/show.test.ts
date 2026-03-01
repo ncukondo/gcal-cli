@@ -62,6 +62,7 @@ function runShow(
     calendarId?: string;
     calendarName?: string;
     format?: "text" | "json";
+    quiet?: boolean;
     timezone?: string;
   } = {},
 ) {
@@ -72,6 +73,7 @@ function runShow(
     calendarId: opts.calendarId ?? "primary",
     calendarName: opts.calendarName ?? "Main Calendar",
     format: opts.format ?? "text",
+    ...(opts.quiet !== undefined && { quiet: opts.quiet }),
     ...(opts.timezone !== undefined && { timezone: opts.timezone }),
     write: (msg: string) => {
       output.push(msg);
@@ -238,6 +240,45 @@ describe("show command", () => {
         calendarId: "primary",
         eventId: "evt1",
       });
+    });
+  });
+
+  describe("quiet mode", () => {
+    it("outputs TSV line: Title\\tStart\\tEnd for timed event", async () => {
+      const event = makeEvent({
+        title: "Team Meeting",
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
+      });
+      const api = makeMockApi(event);
+      const result = await runShow(api, { quiet: true });
+
+      const text = result.output.join("\n");
+      expect(text).toBe("Team Meeting\t2026-02-01T10:00:00+09:00\t2026-02-01T11:00:00+09:00");
+    });
+
+    it("outputs TSV line: Title\\tStart\\tEnd for all-day event", async () => {
+      const event = makeEvent({
+        title: "Vacation",
+        all_day: true,
+        start: "2026-02-01",
+        end: "2026-02-04",
+      });
+      const api = makeMockApi(event);
+      const result = await runShow(api, { quiet: true });
+
+      const text = result.output.join("\n");
+      expect(text).toBe("Vacation\t2026-02-01\t2026-02-04");
+    });
+
+    it("does not affect JSON output", async () => {
+      const event = makeEvent();
+      const api = makeMockApi(event);
+      const result = await runShow(api, { format: "json", quiet: true });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data.event).toBeDefined();
     });
   });
 

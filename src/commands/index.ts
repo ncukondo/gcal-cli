@@ -183,6 +183,7 @@ export function registerCommands(program: Command): void {
         calendarId: cal.id,
         calendarName: cal.name,
         format: globalOpts.format,
+        quiet: globalOpts.quiet,
         timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
       });

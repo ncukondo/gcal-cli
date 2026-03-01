@@ -11,17 +11,20 @@ export interface ShowHandlerOptions {
   calendarId: string;
   calendarName: string;
   format: OutputFormat;
+  quiet?: boolean;
   timezone?: string;
   write: (msg: string) => void;
 }
 
 export async function handleShow(opts: ShowHandlerOptions): Promise<CommandResult> {
-  const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
+  const { api, eventId, calendarId, calendarName, format, quiet, timezone, write } = opts;
 
   const event = await getEvent(api, calendarId, calendarName, eventId, timezone);
 
   if (format === "json") {
     write(formatJsonSuccess({ event }));
+  } else if (quiet) {
+    write(`${event.title}\t${event.start}\t${event.end}`);
   } else {
     write(formatEventDetailText(event));
   }
