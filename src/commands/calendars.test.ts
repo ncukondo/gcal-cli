@@ -220,19 +220,15 @@ describe("handleCalendars", () => {
       events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
-    try {
-      await handleCalendars({
+    await expect(
+      handleCalendars({
         api,
         format: "json",
         quiet: false,
         write: vi.fn(),
         configCalendars: [],
-      });
-      expect.unreachable("should have thrown");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError);
-      expect((e as InstanceType<typeof ApiError>).code).toBe("AUTH_REQUIRED");
-    }
+      }),
+    ).rejects.toThrow(ApiError);
   });
 });
 

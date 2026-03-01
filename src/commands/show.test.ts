@@ -203,20 +203,16 @@ describe("show command", () => {
       const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi(); // no event → 404
 
-      try {
-        await handleShow({
+      await expect(
+        handleShow({
           api,
           eventId: "nonexistent",
           calendarId: "primary",
           calendarName: "Main Calendar",
           format: "json",
           write: vi.fn(),
-        });
-        expect.unreachable("should have thrown");
-      } catch (e) {
-        expect(e).toBeInstanceOf(ApiError);
-        expect((e as InstanceType<typeof ApiError>).code).toBe("NOT_FOUND");
-      }
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 

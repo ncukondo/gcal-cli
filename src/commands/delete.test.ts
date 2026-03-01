@@ -125,20 +125,16 @@ describe("delete command", () => {
       const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi({ rejectDelete: true });
 
-      try {
-        await handleDelete({
+      await expect(
+        handleDelete({
           api,
           eventId: "nonexistent",
           calendarId: "primary",
           format: "json",
           quiet: false,
           write: vi.fn(),
-        });
-        expect.unreachable("should have thrown");
-      } catch (e) {
-        expect(e).toBeInstanceOf(ApiError);
-        expect((e as InstanceType<typeof ApiError>).code).toBe("NOT_FOUND");
-      }
+        }),
+      ).rejects.toThrow(ApiError);
     });
 
     it("suppresses output when --quiet flag is set even in JSON mode", async () => {

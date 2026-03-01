@@ -153,22 +153,26 @@ describe("JSON output envelope consistency across all commands", () => {
     err.code = 404;
     const mockApi = createMockApi({ errors: { deleteEvent: err } });
 
-    try {
-      await handleDelete({
+    await expect(
+      handleDelete({
         api: mockApi,
         eventId: "x",
         calendarId: "primary",
         format: "json",
         quiet: false,
         write: vi.fn(),
-      });
-      expect.unreachable("should have thrown");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ApiError);
-      const apiErr = e as InstanceType<typeof ApiError>;
-      expect(apiErr.code).toBe("NOT_FOUND");
-      expect(apiErr.message).toBe("Not Found");
-    }
+      }),
+    ).rejects.toThrow(ApiError);
+    await expect(
+      handleDelete({
+        api: mockApi,
+        eventId: "x",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "Not Found" });
   });
 });
 
