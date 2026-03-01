@@ -8,9 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 10: コマンド一貫性改善
 
-24. [024-calendar-option-refactor](./024-calendar-option-refactor.md) — calendar option (-c) をコマンドレベルに移動 (#33)
-25. [025-error-handling-unification](./025-error-handling-unification.md) — エラー処理パターンを throw 方式に統一 (#34)
-26. [026-write-command-output-consistency](./026-write-command-output-consistency.md) — 書き込み系コマンドの出力と dry-run を統一 (#35)
 27. [027-quiet-mode-universal](./027-quiet-mode-universal.md) — --quiet を全コマンドで動作するように拡張 (#36)
 
 ## In Progress
@@ -21,6 +18,9 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 10: コマンド一貫性改善
 
+26. [026-write-command-output-consistency](./completed/026-write-command-output-consistency.md) — 書き込み系コマンドの出力と dry-run を統一 (#35)
+25. [025-error-handling-unification](./completed/025-error-handling-unification.md) — エラー処理パターンを throw 方式に統一 (#34)
+24. [024-calendar-option-refactor](./completed/024-calendar-option-refactor.md) — calendar option (-c) をコマンドレベルに移動 (#33)
 23. [023-option-conflict-fixes](./completed/023-option-conflict-fixes.md) — オプション conflict 修正とコマンド間の軽微な不整合修正 (#32)
 
 ### Phase 9: Command Consistency
