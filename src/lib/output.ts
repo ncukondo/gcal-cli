@@ -94,6 +94,24 @@ export function formatSearchResultText(query: string, events: CalendarEvent[]): 
   return lines.join("\n");
 }
 
+export function formatQuietText(events: CalendarEvent[]): string {
+  if (events.length === 0) return "No events found.";
+
+  const lines: string[] = [];
+  for (const event of events) {
+    const month = event.start.slice(5, 7);
+    const day = event.start.slice(8, 10);
+    const datePrefix = `${month}/${day}`;
+    if (event.all_day) {
+      lines.push(`${datePrefix} All day      ${event.title}`);
+    } else {
+      const time = formatTimeRange(event);
+      lines.push(`${datePrefix} ${time}  ${event.title}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 const CALENDAR_ID_MAX = 15;
 const CALENDAR_ID_COL = 18;
 

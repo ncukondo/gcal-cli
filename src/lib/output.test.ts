@@ -7,6 +7,7 @@ import {
   formatSearchResultText,
   formatCalendarListText,
   formatEventDetailText,
+  formatQuietText,
   errorCodeToExitCode,
 } from "./output.ts";
 
@@ -447,6 +448,56 @@ describe("formatEventDetailText", () => {
       "Link: https://calendar.google.com/event?id=test",
     ].join("\n");
     expect(result).toBe(expected);
+  });
+});
+
+describe("formatQuietText", () => {
+  it("formats timed events as MM/DD HH:MM-HH:MM Title", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Team Meeting",
+      }),
+    ];
+    const result = formatQuietText(events);
+    expect(result).toBe("01/24 10:00-11:00  Team Meeting");
+  });
+
+  it("formats all-day events as MM/DD All day Title", () => {
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-01-24",
+        end: "2026-01-25",
+        title: "Company Holiday",
+      }),
+    ];
+    const result = formatQuietText(events);
+    expect(result).toBe("01/24 All day      Company Holiday");
+  });
+
+  it("returns 'No events found.' for empty list", () => {
+    const result = formatQuietText([]);
+    expect(result).toBe("No events found.");
+  });
+
+  it("formats multiple events separated by newlines", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Meeting",
+      }),
+      makeEvent({
+        start: "2026-01-25T14:00:00+09:00",
+        end: "2026-01-25T15:00:00+09:00",
+        title: "Review",
+      }),
+    ];
+    const result = formatQuietText(events);
+    expect(result).toContain("01/24 10:00-11:00  Meeting");
+    expect(result).toContain("01/25 14:00-15:00  Review");
   });
 });
 
