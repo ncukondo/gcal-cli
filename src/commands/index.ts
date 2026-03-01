@@ -99,7 +99,6 @@ export function registerCommands(program: Command): void {
         ...listOpts,
         format: globalOpts.format,
         quiet: globalOpts.quiet,
-        calendar: listOpts.calendar,
       };
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
@@ -123,7 +122,7 @@ export function registerCommands(program: Command): void {
       const api = createGoogleCalendarApi(calendarApi);
       const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
       const calendars = selectCalendars(
-        searchOpts.calendar?.length > 0 ? searchOpts.calendar : undefined,
+        searchOpts.calendar.length > 0 ? searchOpts.calendar : undefined,
         config,
       );
 

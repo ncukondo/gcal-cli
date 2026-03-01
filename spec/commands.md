@@ -229,7 +229,6 @@ gcal delete <event-id> [options]
 
 Options:
   --calendar, -c <id>  Calendar ID to query (single)
-  --dry-run            Preview without executing
 ```
 
 ### `gcal auth`

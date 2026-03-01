@@ -24,6 +24,11 @@ type EventListData = {
   nextPageToken?: string;
 };
 
+/** Commander option callback to collect repeatable values into an array. */
+export function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalendarApi {
   return {
     calendarList: {
