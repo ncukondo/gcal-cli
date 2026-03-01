@@ -343,9 +343,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   const updated = await updateEvent(api, calendarId, calendarName, eventId, input);
 
   if (format === "json") {
-    write(formatJsonSuccess({ event: updated }));
+    write(formatJsonSuccess({ event: updated, message: "Event updated" }));
   } else {
-    write(formatEventDetailText(updated));
+    const detail = formatEventDetailText(updated);
+    write(`Event updated\n\n${detail}`);
   }
 
   return { exitCode: ExitCode.SUCCESS };

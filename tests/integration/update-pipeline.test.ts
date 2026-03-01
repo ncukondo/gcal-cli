@@ -94,7 +94,7 @@ describe("update command pipeline: API → normalize → output", () => {
     expect(patchFn.mock.calls[0]![0].requestBody.transparency).toBe("transparent");
   });
 
-  it("text output shows event detail after update", async () => {
+  it("text output starts with 'Event updated' message", async () => {
     const mockApi = createMockApi({
       events: {
         primary: [makeGoogleEvent({ id: "evt-1", summary: "Original" })],
@@ -116,8 +116,35 @@ describe("update command pipeline: API → normalize → output", () => {
     });
 
     const output = out.output();
+    expect(output).toMatch(/^Event updated/);
     expect(output).toContain("Updated Title");
     expect(output).toContain("Main Calendar");
+  });
+
+  it("JSON output includes message: 'Event updated'", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [makeGoogleEvent({ id: "evt-1", summary: "Original" })],
+      },
+    });
+    const out = captureWrite();
+
+    await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
+      title: "Updated Title",
+    });
+
+    const json = JSON.parse(out.output());
+    expect(json.data.message).toBe("Event updated");
+    expect(json.data.event.title).toBe("Updated Title");
   });
 
   it("throws when no update options are provided", async () => {

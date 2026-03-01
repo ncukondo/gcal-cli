@@ -17,6 +17,7 @@ export interface AddOptions {
   calendar?: string;
   busy?: boolean;
   free?: boolean;
+  dryRun?: boolean;
   format: OutputFormat;
   timezone?: string;
 }
@@ -160,6 +161,29 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     input.description = options.description;
   }
 
+  if (options.dryRun) {
+    const preview: Record<string, unknown> = {
+      title: input.title,
+      start: input.start,
+      end: input.end,
+    };
+    if (input.description !== undefined) preview.description = input.description;
+    if (input.transparency !== "opaque") preview.transparency = input.transparency;
+
+    if (options.format === "json") {
+      deps.write(formatJsonSuccess({ dry_run: true, action: "add", event: preview }));
+    } else {
+      const lines = ["DRY RUN: Would create event:"];
+      lines.push(`  title: "${preview.title}"`);
+      lines.push(`  start: "${preview.start}"`);
+      lines.push(`  end: "${preview.end}"`);
+      if (preview.description !== undefined) lines.push(`  description: "${preview.description}"`);
+      if (preview.transparency !== undefined) lines.push(`  transparency: ${preview.transparency}`);
+      deps.write(lines.join("\n"));
+    }
+    return { exitCode: ExitCode.SUCCESS };
+  }
+
   const event = await deps.createEvent(calendarId, calendarName, input);
 
   if (options.format === "json") {
@@ -191,6 +215,7 @@ export function createAddCommand(): Command {
   cmd.option("-d, --description <text>", "Event description");
   cmd.option("--busy", "Mark as busy (default)");
   cmd.option("--free", "Mark as free (transparent)");
+  cmd.option("--dry-run", "Preview without executing");
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;
   const durationOpt = cmd.options.find((o) => o.long === "--duration")!;

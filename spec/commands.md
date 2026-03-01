@@ -119,6 +119,7 @@ Options:
   --calendar, -c <id>           Target calendar (uses first enabled if omitted)
   --busy                        Mark as busy (default)
   --free                        Mark as free (transparent)
+  --dry-run                     Preview without executing
 ```
 
 Datetime is interpreted in the configured timezone (or --tz override).

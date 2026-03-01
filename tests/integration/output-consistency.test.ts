@@ -100,7 +100,7 @@ describe("JSON output envelope consistency across all commands", () => {
     expect(json.data).toHaveProperty("message", "Event created");
   });
 
-  it("update command returns { success: true, data: { event } }", async () => {
+  it("update command returns { success: true, data: { event, message } }", async () => {
     const mockApi = createMockApi({
       events: { primary: [makeGoogleEvent({ id: "evt-1" })] },
     });
@@ -125,6 +125,7 @@ describe("JSON output envelope consistency across all commands", () => {
 
     assertSuccessEnvelope(json);
     expect(json.data).toHaveProperty("event");
+    expect(json.data).toHaveProperty("message", "Event updated");
   });
 
   it("delete command returns { success: true, data: { deleted_id, message } }", async () => {
