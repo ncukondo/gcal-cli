@@ -34,6 +34,10 @@ Options:
   --today           Shorthand for today's events
   --days <n>        Events for next n days (default: 7)
 
+  Mutual exclusivity:
+    --today, --days, --from are mutually exclusive
+    --days and --to are mutually exclusive
+
 Filtering:
   --busy            Show only busy (opaque) events
   --free            Show only free (transparent) events
