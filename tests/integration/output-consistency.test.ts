@@ -148,28 +148,32 @@ describe("JSON output envelope consistency across all commands", () => {
   });
 
   it("all JSON error responses follow { success: false, error: { code, message } }", async () => {
-    // Test with delete (which has internal error handling)
+    // Test with delete - errors now throw ApiError instead of internal catch
+    const { ApiError } = await import("../../src/lib/api.ts");
     const err = new Error("Not Found") as Error & { code: number };
     err.code = 404;
     const mockApi = createMockApi({ errors: { deleteEvent: err } });
-    const out = captureWrite();
 
-    await handleDelete({
-      api: mockApi,
-      eventId: "x",
-      calendarId: "primary",
-      format: "json",
-      quiet: false,
-      write: out.write,
-    });
-    const json = JSON.parse(out.output());
-
-    expect(json).toHaveProperty("success", false);
-    expect(json).toHaveProperty("error");
-    expect(json.error).toHaveProperty("code");
-    expect(json.error).toHaveProperty("message");
-    expect(typeof json.error.code).toBe("string");
-    expect(typeof json.error.message).toBe("string");
+    await expect(
+      handleDelete({
+        api: mockApi,
+        eventId: "x",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(ApiError);
+    await expect(
+      handleDelete({
+        api: mockApi,
+        eventId: "x",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "Not Found" });
   });
 });
 

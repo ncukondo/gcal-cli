@@ -63,18 +63,22 @@ export function registerCommands(program: Command): void {
   const calendarsCmd = createCalendarsCommand();
   calendarsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
-    const config = loadConfig(fsAdapter);
-    const oauth2Client = await getAuthenticatedClient(fsAdapter);
-    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-    const api = createGoogleCalendarApi(calendar);
-    const result = await handleCalendars({
-      api,
-      format: globalOpts.format,
-      quiet: globalOpts.quiet,
-      write: (msg) => process.stdout.write(msg + "\n"),
-      configCalendars: config.calendars,
-    });
-    process.exit(result.exitCode);
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+      const api = createGoogleCalendarApi(calendar);
+      const result = await handleCalendars({
+        api,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configCalendars: config.calendars,
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
   });
   program.addCommand(calendarsCmd);
 

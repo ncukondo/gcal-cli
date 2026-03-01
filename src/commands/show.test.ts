@@ -93,13 +93,20 @@ describe("show command", () => {
       });
     });
 
-    it("returns NOT_FOUND error for non-existent event ID with exit code 1", async () => {
+    it("throws ApiError for non-existent event ID", async () => {
+      const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi(); // no event → 404
-      const result = await runShow(api, { eventId: "nonexistent" });
 
-      expect(result.exitCode).toBe(1);
-      const text = result.output.join("\n");
-      expect(text).toContain("Not Found");
+      await expect(
+        handleShow({
+          api,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          calendarName: "Main Calendar",
+          format: "text",
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -192,14 +199,20 @@ describe("show command", () => {
       expect(json.data.event.title).toBe("Team Meeting");
     });
 
-    it("returns NOT_FOUND error in JSON format", async () => {
+    it("throws ApiError with NOT_FOUND for non-existent event in JSON mode", async () => {
+      const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi(); // no event → 404
-      const result = await runShow(api, { format: "json", eventId: "nonexistent" });
 
-      expect(result.exitCode).toBe(1);
-      const json = JSON.parse(result.output.join(""));
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe("NOT_FOUND");
+      await expect(
+        handleShow({
+          api,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          calendarName: "Main Calendar",
+          format: "json",
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 

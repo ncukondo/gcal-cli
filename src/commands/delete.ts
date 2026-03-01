@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { ApiError, deleteEvent } from "../lib/api.ts";
-import { formatJsonSuccess, formatJsonError, errorCodeToExitCode } from "../lib/output.ts";
+import { formatJsonSuccess } from "../lib/output.ts";
 import type { CommandResult, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
@@ -19,8 +19,7 @@ export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandR
   const { api, eventId, calendarId, format, quiet, dryRun = false, write } = opts;
 
   if (!eventId) {
-    write(formatJsonError("INVALID_ARGS", "event-id is required"));
-    return { exitCode: ExitCode.ARGUMENT };
+    throw new ApiError("INVALID_ARGS", "event-id is required");
   }
 
   if (dryRun) {
@@ -39,29 +38,17 @@ export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandR
     return { exitCode: ExitCode.SUCCESS };
   }
 
-  try {
-    await deleteEvent(api, calendarId, eventId);
+  await deleteEvent(api, calendarId, eventId);
 
-    if (!quiet) {
-      if (format === "json") {
-        write(formatJsonSuccess({ deleted_id: eventId, message: "Event deleted" }));
-      } else {
-        write("Event deleted");
-      }
+  if (!quiet) {
+    if (format === "json") {
+      write(formatJsonSuccess({ deleted_id: eventId, message: "Event deleted" }));
+    } else {
+      write("Event deleted");
     }
-
-    return { exitCode: ExitCode.SUCCESS };
-  } catch (error) {
-    if (error instanceof ApiError) {
-      if (format === "json") {
-        write(formatJsonError(error.code, error.message));
-      } else {
-        write(`Error: ${error.message}`);
-      }
-      return { exitCode: errorCodeToExitCode(error.code) };
-    }
-    throw error;
   }
+
+  return { exitCode: ExitCode.SUCCESS };
 }
 
 export function createDeleteCommand(): Command {

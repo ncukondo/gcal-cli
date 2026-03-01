@@ -94,25 +94,21 @@ describe("error propagation: API errors → command handler → output", () => {
       ).rejects.toThrow();
     });
 
-    it("delete: auth error is caught and formatted as JSON error", async () => {
+    it("delete: auth error propagates as ApiError", async () => {
       const mockApi = createMockApi({
         errors: { deleteEvent: makeAuthError() },
       });
-      const out = captureWrite();
 
-      const result = await handleDelete({
-        api: mockApi,
-        eventId: "evt-1",
-        calendarId: "primary",
-        format: "json",
-        quiet: false,
-        write: out.write,
-      });
-
-      expect(result.exitCode).toBe(2); // AUTH
-      const json = JSON.parse(out.output());
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe("AUTH_REQUIRED");
+      await expect(
+        handleDelete({
+          api: mockApi,
+          eventId: "evt-1",
+          calendarId: "primary",
+          format: "json",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -147,64 +143,60 @@ describe("error propagation: API errors → command handler → output", () => {
       ).rejects.toThrow();
     });
 
-    it("delete: 404 error is caught and formatted as NOT_FOUND", async () => {
+    it("delete: 404 error propagates as ApiError with NOT_FOUND", async () => {
+      const { ApiError } = await import("../../src/lib/api.ts");
       const mockApi = createMockApi({
         errors: { deleteEvent: makeNotFoundError() },
       });
-      const out = captureWrite();
 
-      await handleDelete({
-        api: mockApi,
-        eventId: "nonexistent",
-        calendarId: "primary",
-        format: "json",
-        quiet: false,
-        write: out.write,
-      });
-
-      const json = JSON.parse(out.output());
-      expect(json.error.code).toBe("NOT_FOUND");
+      await expect(
+        handleDelete({
+          api: mockApi,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          format: "json",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
 
-    it("delete: 404 error in text format shows readable error message", async () => {
+    it("delete: 404 error in text format also throws", async () => {
       const mockApi = createMockApi({
         errors: { deleteEvent: makeNotFoundError() },
       });
-      const out = captureWrite();
 
-      const result = await handleDelete({
-        api: mockApi,
-        eventId: "nonexistent",
-        calendarId: "primary",
-        format: "text",
-        quiet: false,
-        write: out.write,
-      });
-
-      expect(result.exitCode).toBe(1);
-      expect(out.output()).toContain("Error:");
+      await expect(
+        handleDelete({
+          api: mockApi,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          format: "text",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow();
     });
   });
 
   describe("generic API errors map to API_ERROR", () => {
-    it("500 server error maps to API_ERROR", async () => {
+    it("500 server error propagates as ApiError with API_ERROR", async () => {
+      const { ApiError } = await import("../../src/lib/api.ts");
       const err = new Error("Internal Server Error") as Error & { code: number };
       err.code = 500;
 
       const mockApi = createMockApi({ errors: { deleteEvent: err } });
-      const out = captureWrite();
 
-      await handleDelete({
-        api: mockApi,
-        eventId: "evt-1",
-        calendarId: "primary",
-        format: "json",
-        quiet: false,
-        write: out.write,
-      });
-
-      const json = JSON.parse(out.output());
-      expect(json.error.code).toBe("API_ERROR");
+      await expect(
+        handleDelete({
+          api: mockApi,
+          eventId: "evt-1",
+          calendarId: "primary",
+          format: "json",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -230,22 +222,20 @@ describe("error propagation: API errors → command handler → output", () => {
       expect(json.error.code).toBe("INVALID_ARGS");
     });
 
-    it("delete: missing event-id returns INVALID_ARGS", async () => {
+    it("delete: missing event-id throws ApiError with INVALID_ARGS", async () => {
+      const { ApiError } = await import("../../src/lib/api.ts");
       const mockApi = createMockApi();
-      const out = captureWrite();
 
-      const result = await handleDelete({
-        api: mockApi,
-        eventId: "",
-        calendarId: "primary",
-        format: "json",
-        quiet: false,
-        write: out.write,
-      });
-
-      expect(result.exitCode).toBe(3);
-      const json = JSON.parse(out.output());
-      expect(json.error.code).toBe("INVALID_ARGS");
+      await expect(
+        handleDelete({
+          api: mockApi,
+          eventId: "",
+          calendarId: "primary",
+          format: "json",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 });

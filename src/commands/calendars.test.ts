@@ -191,48 +191,44 @@ describe("handleCalendars", () => {
     expect(text).toContain("New Cal");
   });
 
-  it("handles API error gracefully", async () => {
+  it("throws ApiError on API error", async () => {
+    const { ApiError } = await import("../lib/api.ts");
     const api: GoogleCalendarApi = {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
       events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
-    const { output, write } = makeOutput();
 
-    const result = await handleCalendars({
-      api,
-      format: "text",
-      quiet: false,
-      write,
-      configCalendars: [],
-    });
-
-    expect(result.exitCode).toBe(ExitCode.AUTH);
-    expect(output.join("")).toContain("Unauthorized");
+    await expect(
+      handleCalendars({
+        api,
+        format: "text",
+        quiet: false,
+        write: vi.fn(),
+        configCalendars: [],
+      }),
+    ).rejects.toThrow(ApiError);
   });
 
-  it("handles API error in JSON format", async () => {
+  it("throws ApiError with AUTH_REQUIRED on 401 error", async () => {
+    const { ApiError } = await import("../lib/api.ts");
     const api: GoogleCalendarApi = {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
       events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
-    const { output, write } = makeOutput();
 
-    const result = await handleCalendars({
-      api,
-      format: "json",
-      quiet: false,
-      write,
-      configCalendars: [],
-    });
-
-    expect(result.exitCode).toBe(ExitCode.AUTH);
-    const json = JSON.parse(output.join(""));
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe("AUTH_REQUIRED");
+    await expect(
+      handleCalendars({
+        api,
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+        configCalendars: [],
+      }),
+    ).rejects.toThrow(ApiError);
   });
 });
 

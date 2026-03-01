@@ -1,8 +1,7 @@
 import { Command } from "commander";
 import type { GoogleCalendarApi } from "../lib/api.ts";
-import { listCalendars, ApiError } from "../lib/api.ts";
-import { formatCalendarListText, formatJsonSuccess, formatJsonError } from "../lib/output.ts";
-import { errorCodeToExitCode } from "../lib/output.ts";
+import { listCalendars } from "../lib/api.ts";
+import { formatCalendarListText, formatJsonSuccess } from "../lib/output.ts";
 import { ExitCode } from "../types/index.ts";
 import type { Calendar, CalendarConfig, CommandResult, OutputFormat } from "../types/index.ts";
 
@@ -32,21 +31,7 @@ function mergeCalendarsWithConfig(
 export async function handleCalendars(opts: HandleCalendarsOptions): Promise<CommandResult> {
   const { api, format, quiet, write, configCalendars } = opts;
 
-  let apiCalendars: Calendar[];
-  try {
-    apiCalendars = await listCalendars(api);
-  } catch (error: unknown) {
-    if (error instanceof ApiError) {
-      if (format === "json") {
-        write(formatJsonError(error.code, error.message));
-      } else {
-        write(error.message);
-      }
-      return { exitCode: errorCodeToExitCode(error.code) };
-    }
-    throw error;
-  }
-
+  const apiCalendars = await listCalendars(api);
   const calendars = mergeCalendarsWithConfig(apiCalendars, configCalendars);
 
   if (quiet) {
