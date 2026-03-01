@@ -150,4 +150,29 @@ describe("search command pipeline: config → API → filter → output", () => 
     // --to is inclusive: API boundary is start of next day (2026-04-01)
     expect(params.timeMax).toContain("2026-04-01");
   });
+
+  it("stderr displayTo shows user-provided --to date, not the internal API boundary (+1 day)", async () => {
+    const mockApi = createMockApi({ events: { primary: [] } });
+    const out = captureWrite();
+    const errMessages: string[] = [];
+    const writeErr = (msg: string) => errMessages.push(msg);
+
+    await handleSearch({
+      api: mockApi,
+      query: "test",
+      format: "json",
+      calendars: [{ id: "primary", name: "Main", enabled: true }],
+      timezone: "Asia/Tokyo",
+      from: "2026-03-01",
+      to: "2026-03-31",
+      write: out.write,
+      writeErr,
+    });
+
+    // stderr should show the user-provided --to date (2026-03-31), not the API boundary (2026-04-01)
+    const searchingLine = errMessages.find((m) => m.startsWith("Searching:"));
+    expect(searchingLine).toBeDefined();
+    expect(searchingLine).toContain("2026-03-31");
+    expect(searchingLine).not.toContain("2026-04-01");
+  });
 });
