@@ -13,9 +13,12 @@ Main orchestration skill. Analyzes ROADMAP and spawns parallel workers.
 1. **Analyze ROADMAP**: Read `spec/tasks/ROADMAP.md` and identify ready tasks
 2. **Identify parallelizable tasks**: Group tasks that can be worked on simultaneously
 3. **Spawn workers**: Use `./scripts/spawn-worker.sh` (max 4 worker panes)
-4. **Start orchestration**: `./scripts/orchestrate.sh --background`
-5. **Monitor progress**: Read events from `/tmp/claude-orchestrator/events/`
-6. **Review**: When worker completes and creates PR:
+4. **Launch background monitor**: After spawning workers, launch a monitoring agent:
+   - Use `Agent` tool with `run_in_background: true`, `subagent_type: "general-purpose"`
+   - Monitor agent polls `/tmp/claude-agent-states/` and `/tmp/claude-orchestrator/events/` using `Read` tool
+   - Monitor agent returns on first significant event (worker completed, error, or permission request)
+5. **Idle while monitoring**: Tell user "Workers running, will notify on completion" and wait for monitor agent to return
+6. **Review**: When monitor agent reports worker completion with PR:
    a. Kill the completed worker (`kill-agent.sh`)
    b. Spawn reviewer (`spawn-reviewer.sh <pr-number>`)
    c. Wait for review to complete, then kill reviewer
@@ -25,7 +28,8 @@ Main orchestration skill. Analyzes ROADMAP and spawns parallel workers.
    b. Launch fix agent with detailed fix list (`launch-agent.sh <worktree> <prompt>`)
    c. Wait for completion, then kill fix agent
 8. **Merge**: Only with explicit user approval
-9. **Cleanup after merge**: Update ROADMAP, move task to completed, remove worktree, stop orchestrator
+9. **Re-monitor remaining workers**: After handling an event (review, fix, merge), if other workers are still running, launch a new background monitor agent (repeat from step 4)
+10. **Cleanup after merge**: Update ROADMAP, move task to completed, remove worktree, stop orchestrator
 
 ## Critical Rules
 

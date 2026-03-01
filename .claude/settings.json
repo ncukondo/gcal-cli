@@ -10,7 +10,9 @@
       "Bash(tmux has-session:*)",
       "Bash(which tmux)",
       "Bash(sleep:*)",
-      "Read(/workspaces/gcal-cli--worktrees/**)"
+      "Read(/workspaces/gcal-cli--worktrees/**)",
+      "Read(/tmp/claude-agent-states/**)",
+      "Read(/tmp/claude-orchestrator/**)"
     ]
   },
   "hooks": {
