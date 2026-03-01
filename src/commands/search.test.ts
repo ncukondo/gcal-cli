@@ -56,6 +56,7 @@ function makeMockApi(events: CalendarEvent[] = []): GoogleCalendarApi {
 interface SearchOpts {
   query: string;
   format?: "text" | "json";
+  quiet?: boolean;
   days?: number;
   from?: string;
   to?: string;
@@ -83,6 +84,7 @@ function runSearch(api: GoogleCalendarApi, opts: SearchOpts) {
       errOutput.push(msg);
     },
   };
+  if (opts.quiet !== undefined) handlerOpts.quiet = opts.quiet;
   if (opts.days !== undefined) handlerOpts.days = opts.days;
   if (opts.from !== undefined) handlerOpts.from = opts.from;
   if (opts.to !== undefined) handlerOpts.to = opts.to;
@@ -528,6 +530,59 @@ describe("search command", () => {
     it("allows --free alone", () => {
       const result = parseSearch(["test", "--free"]);
       expect(result.error).toBeNull();
+    });
+  });
+
+  describe("quiet mode", () => {
+    it("outputs compact format (same as list quiet) when quiet is true", async () => {
+      const events = [
+        makeEvent({
+          id: "e1",
+          title: "Team Meeting",
+          start: "2026-02-01T10:00:00+09:00",
+          end: "2026-02-01T11:00:00+09:00",
+        }),
+        makeEvent({
+          id: "e2",
+          title: "Project Meeting",
+          start: "2026-02-02T09:00:00+09:00",
+          end: "2026-02-02T10:00:00+09:00",
+        }),
+      ];
+      const api = makeMockApi(events);
+      const result = await runSearch(api, { query: "meeting", quiet: true });
+
+      const text = result.output.join("\n");
+      expect(text).toContain("02/01 10:00-11:00  Team Meeting");
+      expect(text).toContain("02/02 09:00-10:00  Project Meeting");
+      // Should NOT contain the "Found X events" header
+      expect(text).not.toContain("Found");
+    });
+
+    it("outputs 'No events found.' when quiet and no results", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "nonexistent", quiet: true });
+
+      const text = result.output.join("\n");
+      expect(text).toBe("No events found.");
+    });
+
+    it("does not affect JSON output", async () => {
+      const events = [makeEvent({ id: "e1", title: "Team Meeting" })];
+      const api = makeMockApi(events);
+      const result = await runSearch(api, { query: "meeting", format: "json", quiet: true });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data.query).toBe("meeting");
+      expect(json.data.events).toHaveLength(1);
+    });
+
+    it("suppresses stderr messages when quiet is true", async () => {
+      const api = makeMockApi([]);
+      const result = await runSearch(api, { query: "test", quiet: true });
+
+      expect(result.errOutput).toHaveLength(0);
     });
   });
 

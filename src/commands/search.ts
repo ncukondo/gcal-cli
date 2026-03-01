@@ -3,7 +3,7 @@ import type { GoogleCalendarApi } from "../lib/api.ts";
 import { listEvents } from "../lib/api.ts";
 import { applyFilters } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
-import { formatJsonSuccess, formatSearchResultText } from "../lib/output.ts";
+import { formatJsonSuccess, formatSearchResultText, formatQuietText } from "../lib/output.ts";
 import { collect } from "./shared.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { addDays } from "date-fns";
@@ -16,6 +16,7 @@ export interface SearchHandlerOptions {
   api: GoogleCalendarApi;
   query: string;
   format: OutputFormat;
+  quiet?: boolean;
   calendars: CalendarConfig[];
   timezone: string;
   days?: number;
@@ -34,8 +35,8 @@ interface CommandResult {
 }
 
 export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandResult> {
-  const { api, query, format, calendars, timezone, write } = opts;
-  const writeErr = opts.writeErr ?? (() => {});
+  const { api, query, format, calendars, timezone, write, quiet } = opts;
+  const writeErr = quiet ? () => {} : (opts.writeErr ?? (() => {}));
 
   const now = new Date();
   const days = opts.days ?? DEFAULT_SEARCH_DAYS;
@@ -99,6 +100,8 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
         count: filtered.length,
       }),
     );
+  } else if (quiet) {
+    write(formatQuietText(filtered));
   } else {
     write(formatSearchResultText(query, filtered));
   }

@@ -134,6 +134,7 @@ export function registerCommands(program: Command): void {
         api,
         query,
         format: globalOpts.format,
+        quiet: globalOpts.quiet,
         calendars,
         timezone,
         days: searchOpts.days,
