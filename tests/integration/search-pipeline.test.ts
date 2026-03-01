@@ -147,6 +147,7 @@ describe("search command pipeline: config → API → filter → output", () => 
     const listFn = mockApi.events.list as ReturnType<typeof vi.fn>;
     const params = listFn.mock.calls[0]![0];
     expect(params.timeMin).toContain("2026-03-01");
-    expect(params.timeMax).toContain("2026-03-31");
+    // --to is inclusive: API boundary is start of next day (2026-04-01)
+    expect(params.timeMax).toContain("2026-04-01");
   });
 });

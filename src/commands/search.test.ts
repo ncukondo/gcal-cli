@@ -126,7 +126,7 @@ describe("search command", () => {
       expect(diffDays).toBe(60);
     });
 
-    it("--from and --to set explicit search range", async () => {
+    it("--from and --to set explicit search range (inclusive end with +1 day)", async () => {
       const api = makeMockApi([]);
       await runSearch(api, {
         query: "test",
@@ -137,7 +137,8 @@ describe("search command", () => {
 
       const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(call.timeMin).toContain("2026-03-01");
-      expect(call.timeMax).toContain("2026-03-31");
+      // --to is inclusive: API boundary is start of next day
+      expect(call.timeMax).toContain("2026-04-01");
     });
 
     it("--from/--to use configured timezone, not system timezone", async () => {
@@ -154,8 +155,37 @@ describe("search command", () => {
       const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       // timeMin should be 2026-03-01T00:00:00+09:00 (midnight in Asia/Tokyo)
       expect(call.timeMin).toBe("2026-03-01T00:00:00+09:00");
-      // timeMax should be 2026-03-31T23:59:59+09:00 (end of day in Asia/Tokyo)
-      expect(call.timeMax).toBe("2026-03-31T23:59:59+09:00");
+      // timeMax should be 2026-04-01T00:00:00+09:00 (start of next day, addDays inclusive)
+      expect(call.timeMax).toBe("2026-04-01T00:00:00+09:00");
+    });
+
+    it("--to inclusive uses addDays(+1) not T23:59:59", async () => {
+      const api = makeMockApi([]);
+      await runSearch(api, {
+        query: "test",
+        to: "2026-03-15",
+        timezone: "UTC",
+      });
+
+      const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      // Should be start of next day (2026-03-16), not 2026-03-15T23:59:59
+      expect(call.timeMax).toBe("2026-03-16T00:00:00+00:00");
+      expect(call.timeMax).not.toContain("23:59:59");
+    });
+
+    it("--from/--to range uses addDays(+1) for inclusive end", async () => {
+      const api = makeMockApi([]);
+      await runSearch(api, {
+        query: "test",
+        from: "2026-03-01",
+        to: "2026-03-15",
+        timezone: "UTC",
+      });
+
+      const call = (api.events.list as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(call.timeMin).toBe("2026-03-01T00:00:00+00:00");
+      // Should be start of next day (2026-03-16), not 2026-03-15T23:59:59
+      expect(call.timeMax).toBe("2026-03-16T00:00:00+00:00");
     });
   });
 
@@ -417,6 +447,32 @@ describe("search command", () => {
     });
   });
 
+  describe("--include-tentative description", () => {
+    it("matches list command description", () => {
+      const searchCmd = createSearchCommand();
+      const searchOpt = searchCmd.options.find((o) => o.long === "--include-tentative");
+      expect(searchOpt).toBeDefined();
+      expect(searchOpt!.description).toBe("Include tentative events (excluded by default)");
+    });
+  });
+
+  describe("--days parser", () => {
+    it("parses --days with radix 10", () => {
+      const cmd = createSearchCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "search", "test", "--days", "10"]);
+      expect(cmd.opts().days).toBe(10);
+    });
+
+    it("parses --days with leading zero correctly (radix 10, not octal)", () => {
+      const cmd = createSearchCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "search", "test", "--days", "010"]);
+      // With radix 10, "010" should be 10, not 8 (octal)
+      expect(cmd.opts().days).toBe(10);
+    });
+  });
+
   describe("option conflicts", () => {
     function parseSearch(args: string[]): { error: string | null } {
       const cmd = createSearchCommand();
@@ -455,6 +511,22 @@ describe("search command", () => {
 
     it("allows --days alone", () => {
       const result = parseSearch(["test", "--days", "60"]);
+      expect(result.error).toBeNull();
+    });
+
+    it("rejects --busy and --free together", () => {
+      const result = parseSearch(["test", "--busy", "--free"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("allows --busy alone", () => {
+      const result = parseSearch(["test", "--busy"]);
+      expect(result.error).toBeNull();
+    });
+
+    it("allows --free alone", () => {
+      const result = parseSearch(["test", "--free"]);
       expect(result.error).toBeNull();
     });
   });
