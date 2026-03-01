@@ -255,6 +255,7 @@ export function registerCommands(program: Command): void {
         busy: addOpts.busy,
         free: addOpts.free,
         dryRun: addOpts.dryRun,
+        quiet: globalOpts.quiet,
         format: globalOpts.format,
       };
       if (addOpts.calendar) handleOpts.calendar = addOpts.calendar;
