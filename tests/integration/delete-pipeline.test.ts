@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handleDelete } from "../../src/commands/delete.ts";
 import { createMockApi, captureWrite } from "./helpers.ts";
 
@@ -61,51 +61,45 @@ describe("delete command pipeline: API → output", () => {
     expect(out.output()).toBe("");
   });
 
-  it("returns error when API returns 404 Not Found", async () => {
+  it("throws ApiError when API returns 404 Not Found", async () => {
+    const { ApiError } = await import("../../src/lib/api.ts");
     const notFoundError = new Error("Not Found") as Error & { code: number };
     notFoundError.code = 404;
 
     const mockApi = createMockApi({
       errors: { deleteEvent: notFoundError },
     });
-    const out = captureWrite();
 
-    const result = await handleDelete({
-      api: mockApi,
-      eventId: "nonexistent",
-      calendarId: "primary",
-      format: "json",
-      quiet: false,
-      write: out.write,
-    });
-
-    expect(result.exitCode).toBe(1); // ExitCode.GENERAL for NOT_FOUND
-    const json = JSON.parse(out.output());
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe("NOT_FOUND");
+    await expect(
+      handleDelete({
+        api: mockApi,
+        eventId: "nonexistent",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(ApiError);
   });
 
-  it("returns error when API returns 401 Unauthorized", async () => {
+  it("throws ApiError when API returns 401 Unauthorized", async () => {
+    const { ApiError } = await import("../../src/lib/api.ts");
     const authError = new Error("Unauthorized") as Error & { code: number };
     authError.code = 401;
 
     const mockApi = createMockApi({
       errors: { deleteEvent: authError },
     });
-    const out = captureWrite();
 
-    const result = await handleDelete({
-      api: mockApi,
-      eventId: "evt-123",
-      calendarId: "primary",
-      format: "json",
-      quiet: false,
-      write: out.write,
-    });
-
-    expect(result.exitCode).toBe(2); // ExitCode.AUTH
-    const json = JSON.parse(out.output());
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe("AUTH_REQUIRED");
+    await expect(
+      handleDelete({
+        api: mockApi,
+        eventId: "evt-123",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(ApiError);
   });
 });

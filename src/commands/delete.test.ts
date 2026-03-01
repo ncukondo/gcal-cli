@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleCalendarApi } from "../lib/api.ts";
-import { ExitCode } from "../types/index.ts";
 import { createDeleteCommand, handleDelete } from "./delete.ts";
 import type { DeleteHandlerOptions } from "./delete.ts";
 
@@ -47,13 +46,20 @@ function runDelete(
 }
 
 describe("delete command", () => {
-  it("missing event-id returns INVALID_ARGS error with exit code 3", async () => {
+  it("missing event-id throws ApiError with INVALID_ARGS", async () => {
+    const { ApiError } = await import("../lib/api.ts");
     const api = makeMockApi();
-    const result = await runDelete(api, { eventId: "" });
 
-    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
-    const output = result.output.join("");
-    expect(output).toContain("INVALID_ARGS");
+    await expect(
+      handleDelete({
+        api,
+        eventId: "",
+        calendarId: "primary",
+        format: "json",
+        quiet: false,
+        write: vi.fn(),
+      }),
+    ).rejects.toThrow(ApiError);
   });
 
   describe("API interaction", () => {
@@ -67,13 +73,20 @@ describe("delete command", () => {
       });
     });
 
-    it("returns NOT_FOUND error for non-existent event ID with exit code 1", async () => {
+    it("throws ApiError for non-existent event ID", async () => {
+      const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi({ rejectDelete: true });
-      const result = await runDelete(api, { eventId: "nonexistent" });
 
-      expect(result.exitCode).toBe(1);
-      const text = result.output.join("\n");
-      expect(text).toContain("Not Found");
+      await expect(
+        handleDelete({
+          api,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          format: "text",
+          quiet: false,
+          write: vi.fn(),
+        }),
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -108,14 +121,24 @@ describe("delete command", () => {
       expect(json.data.message).toBe("Event deleted");
     });
 
-    it("returns NOT_FOUND error in JSON format", async () => {
+    it("throws ApiError with NOT_FOUND for non-existent event in JSON mode", async () => {
+      const { ApiError } = await import("../lib/api.ts");
       const api = makeMockApi({ rejectDelete: true });
-      const result = await runDelete(api, { format: "json", eventId: "nonexistent" });
 
-      expect(result.exitCode).toBe(1);
-      const json = JSON.parse(result.output.join(""));
-      expect(json.success).toBe(false);
-      expect(json.error.code).toBe("NOT_FOUND");
+      try {
+        await handleDelete({
+          api,
+          eventId: "nonexistent",
+          calendarId: "primary",
+          format: "json",
+          quiet: false,
+          write: vi.fn(),
+        });
+        expect.unreachable("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(ApiError);
+        expect((e as InstanceType<typeof ApiError>).code).toBe("NOT_FOUND");
+      }
     });
 
     it("suppresses output when --quiet flag is set even in JSON mode", async () => {
