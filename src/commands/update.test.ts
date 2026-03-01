@@ -92,6 +92,7 @@ interface RunUpdateOpts {
   description?: string;
   busy?: boolean;
   free?: boolean;
+  quiet?: boolean;
   format?: "text" | "json";
   calendar?: string;
   timezone?: string;
@@ -120,6 +121,7 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
       return getEvent(api, calendarId, calendarName, eventId, timezone);
     },
   };
+  if (opts.quiet !== undefined) handlerOpts.quiet = opts.quiet;
   if (opts.title !== undefined) handlerOpts.title = opts.title;
   if (opts.start !== undefined) handlerOpts.start = opts.start;
   if (opts.end !== undefined) handlerOpts.end = opts.end;
@@ -680,6 +682,52 @@ describe("update command", () => {
       });
 
       expect(result.stderrOutput).toHaveLength(0);
+    });
+  });
+
+  describe("quiet mode", () => {
+    it("--quiet outputs only event ID (text)", async () => {
+      const updatedEvent = makeEvent({ id: "evt1", title: "Updated Meeting" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Updated Meeting",
+        quiet: true,
+      });
+
+      const text = result.output.join("\n");
+      expect(text).toBe("evt1");
+    });
+
+    it("--quiet does not affect JSON output", async () => {
+      const updatedEvent = makeEvent({ title: "Updated Meeting" });
+      const api = makeMockApi({ patchReturn: updatedEvent });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Updated Meeting",
+        format: "json",
+        quiet: true,
+      });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.success).toBe(true);
+      expect(json.data.event.title).toBe("Updated Meeting");
+      expect(json.data.message).toBe("Event updated");
+    });
+
+    it("--quiet with --dry-run still shows dry-run output", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt123",
+        title: "New Title",
+        quiet: true,
+        dryRun: true,
+      });
+
+      const text = result.output.join("\n");
+      expect(text).toContain("DRY RUN");
     });
   });
 
