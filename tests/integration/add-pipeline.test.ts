@@ -294,6 +294,70 @@ describe("add command pipeline: config → timezone → API → output", () => {
     expect(result.exitCode).toBe(3); // ExitCode.ARGUMENT
   });
 
+  it("--dry-run text output previews event without calling createEvent", async () => {
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+    const createEventFn = vi.fn();
+
+    const deps: AddHandlerDeps = {
+      createEvent: createEventFn,
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      {
+        title: "Meeting",
+        start: "2026-03-01T10:00",
+        end: "2026-03-01T11:00",
+        format: "text",
+        dryRun: true,
+      },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(createEventFn).not.toHaveBeenCalled();
+    const output = out.output();
+    expect(output).toContain("DRY RUN: Would create event:");
+    expect(output).toContain('title: "Meeting"');
+    expect(output).toContain("start:");
+    expect(output).toContain("end:");
+  });
+
+  it("--dry-run JSON output returns dry_run envelope without calling createEvent", async () => {
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+    const createEventFn = vi.fn();
+
+    const deps: AddHandlerDeps = {
+      createEvent: createEventFn,
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      {
+        title: "Meeting",
+        start: "2026-03-01T10:00",
+        end: "2026-03-01T11:00",
+        format: "json",
+        dryRun: true,
+      },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(createEventFn).not.toHaveBeenCalled();
+    const json = JSON.parse(out.output());
+    expect(json.success).toBe(true);
+    expect(json.data.dry_run).toBe(true);
+    expect(json.data.action).toBe("add");
+    expect(json.data.event.title).toBe("Meeting");
+    expect(json.data.event.start).toBeDefined();
+    expect(json.data.event.end).toBeDefined();
+  });
+
   it("rejects start/end type mismatch (date + datetime)", async () => {
     const mockApi = createMockApi();
     const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);

@@ -354,7 +354,7 @@ describe("update command", () => {
   });
 
   describe("text output shows confirmation with updated event details", () => {
-    it("shows updated event in text format", async () => {
+    it("starts with 'Event updated' and shows event details", async () => {
       const updatedEvent = makeEvent({ title: "Updated Meeting" });
       const api = makeMockApi({ patchReturn: updatedEvent });
 
@@ -365,13 +365,14 @@ describe("update command", () => {
       });
 
       const text = result.output.join("\n");
+      expect(text).toMatch(/^Event updated/);
       expect(text).toContain("Updated Meeting");
       expect(text).toContain("Main Calendar");
     });
   });
 
   describe("JSON output returns updated event in success envelope", () => {
-    it("returns success envelope with event data", async () => {
+    it("returns success envelope with event data and message", async () => {
       const updatedEvent = makeEvent({ title: "Updated Meeting" });
       const api = makeMockApi({ patchReturn: updatedEvent });
 
@@ -385,6 +386,7 @@ describe("update command", () => {
       expect(json.success).toBe(true);
       expect(json.data.event.title).toBe("Updated Meeting");
       expect(json.data.event.id).toBe("evt1");
+      expect(json.data.message).toBe("Event updated");
     });
   });
 
