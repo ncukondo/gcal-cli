@@ -18,6 +18,7 @@ export interface AddOptions {
   busy?: boolean;
   free?: boolean;
   dryRun?: boolean;
+  quiet?: boolean;
   format: OutputFormat;
   timezone?: string;
 }
@@ -188,6 +189,8 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
 
   if (options.format === "json") {
     deps.write(formatJsonSuccess({ event, message: "Event created" }));
+  } else if (options.quiet) {
+    deps.write(event.id);
   } else {
     const detail = formatEventDetailText(event);
     deps.write(`Event created\n\n${detail}`);

@@ -420,6 +420,38 @@ describe("handleAdd", () => {
     expect(input.transparency).toBe("opaque");
   });
 
+  it("--quiet outputs only event ID (text)", async () => {
+    const event = makeEvent({ id: "new-evt-1" });
+    const deps = makeDeps({ createEvent: vi.fn().mockResolvedValue(event) });
+
+    await handleAdd(baseOptions({ quiet: true }), deps);
+
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toBe("new-evt-1");
+  });
+
+  it("--quiet does not affect JSON output", async () => {
+    const event = makeEvent({ title: "Team Meeting" });
+    const deps = makeDeps({ createEvent: vi.fn().mockResolvedValue(event) });
+
+    await handleAdd(baseOptions({ title: "Team Meeting", format: "json", quiet: true }), deps);
+
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const json = JSON.parse(output);
+    expect(json.success).toBe(true);
+    expect(json.data.event).toBeDefined();
+    expect(json.data.message).toBe("Event created");
+  });
+
+  it("--quiet with --dry-run still shows dry-run output", async () => {
+    const deps = makeDeps();
+
+    await handleAdd(baseOptions({ quiet: true, dryRun: true }), deps);
+
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("DRY RUN");
+  });
+
   it("propagates API errors from deps.createEvent", async () => {
     const deps = makeDeps({
       createEvent: vi.fn().mockRejectedValue(new Error("API failure")),

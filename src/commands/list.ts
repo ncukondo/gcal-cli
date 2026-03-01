@@ -5,7 +5,7 @@ import type { ListEventsOptions } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters } from "../lib/filter.ts";
-import { formatEventListText, formatJsonSuccess, formatTimeRange } from "../lib/output.ts";
+import { formatEventListText, formatJsonSuccess, formatQuietText } from "../lib/output.ts";
 import { collect } from "./shared.ts";
 import { addDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -108,24 +108,6 @@ export interface ListOptions {
 
 interface CommandResult {
   exitCode: number;
-}
-
-function formatQuietText(events: CalendarEvent[]): string {
-  if (events.length === 0) return "No events found.";
-
-  const lines: string[] = [];
-  for (const event of events) {
-    const month = event.start.slice(5, 7);
-    const day = event.start.slice(8, 10);
-    const datePrefix = `${month}/${day}`;
-    if (event.all_day) {
-      lines.push(`${datePrefix} All day      ${event.title}`);
-    } else {
-      const time = formatTimeRange(event);
-      lines.push(`${datePrefix} ${time}  ${event.title}`);
-    }
-  }
-  return lines.join("\n");
 }
 
 export async function handleList(

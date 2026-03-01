@@ -58,6 +58,8 @@ gcal list --today --busy
 gcal list --days 7 --confirmed
 ```
 
+Quiet mode (`-q`): Compact one-line format: `MM/DD HH:MM-HH:MM Title`. Stderr messages suppressed.
+
 ### `gcal search`
 
 Search events by keyword.
@@ -98,6 +100,8 @@ Stderr output:
 Searching: 2026-01-25 to 2026-02-24
 Tip: Use --days <n> or --from/--to to change the search range.
 ```
+
+Quiet mode (`-q`): Same compact format as `list` (`MM/DD HH:MM-HH:MM Title`). Stderr messages suppressed.
 
 ### `gcal add`
 
@@ -149,6 +153,8 @@ gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, 
 gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, with timezone
 ```
 
+Quiet mode (`-q`): Event ID only.
+
 ### `gcal show`
 
 Show event details.
@@ -159,6 +165,8 @@ gcal show <event-id> [options]
 Options:
   --calendar, -c <id>  Calendar ID to query (single)
 ```
+
+Quiet mode (`-q`): Single TSV line `Title\tStart\tEnd`.
 
 ### `gcal update`
 
@@ -220,6 +228,8 @@ gcal update abc123 -s "2026-03-01" --duration 2d                          # All-
 gcal update abc123 --free                                                  # Transparency only
 gcal update abc123 --dry-run -t "Preview"                                  # Dry run
 ```
+
+Quiet mode (`-q`): Event ID only.
 
 ### `gcal delete`
 

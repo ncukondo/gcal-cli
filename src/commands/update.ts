@@ -16,6 +16,7 @@ export interface UpdateHandlerOptions {
   calendarId: string;
   calendarName: string;
   format: OutputFormat;
+  quiet?: boolean;
   timezone: string;
   write: (msg: string) => void;
   writeStderr: (msg: string) => void;
@@ -344,6 +345,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   if (format === "json") {
     write(formatJsonSuccess({ event: updated, message: "Event updated" }));
+  } else if (opts.quiet) {
+    write(updated.id);
   } else {
     const detail = formatEventDetailText(updated);
     write(`Event updated\n\n${detail}`);

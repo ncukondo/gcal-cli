@@ -134,6 +134,7 @@ export function registerCommands(program: Command): void {
         api,
         query,
         format: globalOpts.format,
+        quiet: globalOpts.quiet,
         calendars,
         timezone,
         days: searchOpts.days,
@@ -182,6 +183,7 @@ export function registerCommands(program: Command): void {
         calendarId: cal.id,
         calendarName: cal.name,
         format: globalOpts.format,
+        quiet: globalOpts.quiet,
         timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
@@ -253,6 +255,7 @@ export function registerCommands(program: Command): void {
         busy: addOpts.busy,
         free: addOpts.free,
         dryRun: addOpts.dryRun,
+        quiet: globalOpts.quiet,
         format: globalOpts.format,
       };
       if (addOpts.calendar) handleOpts.calendar = addOpts.calendar;
@@ -359,6 +362,7 @@ export function registerCommands(program: Command): void {
         calendarId: cal.id,
         calendarName: cal.name,
         format: globalOpts.format,
+        quiet: globalOpts.quiet,
         timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
         writeStderr: (msg) => process.stderr.write(msg + "\n"),
