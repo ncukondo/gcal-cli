@@ -188,6 +188,7 @@ export function createAddCommand(): Command {
     "--duration <duration>",
     "Duration instead of --end (e.g. 30m, 1h, 2d, 1h30m). Mutually exclusive with --end.",
   );
+  cmd.option("-c, --calendar <id>", "Target calendar ID");
   cmd.option("-d, --description <text>", "Event description");
   cmd.option("--busy", "Mark as busy (default)");
   cmd.option("--free", "Mark as free (transparent)");

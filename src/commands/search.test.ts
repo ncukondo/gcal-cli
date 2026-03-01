@@ -530,4 +530,20 @@ describe("search command", () => {
       expect(result.error).toBeNull();
     });
   });
+
+  describe("-c / --calendar option", () => {
+    it("has -c, --calendar repeatable option", () => {
+      const cmd = createSearchCommand();
+      const opt = cmd.options.find((o) => o.long === "--calendar");
+      expect(opt).toBeDefined();
+      expect(opt!.short).toBe("-c");
+    });
+
+    it("-c can be specified multiple times", () => {
+      const cmd = createSearchCommand();
+      cmd.parse(["node", "search", "test", "-c", "cal1", "-c", "cal2"]);
+      const opts = cmd.opts();
+      expect(opts.calendar).toEqual(["cal1", "cal2"]);
+    });
+  });
 });

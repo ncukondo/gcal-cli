@@ -99,7 +99,7 @@ export function registerCommands(program: Command): void {
         ...listOpts,
         format: globalOpts.format,
         quiet: globalOpts.quiet,
-        calendar: globalOpts.calendar,
+        calendar: listOpts.calendar,
       };
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
@@ -122,7 +122,10 @@ export function registerCommands(program: Command): void {
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
       const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
-      const calendars = selectCalendars(globalOpts.calendar, config);
+      const calendars = selectCalendars(
+        searchOpts.calendar?.length > 0 ? searchOpts.calendar : undefined,
+        config,
+      );
 
       const result = await handleSearch({
         api,
@@ -157,8 +160,7 @@ export function registerCommands(program: Command): void {
       const calendarApi = google.calendar({ version: "v3", auth });
       const api = createGoogleCalendarApi(calendarApi);
 
-      const calendarId =
-        showOpts.calendar ?? (globalOpts.calendar.length > 0 ? globalOpts.calendar[0] : undefined);
+      const calendarId = showOpts.calendar;
       let cal: { id: string; name: string };
       if (calendarId) {
         const found = config.calendars.find((c) => c.id === calendarId);
@@ -198,11 +200,8 @@ export function registerCommands(program: Command): void {
       const api = createGoogleCalendarApi(calendarApi);
 
       let resolvedCalendarId: string;
-      if (deleteOpts.calendar || globalOpts.calendar.length > 0) {
-        const calendars = selectCalendars(
-          deleteOpts.calendar ? [deleteOpts.calendar] : globalOpts.calendar,
-          config,
-        );
+      if (deleteOpts.calendar) {
+        const calendars = selectCalendars([deleteOpts.calendar], config);
         resolvedCalendarId = calendars[0]?.id ?? "primary";
       } else {
         const calendars = selectCalendars(undefined, config);
@@ -252,7 +251,7 @@ export function registerCommands(program: Command): void {
         free: addOpts.free,
         format: globalOpts.format,
       };
-      if (globalOpts.calendar?.[0]) handleOpts.calendar = globalOpts.calendar[0];
+      if (addOpts.calendar) handleOpts.calendar = addOpts.calendar;
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
       const result = await handleAdd(handleOpts, deps);
@@ -341,11 +340,8 @@ export function registerCommands(program: Command): void {
       const timezone = resolveTimezone(globalOpts.timezone, config.timezone);
       const updateOpsCalendar = updateOpts.calendar as string | undefined;
       let cal: { id: string; name: string };
-      if (updateOpsCalendar || globalOpts.calendar.length > 0) {
-        const calendars = selectCalendars(
-          updateOpsCalendar ? [updateOpsCalendar] : globalOpts.calendar,
-          config,
-        );
+      if (updateOpsCalendar) {
+        const calendars = selectCalendars([updateOpsCalendar], config);
         cal = calendars[0]!;
       } else {
         const calendars = selectCalendars(undefined, config);

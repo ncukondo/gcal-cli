@@ -191,9 +191,14 @@ export async function handleList(
   return { exitCode: ExitCode.SUCCESS };
 }
 
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 export function createListCommand(): Command {
   const cmd = new Command("list").description("List events within a date range");
 
+  cmd.option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, []);
   cmd.option("--today", "Show today's events");
   cmd.option("--days <n>", "Events for next n days (default: 7)", (v: string) =>
     Number.parseInt(v, 10),

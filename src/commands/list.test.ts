@@ -569,4 +569,18 @@ describe("createListCommand", () => {
     expect(toOpt).toBeDefined();
     expect(toOpt.conflictsWith).toContain("days");
   });
+
+  it("has -c, --calendar repeatable option", () => {
+    const cmd = createListCommand();
+    const opt = cmd.options.find((o) => o.long === "--calendar");
+    expect(opt).toBeDefined();
+    expect(opt!.short).toBe("-c");
+  });
+
+  it("-c can be specified multiple times", () => {
+    const cmd = createListCommand();
+    cmd.parse(["node", "list", "-c", "cal1", "-c", "cal2"]);
+    const opts = cmd.opts();
+    expect(opts.calendar).toEqual(["cal1", "cal2"]);
+  });
 });

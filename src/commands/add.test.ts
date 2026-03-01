@@ -522,4 +522,18 @@ describe("createAddCommand", () => {
     cmd.outputHelp();
     expect(helpOutput).toContain("Examples:");
   });
+
+  it("has -c, --calendar single option", () => {
+    const cmd = createAddCommand();
+    const opt = cmd.options.find((o) => o.long === "--calendar");
+    expect(opt).toBeDefined();
+    expect(opt!.short).toBe("-c");
+  });
+
+  it("-c accepts a single value (not repeatable)", () => {
+    const cmd = createAddCommand();
+    cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01", "-c", "mycal"]);
+    const opts = cmd.opts();
+    expect(opts.calendar).toBe("mycal");
+  });
 });

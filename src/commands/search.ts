@@ -105,11 +105,16 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
   return { exitCode: ExitCode.SUCCESS };
 }
 
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 export function createSearchCommand(): Command {
   const cmd = new Command("search")
     .description("Search events by keyword")
     .argument("<query>", "Search query string");
 
+  cmd.option("-c, --calendar <id>", "Target calendar ID (repeatable)", collect, []);
   cmd.option("--from <date>", "Start date for search range");
   cmd.option("--to <date>", "End date for search range");
   cmd.option("--days <n>", "Search within next n days (default: 30)", (v: string) =>
