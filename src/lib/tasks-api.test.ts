@@ -2,7 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import {
   normalizeTaskList,
   normalizeTask,
-  createGoogleTasksApi,
+  listTaskLists,
+  listTasks,
+  getTask,
+  createTask,
+  updateTask,
+  deleteTask,
+  completeTask,
+  uncompleteTask,
   MAX_PAGES,
   type GoogleTasksClient,
   type CreateTaskInput,
@@ -186,8 +193,7 @@ describe("listTaskLists", () => {
       },
     });
 
-    const api = createGoogleTasksApi(client);
-    const result = await api.listTaskLists();
+    const result = await listTaskLists(client);
 
     expect(result).toEqual([
       { id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00.000Z" },
@@ -206,8 +212,7 @@ describe("listTaskLists", () => {
       },
     });
 
-    const api = createGoogleTasksApi(client);
-    const result = await api.listTaskLists();
+    const result = await listTaskLists(client);
 
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("list1");
@@ -233,8 +238,7 @@ describe("listTaskLists", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.listTaskLists().catch((e) => e);
+    const error = await listTaskLists(client).catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "API_ERROR" });
     expect(error.message).toContain(`${MAX_PAGES}`);
@@ -258,14 +262,14 @@ describe("listTasks", () => {
       },
     });
 
-    const api = createGoogleTasksApi(client);
-    const result = await api.listTasks("@default");
+    const result = await listTasks(client, "@default", "My Tasks");
 
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe("task1");
     expect(result[0]!.title).toBe("Buy groceries");
     expect(result[0]!.due).toBe("2026-03-25");
     expect(result[0]!.list_id).toBe("@default");
+    expect(result[0]!.list_title).toBe("My Tasks");
   });
 
   it("passes filter options to the API", async () => {
@@ -281,8 +285,7 @@ describe("listTasks", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    await api.listTasks("@default", {
+    await listTasks(client, "@default", "My Tasks", {
       showCompleted: true,
       dueMin: "2026-03-01T00:00:00Z",
       dueMax: "2026-03-31T23:59:59Z",
@@ -309,8 +312,7 @@ describe("listTasks", () => {
       },
     });
 
-    const api = createGoogleTasksApi(client);
-    const result = await api.listTasks("@default");
+    const result = await listTasks(client, "@default", "My Tasks");
 
     expect(result).toHaveLength(2);
     expect(result[0]!.id).toBe("task1");
@@ -334,8 +336,7 @@ describe("listTasks", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.listTasks("@default").catch((e) => e);
+    const error = await listTasks(client, "@default", "My Tasks").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "API_ERROR" });
     expect(error.message).toContain(`${MAX_PAGES}`);
@@ -353,19 +354,18 @@ describe("getTask", () => {
       },
     });
 
-    const api = createGoogleTasksApi(client);
-    const result = await api.getTask("@default", "task1");
+    const result = await getTask(client, "@default", "My Tasks", "task1");
 
     expect(result.id).toBe("task1");
     expect(result.title).toBe("Buy groceries");
     expect(result.list_id).toBe("@default");
+    expect(result.list_title).toBe("My Tasks");
   });
 
   it("throws NOT_FOUND for non-existent task", async () => {
     const client = createMockClient({});
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.getTask("@default", "missing").catch((e) => e);
+    const error = await getTask(client, "@default", "My Tasks", "missing").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "NOT_FOUND" });
   });
@@ -383,7 +383,6 @@ describe("createTask", () => {
     };
 
     const client = createMockClient({ inserted: returnedTask });
-    const api = createGoogleTasksApi(client);
 
     const input: CreateTaskInput = {
       title: "Buy groceries",
@@ -391,7 +390,7 @@ describe("createTask", () => {
       due: "2026-03-25T00:00:00.000Z",
     };
 
-    const result = await api.createTask("@default", input);
+    const result = await createTask(client, "@default", "My Tasks", input);
 
     expect(client.tasks.insert).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -405,6 +404,7 @@ describe("createTask", () => {
     expect(result.id).toBe("new1");
     expect(result.title).toBe("Buy groceries");
     expect(result.due).toBe("2026-03-25");
+    expect(result.list_title).toBe("My Tasks");
   });
 
   it("supports parent parameter for subtasks", async () => {
@@ -417,14 +417,13 @@ describe("createTask", () => {
     };
 
     const client = createMockClient({ inserted: returnedTask });
-    const api = createGoogleTasksApi(client);
 
     const input: CreateTaskInput = {
       title: "Sub task",
       parent: "parent1",
     };
 
-    await api.createTask("@default", input);
+    await createTask(client, "@default", "My Tasks", input);
 
     expect(client.tasks.insert).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -447,8 +446,9 @@ describe("createTask", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.createTask("@default", { title: "Test" }).catch((e: unknown) => e);
+    const error = await createTask(client, "@default", "My Tasks", { title: "Test" }).catch(
+      (e: unknown) => e,
+    );
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
@@ -465,10 +465,9 @@ describe("updateTask", () => {
     };
 
     const client = createMockClient({ patched: returnedTask });
-    const api = createGoogleTasksApi(client);
 
     const input: UpdateTaskInput = { title: "Updated Title" };
-    const result = await api.updateTask("@default", "task1", input);
+    const result = await updateTask(client, "@default", "My Tasks", "task1", input);
 
     expect(client.tasks.patch).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -478,6 +477,7 @@ describe("updateTask", () => {
 
     expect(result.id).toBe("task1");
     expect(result.title).toBe("Updated Title");
+    expect(result.list_title).toBe("My Tasks");
   });
 
   it("maps API errors correctly", async () => {
@@ -492,10 +492,9 @@ describe("updateTask", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api
-      .updateTask("@default", "missing", { title: "New" })
-      .catch((e: unknown) => e);
+    const error = await updateTask(client, "@default", "My Tasks", "missing", {
+      title: "New",
+    }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "NOT_FOUND" });
   });
@@ -504,9 +503,8 @@ describe("updateTask", () => {
 describe("deleteTask", () => {
   it("sends delete request", async () => {
     const client = createMockClient({ task1: "exists" });
-    const api = createGoogleTasksApi(client);
 
-    await api.deleteTask("@default", "task1");
+    await deleteTask(client, "@default", "task1");
 
     expect(client.tasks.delete).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -516,9 +514,8 @@ describe("deleteTask", () => {
 
   it("throws NOT_FOUND for non-existent task", async () => {
     const client = createMockClient({ missing: "not_found" });
-    const api = createGoogleTasksApi(client);
 
-    const error = await api.deleteTask("@default", "missing").catch((e: unknown) => e);
+    const error = await deleteTask(client, "@default", "missing").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "NOT_FOUND" });
   });
@@ -535,9 +532,8 @@ describe("completeTask", () => {
     };
 
     const client = createMockClient({ patched: returnedTask });
-    const api = createGoogleTasksApi(client);
 
-    const result = await api.completeTask("@default", "task1");
+    const result = await completeTask(client, "@default", "My Tasks", "task1");
 
     expect(client.tasks.patch).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -547,6 +543,7 @@ describe("completeTask", () => {
 
     expect(result.status).toBe("completed");
     expect(result.completed).toBe("2026-03-23T12:00:00.000Z");
+    expect(result.list_title).toBe("My Tasks");
   });
 });
 
@@ -561,9 +558,8 @@ describe("uncompleteTask", () => {
     };
 
     const client = createMockClient({ patched: returnedTask });
-    const api = createGoogleTasksApi(client);
 
-    const result = await api.uncompleteTask("@default", "task1");
+    const result = await uncompleteTask(client, "@default", "My Tasks", "task1");
 
     expect(client.tasks.patch).toHaveBeenCalledWith({
       tasklist: "@default",
@@ -573,6 +569,7 @@ describe("uncompleteTask", () => {
 
     expect(result.status).toBe("needsAction");
     expect(result.completed).toBeNull();
+    expect(result.list_title).toBe("My Tasks");
   });
 });
 
@@ -585,8 +582,7 @@ describe("API error mapping", () => {
       tasks: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.listTaskLists().catch((e) => e);
+    const error = await listTaskLists(client).catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
@@ -603,8 +599,7 @@ describe("API error mapping", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.listTasks("@default").catch((e) => e);
+    const error = await listTasks(client, "@default", "My Tasks").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
@@ -623,8 +618,7 @@ describe("API error mapping", () => {
       },
     };
 
-    const api = createGoogleTasksApi(client);
-    const error = await api.getTask("@default", "task1").catch((e) => e);
+    const error = await getTask(client, "@default", "My Tasks", "task1").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "API_ERROR" });
   });
@@ -637,7 +631,6 @@ describe("API error mapping", () => {
       tasks: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
     };
 
-    const api = createGoogleTasksApi(client);
-    await expect(api.listTaskLists()).rejects.toThrow(TypeError);
+    await expect(listTaskLists(client)).rejects.toThrow(TypeError);
   });
 });

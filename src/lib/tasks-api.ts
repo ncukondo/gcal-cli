@@ -1,7 +1,8 @@
 import type { Task, TaskList, TaskStatus } from "../types/index.ts";
 import { ApiError } from "./api.ts";
+import { MAX_PAGES, mapApiError } from "./api-utils.ts";
 
-export const MAX_PAGES = 100;
+export { MAX_PAGES };
 
 // --- Google API raw response types ---
 
@@ -65,7 +66,7 @@ export interface GoogleTasksClient {
   };
 }
 
-// --- High-level interface ---
+// --- Options / Input types ---
 
 export interface ListTasksOptions {
   showCompleted?: boolean;
@@ -85,17 +86,6 @@ export interface UpdateTaskInput {
   title?: string;
   notes?: string;
   due?: string;
-}
-
-export interface GoogleTasksApi {
-  listTaskLists(): Promise<TaskList[]>;
-  listTasks(taskListId: string, options?: ListTasksOptions): Promise<Task[]>;
-  getTask(taskListId: string, taskId: string): Promise<Task>;
-  createTask(taskListId: string, task: CreateTaskInput): Promise<Task>;
-  updateTask(taskListId: string, taskId: string, task: UpdateTaskInput): Promise<Task>;
-  deleteTask(taskListId: string, taskId: string): Promise<void>;
-  completeTask(taskListId: string, taskId: string): Promise<Task>;
-  uncompleteTask(taskListId: string, taskId: string): Promise<Task>;
 }
 
 // --- Normalization functions ---
@@ -139,191 +129,196 @@ export function normalizeTask(raw: GoogleRawTask, listId: string, listTitle: str
   };
 }
 
-// --- Error mapping ---
+// --- Standalone API functions ---
 
-function isGoogleApiError(error: unknown): error is Error & { code: number } {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "number"
-  );
-}
+export async function listTaskLists(client: GoogleTasksClient): Promise<TaskList[]> {
+  try {
+    const results: TaskList[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
 
-function mapApiError(error: unknown): never {
-  if (isGoogleApiError(error)) {
-    if (error.code === 401 || error.code === 403) {
-      throw new ApiError("AUTH_REQUIRED", error.message);
-    }
-    if (error.code === 404) {
-      throw new ApiError("NOT_FOUND", error.message);
-    }
-    throw new ApiError("API_ERROR", error.message);
+    do {
+      if (pages >= MAX_PAGES) {
+        throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
+      }
+      const response = await client.tasklists.list(pageToken ? { pageToken } : undefined);
+      const items = response.data.items ?? [];
+      for (const item of items) {
+        results.push(normalizeTaskList(item));
+      }
+      pageToken = response.data.nextPageToken;
+      pages++;
+    } while (pageToken);
+
+    return results;
+  } catch (error: unknown) {
+    mapApiError(error);
   }
-  throw error;
 }
 
-// --- API wrapper implementation ---
+export async function listTasks(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  options?: ListTasksOptions,
+): Promise<Task[]> {
+  try {
+    const results: Task[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
 
-export function createGoogleTasksApi(client: GoogleTasksClient): GoogleTasksApi {
-  return {
-    async listTaskLists(): Promise<TaskList[]> {
-      try {
-        const results: TaskList[] = [];
-        let pageToken: string | undefined;
-        let pages = 0;
-
-        do {
-          if (pages >= MAX_PAGES) {
-            throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
-          }
-          const response = await client.tasklists.list(pageToken ? { pageToken } : undefined);
-          const items = response.data.items ?? [];
-          for (const item of items) {
-            results.push(normalizeTaskList(item));
-          }
-          pageToken = response.data.nextPageToken;
-          pages++;
-        } while (pageToken);
-
-        return results;
-      } catch (error: unknown) {
-        mapApiError(error);
+    do {
+      if (pages >= MAX_PAGES) {
+        throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
       }
-    },
-
-    async listTasks(taskListId: string, options?: ListTasksOptions): Promise<Task[]> {
-      try {
-        const results: Task[] = [];
-        let pageToken: string | undefined;
-        let pages = 0;
-        // We need the list title for normalization; fetch it from the first task list response
-        // For now, use taskListId as the title placeholder — the caller can resolve this
-        const listTitle = taskListId;
-
-        do {
-          if (pages >= MAX_PAGES) {
-            throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
-          }
-          const params: {
-            tasklist: string;
-            pageToken?: string;
-            showCompleted?: boolean;
-            showHidden?: boolean;
-            dueMin?: string;
-            dueMax?: string;
-          } = {
-            tasklist: taskListId,
-            ...options,
-          };
-          if (pageToken) {
-            params.pageToken = pageToken;
-          }
-
-          const response = await client.tasks.list(params);
-          const items = response.data.items ?? [];
-          for (const item of items) {
-            results.push(normalizeTask(item, taskListId, listTitle));
-          }
-          pageToken = response.data.nextPageToken;
-          pages++;
-        } while (pageToken);
-
-        return results;
-      } catch (error: unknown) {
-        mapApiError(error);
+      const params: {
+        tasklist: string;
+        pageToken?: string;
+        showCompleted?: boolean;
+        showHidden?: boolean;
+        dueMin?: string;
+        dueMax?: string;
+      } = {
+        tasklist: taskListId,
+        ...options,
+      };
+      if (pageToken) {
+        params.pageToken = pageToken;
       }
-    },
 
-    async getTask(taskListId: string, taskId: string): Promise<Task> {
-      try {
-        const response = await client.tasks.get({ tasklist: taskListId, task: taskId });
-        return normalizeTask(response.data, taskListId, taskListId);
-      } catch (error: unknown) {
-        mapApiError(error);
+      const response = await client.tasks.list(params);
+      const items = response.data.items ?? [];
+      for (const item of items) {
+        results.push(normalizeTask(item, taskListId, listTitle));
       }
-    },
+      pageToken = response.data.nextPageToken;
+      pages++;
+    } while (pageToken);
 
-    async createTask(taskListId: string, input: CreateTaskInput): Promise<Task> {
-      try {
-        const requestBody: { title: string; notes?: string; due?: string } = {
-          title: input.title,
-        };
-        if (input.notes !== undefined) {
-          requestBody.notes = input.notes;
-        }
-        if (input.due !== undefined) {
-          requestBody.due = input.due;
-        }
-        const params: {
-          tasklist: string;
-          parent?: string;
-          requestBody: { title: string; notes?: string; due?: string };
-        } = { tasklist: taskListId, requestBody };
-        if (input.parent !== undefined) {
-          params.parent = input.parent;
-        }
-        const response = await client.tasks.insert(params);
-        return normalizeTask(response.data, taskListId, taskListId);
-      } catch (error: unknown) {
-        mapApiError(error);
-      }
-    },
+    return results;
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
 
-    async updateTask(taskListId: string, taskId: string, input: UpdateTaskInput): Promise<Task> {
-      try {
-        const requestBody: Partial<{ title: string; notes: string; due: string }> = {};
-        if (input.title !== undefined) {
-          requestBody.title = input.title;
-        }
-        if (input.notes !== undefined) {
-          requestBody.notes = input.notes;
-        }
-        if (input.due !== undefined) {
-          requestBody.due = input.due;
-        }
-        const response = await client.tasks.patch({
-          tasklist: taskListId,
-          task: taskId,
-          requestBody,
-        });
-        return normalizeTask(response.data, taskListId, taskListId);
-      } catch (error: unknown) {
-        mapApiError(error);
-      }
-    },
+export async function getTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  taskId: string,
+): Promise<Task> {
+  try {
+    const response = await client.tasks.get({ tasklist: taskListId, task: taskId });
+    return normalizeTask(response.data, taskListId, listTitle);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
 
-    async deleteTask(taskListId: string, taskId: string): Promise<void> {
-      try {
-        await client.tasks.delete({ tasklist: taskListId, task: taskId });
-      } catch (error: unknown) {
-        mapApiError(error);
-      }
-    },
+export async function createTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  input: CreateTaskInput,
+): Promise<Task> {
+  try {
+    const requestBody: { title: string; notes?: string; due?: string } = {
+      title: input.title,
+    };
+    if (input.notes !== undefined) {
+      requestBody.notes = input.notes;
+    }
+    if (input.due !== undefined) {
+      requestBody.due = input.due;
+    }
+    const params: {
+      tasklist: string;
+      parent?: string;
+      requestBody: { title: string; notes?: string; due?: string };
+    } = { tasklist: taskListId, requestBody };
+    if (input.parent !== undefined) {
+      params.parent = input.parent;
+    }
+    const response = await client.tasks.insert(params);
+    return normalizeTask(response.data, taskListId, listTitle);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
 
-    async completeTask(taskListId: string, taskId: string): Promise<Task> {
-      try {
-        const response = await client.tasks.patch({
-          tasklist: taskListId,
-          task: taskId,
-          requestBody: { status: "completed" },
-        });
-        return normalizeTask(response.data, taskListId, taskListId);
-      } catch (error: unknown) {
-        mapApiError(error);
-      }
-    },
+export async function updateTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  taskId: string,
+  input: UpdateTaskInput,
+): Promise<Task> {
+  try {
+    const requestBody: Partial<{ title: string; notes: string; due: string }> = {};
+    if (input.title !== undefined) {
+      requestBody.title = input.title;
+    }
+    if (input.notes !== undefined) {
+      requestBody.notes = input.notes;
+    }
+    if (input.due !== undefined) {
+      requestBody.due = input.due;
+    }
+    const response = await client.tasks.patch({
+      tasklist: taskListId,
+      task: taskId,
+      requestBody,
+    });
+    return normalizeTask(response.data, taskListId, listTitle);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
 
-    async uncompleteTask(taskListId: string, taskId: string): Promise<Task> {
-      try {
-        const response = await client.tasks.patch({
-          tasklist: taskListId,
-          task: taskId,
-          requestBody: { status: "needsAction", completed: null },
-        });
-        return normalizeTask(response.data, taskListId, taskListId);
-      } catch (error: unknown) {
-        mapApiError(error);
-      }
-    },
-  };
+export async function deleteTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  taskId: string,
+): Promise<void> {
+  try {
+    await client.tasks.delete({ tasklist: taskListId, task: taskId });
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+export async function completeTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  taskId: string,
+): Promise<Task> {
+  try {
+    const response = await client.tasks.patch({
+      tasklist: taskListId,
+      task: taskId,
+      requestBody: { status: "completed" },
+    });
+    return normalizeTask(response.data, taskListId, listTitle);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+export async function uncompleteTask(
+  client: GoogleTasksClient,
+  taskListId: string,
+  listTitle: string,
+  taskId: string,
+): Promise<Task> {
+  try {
+    const response = await client.tasks.patch({
+      tasklist: taskListId,
+      task: taskId,
+      requestBody: { status: "needsAction", completed: null },
+    });
+    return normalizeTask(response.data, taskListId, listTitle);
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
 }
