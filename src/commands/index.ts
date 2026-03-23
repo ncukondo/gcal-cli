@@ -9,7 +9,9 @@ import { createAddCommand, handleAdd, type AddHandlerDeps } from "./add.ts";
 import { createDeleteCommand, handleDelete } from "./delete.ts";
 import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { createInitCommand, handleInit } from "./init.ts";
-import { fsAdapter, createGoogleCalendarApi } from "./shared.ts";
+import { createTasksCommand } from "./tasks/index.ts";
+import { handleTaskLists } from "./tasks/lists.ts";
+import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
 import {
@@ -81,6 +83,29 @@ export function registerCommands(program: Command): void {
     }
   });
   program.addCommand(calendarsCmd);
+
+  const { tasksCmd, listsCmd: tasksListsCmd } = createTasksCommand();
+  tasksListsCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const result = await handleTaskLists({
+        client: tasksClient,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  program.addCommand(tasksCmd);
 
   const listCmd = createListCommand();
   listCmd.action(async () => {
