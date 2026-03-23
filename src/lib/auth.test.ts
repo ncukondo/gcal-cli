@@ -653,6 +653,7 @@ describe("startOAuthFlow", () => {
       expect(authUrl).toContain("accounts.google.com");
       expect(authUrl).toContain("client_id=test-client-id");
       expect(authUrl).toContain("calendar.readonly");
+      expect(authUrl).toContain("tasks");
       expect(server).toBeDefined();
 
       // Simulate callback with auth code
