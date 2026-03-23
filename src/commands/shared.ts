@@ -31,22 +31,12 @@ export function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
-type TaskListsData = {
-  items?: GoogleRawTaskList[];
-  nextPageToken?: string;
-};
-
-type TasksData = {
-  items?: GoogleRawTask[];
-  nextPageToken?: string;
-};
-
 export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
   return {
     tasklists: {
       list: async (p) => {
         const res = await tasks.tasklists.list(p);
-        const data: TaskListsData = {};
+        const data: { items?: GoogleRawTaskList[]; nextPageToken?: string } = {};
         if (res.data.items) data.items = res.data.items as GoogleRawTaskList[];
         if (res.data.nextPageToken) data.nextPageToken = res.data.nextPageToken;
         return { data };
@@ -55,7 +45,7 @@ export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
     tasks: {
       list: async (p) => {
         const res = await tasks.tasks.list(p);
-        const data: TasksData = {};
+        const data: { items?: GoogleRawTask[]; nextPageToken?: string } = {};
         if (res.data.items) data.items = res.data.items as GoogleRawTask[];
         if (res.data.nextPageToken) data.nextPageToken = res.data.nextPageToken;
         return { data };

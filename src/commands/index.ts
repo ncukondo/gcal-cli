@@ -84,8 +84,7 @@ export function registerCommands(program: Command): void {
   });
   program.addCommand(calendarsCmd);
 
-  const tasksCmd = createTasksCommand();
-  const tasksListsCmd = tasksCmd.commands.find((c) => c.name() === "lists")!;
+  const { tasksCmd, listsCmd: tasksListsCmd } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
     try {

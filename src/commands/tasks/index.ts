@@ -1,10 +1,10 @@
 import { Command } from "commander";
 
-export function createTasksCommand(): Command {
-  const cmd = new Command("tasks").description("Manage Google Tasks");
+export function createTasksCommand(): { tasksCmd: Command; listsCmd: Command } {
+  const tasksCmd = new Command("tasks").description("Manage Google Tasks");
 
   const listsCmd = new Command("lists").description("List task lists");
-  cmd.addCommand(listsCmd);
+  tasksCmd.addCommand(listsCmd);
 
-  return cmd;
+  return { tasksCmd, listsCmd };
 }
