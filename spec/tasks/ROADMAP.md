@@ -8,8 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 11: Google Tasks - Foundation
 
-28. [028-task-types](./028-task-types.md) — Google Tasks 型定義
-29. [029-auth-tasks-scope](./029-auth-tasks-scope.md) — OAuth スコープに Tasks を追加
 30. [030-tasks-api-wrapper](./030-tasks-api-wrapper.md) — Google Tasks API ラッパー
 
 ### Phase 12: Google Tasks - Read Commands
@@ -31,9 +29,14 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
-(none)
+30. [030-tasks-api-wrapper](./030-tasks-api-wrapper.md) — Google Tasks API ラッパー
 
 ## Completed
+
+### Phase 11: Google Tasks - Foundation
+
+28. [028-task-types](./completed/028-task-types.md) — Google Tasks 型定義 (#43)
+29. [029-auth-tasks-scope](./completed/029-auth-tasks-scope.md) — OAuth スコープに Tasks を追加 (#42)
 
 ### Phase 10: コマンド一貫性改善
 
