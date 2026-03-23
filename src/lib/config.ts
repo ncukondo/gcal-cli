@@ -1,5 +1,5 @@
 import { parse as parseToml } from "smol-toml";
-import type { AppConfig, CalendarConfig, OutputFormat } from "../types/index.ts";
+import type { AppConfig, CalendarConfig, OutputFormat, TaskListConfig } from "../types/index.ts";
 
 export interface FsAdapter {
   existsSync: (path: string) => boolean;
@@ -41,6 +41,14 @@ export function parseConfig(toml: string): AppConfig {
       }))
     : [];
 
+  const task_lists: TaskListConfig[] = Array.isArray(raw["task_lists"])
+    ? (raw["task_lists"] as Record<string, unknown>[]).map((t) => ({
+        id: String(t["id"]),
+        name: String(t["name"]),
+        enabled: Boolean(t["enabled"]),
+      }))
+    : [];
+
   const envFormat = process.env["GCAL_CLI_FORMAT"];
   const envTimezone = process.env["GCAL_CLI_TIMEZONE"];
 
@@ -56,6 +64,7 @@ export function parseConfig(toml: string): AppConfig {
       ? validateOutputFormat(envFormat, "GCAL_CLI_FORMAT env var")
       : fileFormat,
     calendars,
+    task_lists,
   };
   if (timezone) {
     config.timezone = timezone;

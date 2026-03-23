@@ -29,6 +29,7 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       { id: "primary", name: "Main Calendar", enabled: true },
       { id: "work@group.calendar.google.com", name: "Work", enabled: true },
     ],
+    task_lists: [],
     ...overrides,
   };
 }
