@@ -420,9 +420,7 @@ describe("handleTaskList", () => {
           }),
         },
         tasks: {
-          list: vi
-            .fn()
-            .mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
+          list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
           get: vi.fn(),
           insert: vi.fn(),
           patch: vi.fn(),
