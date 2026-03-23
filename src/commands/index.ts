@@ -11,6 +11,7 @@ import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { createInitCommand, handleInit } from "./init.ts";
 import { createTasksCommand } from "./tasks/index.ts";
 import { handleTaskLists } from "./tasks/lists.ts";
+import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -84,7 +85,7 @@ export function registerCommands(program: Command): void {
   });
   program.addCommand(calendarsCmd);
 
-  const { tasksCmd, listsCmd: tasksListsCmd } = createTasksCommand();
+  const { tasksCmd, listsCmd: tasksListsCmd, listCmd: tasksListCmd } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
     try {
@@ -100,6 +101,39 @@ export function registerCommands(program: Command): void {
         write: (msg) => process.stdout.write(msg + "\n"),
         configTaskLists: config.task_lists,
       });
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksListCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const listOpts = tasksListCmd.opts<{
+      list?: string;
+      all?: boolean;
+      completed?: boolean;
+      dueBefore?: string;
+      dueAfter?: string;
+    }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskListOptions = {
+        client: tasksClient,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (listOpts.list !== undefined) opts.list = listOpts.list;
+      if (listOpts.all) opts.all = true;
+      if (listOpts.completed) opts.completed = true;
+      if (listOpts.dueBefore !== undefined) opts.dueBefore = listOpts.dueBefore;
+      if (listOpts.dueAfter !== undefined) opts.dueAfter = listOpts.dueAfter;
+      const result = await handleTaskList(opts);
       process.exit(result.exitCode);
     } catch (error) {
       handleError(error, globalOpts.format);

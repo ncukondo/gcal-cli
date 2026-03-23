@@ -1,10 +1,23 @@
 import { Command } from "commander";
 
-export function createTasksCommand(): { tasksCmd: Command; listsCmd: Command } {
+export function createTasksCommand(): {
+  tasksCmd: Command;
+  listsCmd: Command;
+  listCmd: Command;
+} {
   const tasksCmd = new Command("tasks").description("Manage Google Tasks");
 
   const listsCmd = new Command("lists").description("List task lists");
   tasksCmd.addCommand(listsCmd);
 
-  return { tasksCmd, listsCmd };
+  const listCmd = new Command("list")
+    .description("List tasks")
+    .option("-l, --list <name-or-id>", "Task list name or ID")
+    .option("--all", "Include completed tasks")
+    .option("--completed", "Show only completed tasks")
+    .option("--due-before <date>", "Tasks due before date (YYYY-MM-DD)")
+    .option("--due-after <date>", "Tasks due after date (YYYY-MM-DD)");
+  tasksCmd.addCommand(listCmd);
+
+  return { tasksCmd, listsCmd, listCmd };
 }
