@@ -2,6 +2,7 @@ import * as nodeFs from "node:fs";
 import { google } from "googleapis";
 import type { AuthFsAdapter } from "../lib/auth.ts";
 import type { GoogleCalendarApi, GoogleCalendar, GoogleEvent } from "../lib/api.ts";
+import type { GoogleTasksClient, GoogleRawTaskList, GoogleRawTask } from "../lib/tasks-api.ts";
 
 export const fsAdapter: AuthFsAdapter = {
   existsSync: (p: string) => nodeFs.existsSync(p),
@@ -13,6 +14,7 @@ export const fsAdapter: AuthFsAdapter = {
 };
 
 type CalendarClient = ReturnType<typeof google.calendar>;
+type TasksClient = ReturnType<typeof google.tasks>;
 
 type CalendarListData = {
   items?: GoogleCalendar[];
@@ -27,6 +29,54 @@ type EventListData = {
 /** Commander option callback to collect repeatable values into an array. */
 export function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+type TaskListsData = {
+  items?: GoogleRawTaskList[];
+  nextPageToken?: string;
+};
+
+type TasksData = {
+  items?: GoogleRawTask[];
+  nextPageToken?: string;
+};
+
+export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
+  return {
+    tasklists: {
+      list: async (p) => {
+        const res = await tasks.tasklists.list(p);
+        const data: TaskListsData = {};
+        if (res.data.items) data.items = res.data.items as GoogleRawTaskList[];
+        if (res.data.nextPageToken) data.nextPageToken = res.data.nextPageToken;
+        return { data };
+      },
+    },
+    tasks: {
+      list: async (p) => {
+        const res = await tasks.tasks.list(p);
+        const data: TasksData = {};
+        if (res.data.items) data.items = res.data.items as GoogleRawTask[];
+        if (res.data.nextPageToken) data.nextPageToken = res.data.nextPageToken;
+        return { data };
+      },
+      get: async (p) => {
+        const res = await tasks.tasks.get(p);
+        return { data: res.data as GoogleRawTask };
+      },
+      insert: async (p) => {
+        const res = await tasks.tasks.insert(p);
+        return { data: res.data as GoogleRawTask };
+      },
+      patch: async (p) => {
+        const res = await tasks.tasks.patch(p);
+        return { data: res.data as GoogleRawTask };
+      },
+      delete: async (p) => {
+        await tasks.tasks.delete(p);
+      },
+    },
+  };
 }
 
 export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalendarApi {
