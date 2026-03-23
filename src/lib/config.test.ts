@@ -110,7 +110,42 @@ enabled = false
     expect(config).toEqual({
       default_format: "text",
       calendars: [],
+      task_lists: [],
     });
+  });
+
+  it("parses task_lists from TOML", () => {
+    const toml = `
+[[task_lists]]
+id = "tl_1"
+name = "My Tasks"
+enabled = true
+
+[[task_lists]]
+id = "tl_2"
+name = "Work"
+enabled = false
+`;
+    const config = parseConfig(toml);
+    expect(config.task_lists).toHaveLength(2);
+    expect(config.task_lists[0]).toEqual({
+      id: "tl_1",
+      name: "My Tasks",
+      enabled: true,
+    });
+    expect(config.task_lists[1]).toEqual({
+      id: "tl_2",
+      name: "Work",
+      enabled: false,
+    });
+  });
+
+  it("defaults task_lists to empty array when not present", () => {
+    const toml = `
+timezone = "Asia/Tokyo"
+`;
+    const config = parseConfig(toml);
+    expect(config.task_lists).toEqual([]);
   });
 
   it("respects GCAL_CLI_FORMAT env var", () => {
@@ -231,6 +266,7 @@ describe("selectCalendars", () => {
       { id: "work", name: "Work", enabled: false },
       { id: "family", name: "Family", enabled: true },
     ],
+    task_lists: [],
   };
 
   it("returns CLI-specified calendars when -c provided (overrides config)", () => {
@@ -271,6 +307,7 @@ describe("selectCalendars", () => {
     const emptyConfig: AppConfig = {
       default_format: "text",
       calendars: [{ id: "work", name: "Work", enabled: false }],
+      task_lists: [],
     };
     const result = selectCalendars(undefined, emptyConfig);
     expect(result).toEqual([]);

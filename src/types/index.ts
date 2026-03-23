@@ -10,6 +10,34 @@ export interface AppConfig {
   timezone?: string;
   default_format: OutputFormat;
   calendars: CalendarConfig[];
+  task_lists: TaskListConfig[];
+}
+
+export type TaskStatus = "needsAction" | "completed";
+
+export interface TaskList {
+  id: string;
+  title: string;
+  updated: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  notes: string | null;
+  status: TaskStatus;
+  due: string | null;
+  completed: string | null;
+  list_id: string;
+  list_title: string;
+  parent: string | null;
+  updated: string;
+}
+
+export interface TaskListConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
 }
 
 export type EventStatus = "confirmed" | "tentative" | "cancelled";
