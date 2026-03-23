@@ -143,12 +143,10 @@ function createMockClient(responses: Record<string, unknown>): GoogleTasksClient
       }),
     },
     tasks: {
-      list: vi
-        .fn()
-        .mockImplementation(async (params: { tasklist: string; pageToken?: string }) => {
-          const key = params.pageToken ?? "default";
-          return { data: responses[key] ?? responses["default"] };
-        }),
+      list: vi.fn().mockImplementation(async (params: { tasklist: string; pageToken?: string }) => {
+        const key = params.pageToken ?? "default";
+        return { data: responses[key] ?? responses["default"] };
+      }),
       get: vi.fn().mockImplementation(async (params: { tasklist: string; task: string }) => {
         const key = params.task;
         const response = responses[key];
@@ -165,16 +163,14 @@ function createMockClient(responses: Record<string, unknown>): GoogleTasksClient
       patch: vi.fn().mockImplementation(async () => {
         return { data: responses["patched"] ?? responses["default"] };
       }),
-      delete: vi
-        .fn()
-        .mockImplementation(async (params: { tasklist: string; task: string }) => {
-          const key = params.task;
-          if (responses[key] === "not_found") {
-            const error = new Error("Not Found") as Error & { code: number };
-            error.code = 404;
-            throw error;
-          }
-        }),
+      delete: vi.fn().mockImplementation(async (params: { tasklist: string; task: string }) => {
+        const key = params.task;
+        if (responses[key] === "not_found") {
+          const error = new Error("Not Found") as Error & { code: number };
+          error.code = 404;
+          throw error;
+        }
+      }),
     },
   };
 }
@@ -305,15 +301,11 @@ describe("listTasks", () => {
   it("handles pagination", async () => {
     const client = createMockClient({
       default: {
-        items: [
-          { id: "task1", title: "First", status: "needsAction", updated: "" },
-        ],
+        items: [{ id: "task1", title: "First", status: "needsAction", updated: "" }],
         nextPageToken: "page2",
       },
       page2: {
-        items: [
-          { id: "task2", title: "Second", status: "needsAction", updated: "" },
-        ],
+        items: [{ id: "task2", title: "Second", status: "needsAction", updated: "" }],
       },
     });
 
@@ -456,9 +448,7 @@ describe("createTask", () => {
     };
 
     const api = createGoogleTasksApi(client);
-    const error = await api
-      .createTask("@default", { title: "Test" })
-      .catch((e: unknown) => e);
+    const error = await api.createTask("@default", { title: "Test" }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });

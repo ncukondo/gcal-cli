@@ -53,7 +53,13 @@ export interface GoogleTasksClient {
     patch: (params: {
       tasklist: string;
       task: string;
-      requestBody: Partial<{ title: string; notes: string; due: string; status: string; completed: string | null }>;
+      requestBody: Partial<{
+        title: string;
+        notes: string;
+        due: string;
+        status: string;
+        completed: string | null;
+      }>;
     }) => Promise<{ data: GoogleRawTask }>;
     delete: (params: { tasklist: string; task: string }) => Promise<void>;
   };
