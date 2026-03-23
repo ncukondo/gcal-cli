@@ -11,7 +11,7 @@ import { createCalendarsCommand, handleCalendars } from "./calendars.ts";
 import { createInitCommand, handleInit } from "./init.ts";
 import { createTasksCommand } from "./tasks/index.ts";
 import { handleTaskLists } from "./tasks/lists.ts";
-import { handleTaskList } from "./tasks/list.ts";
+import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -121,7 +121,7 @@ export function registerCommands(program: Command): void {
       const tasksClient = createGoogleTasksClient(
         google.tasks({ version: "v1", auth: oauth2Client }),
       );
-      const opts: Parameters<typeof handleTaskList>[0] = {
+      const opts: HandleTaskListOptions = {
         client: tasksClient,
         format: globalOpts.format,
         quiet: globalOpts.quiet,

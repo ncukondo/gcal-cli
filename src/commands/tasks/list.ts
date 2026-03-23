@@ -4,7 +4,15 @@ import { formatJsonSuccess } from "../../lib/output.ts";
 import { ExitCode } from "../../types/index.ts";
 import type { CommandResult, OutputFormat, Task, TaskListConfig } from "../../types/index.ts";
 
-interface HandleTaskListOptions {
+function isValidDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return false;
+  // Verify round-trip (catches invalid dates like 2026-02-30)
+  return date.toISOString().startsWith(value);
+}
+
+export interface HandleTaskListOptions {
   client: GoogleTasksClient;
   format: OutputFormat;
   quiet: boolean;
@@ -24,7 +32,7 @@ function resolveTaskListFromConfig(
   if (!listOption) {
     const enabled = configLists.find((c) => c.enabled);
     if (enabled) return { id: enabled.id, title: enabled.name };
-    return configLists.length > 0 ? null : null;
+    return null;
   }
 
   // Try matching by name first
@@ -61,17 +69,18 @@ async function resolveTaskList(
 }
 
 function formatDueInfo(task: Task): string {
-  if (task.status === "completed" && task.completed) {
-    const month = task.completed.slice(5, 7);
-    const day = task.completed.slice(8, 10);
-    return ` (completed: ${month}/${day})`;
-  }
+  const parts: string[] = [];
   if (task.due) {
     const month = task.due.slice(5, 7);
     const day = task.due.slice(8, 10);
-    return ` (due: ${month}/${day})`;
+    parts.push(`due: ${month}/${day}`);
   }
-  return "";
+  if (task.status === "completed" && task.completed) {
+    const month = task.completed.slice(5, 7);
+    const day = task.completed.slice(8, 10);
+    parts.push(`completed: ${month}/${day}`);
+  }
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
 function formatTaskLine(task: Task): string {
@@ -110,7 +119,7 @@ function filterTasks(
 
   // Due date filters
   if (options.dueBefore) {
-    filtered = filtered.filter((t) => t.due !== null && t.due < options.dueBefore!);
+    filtered = filtered.filter((t) => t.due !== null && t.due <= options.dueBefore!);
   }
   if (options.dueAfter) {
     filtered = filtered.filter((t) => t.due !== null && t.due >= options.dueAfter!);
@@ -122,6 +131,15 @@ function filterTasks(
 export async function handleTaskList(opts: HandleTaskListOptions): Promise<CommandResult> {
   const { client, format, quiet, write, configTaskLists, all, completed, dueBefore, dueAfter } =
     opts;
+
+  if (dueBefore !== undefined && !isValidDateString(dueBefore)) {
+    write(`Error: Invalid date for --due-before: "${dueBefore}". Expected format: YYYY-MM-DD`);
+    return { exitCode: ExitCode.ARGUMENT };
+  }
+  if (dueAfter !== undefined && !isValidDateString(dueAfter)) {
+    write(`Error: Invalid date for --due-after: "${dueAfter}". Expected format: YYYY-MM-DD`);
+    return { exitCode: ExitCode.ARGUMENT };
+  }
 
   const resolved = await resolveTaskList(client, configTaskLists, opts.list);
 

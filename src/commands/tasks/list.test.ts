@@ -64,6 +64,13 @@ const completedTask = makeRawTask({
   completed: "2026-03-22T14:30:00.000Z",
 });
 
+const completedTaskWithDue = makeRawTask({
+  title: "Submit tax forms",
+  status: "completed",
+  due: "2026-03-20T00:00:00.000Z",
+  completed: "2026-03-19T10:00:00.000Z",
+});
+
 const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskList", () => {
@@ -106,6 +113,23 @@ describe("handleTaskList", () => {
       const text = output.join("\n");
       expect(text).toContain("□ Buy groceries (due: 03/25)");
       expect(text).toContain("☑ Fix login bug (completed: 03/22)");
+    });
+
+    it("shows both due date and completed date for completed tasks with due", async () => {
+      const client = makeClient([completedTaskWithDue]);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "text",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        all: true,
+      });
+
+      const text = output.join("\n");
+      expect(text).toContain("☑ Submit tax forms (due: 03/20, completed: 03/19)");
     });
 
     it("shows only completed tasks when --completed", async () => {
@@ -240,7 +264,7 @@ describe("handleTaskList", () => {
   });
 
   describe("due date filters", () => {
-    it("filters tasks with --due-before", async () => {
+    it("filters tasks with --due-before (inclusive)", async () => {
       const client = makeClient(sampleTasks);
       const { output, write } = makeOutput();
 
@@ -250,13 +274,15 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
-        dueBefore: "2026-03-26",
+        dueBefore: "2026-03-25",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
       const text = output.join("\n");
       expect(text).toContain("Buy groceries");
       expect(text).not.toContain("Write report");
+      // Tasks with no due date are excluded
+      expect(text).not.toContain("Call dentist");
     });
 
     it("filters tasks with --due-after", async () => {
@@ -278,6 +304,59 @@ describe("handleTaskList", () => {
       expect(text).toContain("Write report");
       // Tasks with no due date are excluded when filtering by due-after
       expect(text).not.toContain("Call dentist");
+    });
+  });
+
+  describe("date validation", () => {
+    it("returns error for invalid --due-before date", async () => {
+      const client = makeClient(sampleTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        dueBefore: "not-a-date",
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("Invalid date for --due-before");
+    });
+
+    it("returns error for invalid --due-after date", async () => {
+      const client = makeClient(sampleTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        dueAfter: "2026-02-30",
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("Invalid date for --due-after");
+    });
+
+    it("accepts valid YYYY-MM-DD dates", async () => {
+      const client = makeClient(sampleTasks);
+      const { write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        dueBefore: "2026-12-31",
+        dueAfter: "2026-01-01",
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
     });
   });
 
