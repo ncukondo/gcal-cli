@@ -264,9 +264,7 @@ describe("AppConfig with task_lists", () => {
     const config: AppConfig = {
       default_format: "text",
       calendars: [],
-      task_lists: [
-        { id: "tl_1", name: "My Tasks", enabled: true },
-      ],
+      task_lists: [{ id: "tl_1", name: "My Tasks", enabled: true }],
     };
     expect(isType<AppConfig>(config)).toBe(true);
     expect(config.task_lists).toHaveLength(1);
