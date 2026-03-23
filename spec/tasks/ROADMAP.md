@@ -8,7 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 12: Google Tasks - Read Commands
 
-32. [032-tasks-list-command](./032-tasks-list-command.md) — `gcal tasks list` コマンド
 33. [033-tasks-show-command](./033-tasks-show-command.md) — `gcal tasks show` コマンド
 
 ### Phase 13: Google Tasks - Write Commands
@@ -29,6 +28,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ### Phase 12: Google Tasks - Read Commands
 
 31. [031-tasks-lists-command](./completed/031-tasks-lists-command.md) — `gcal tasks lists` コマンド (#45)
+32. [032-tasks-list-command](./completed/032-tasks-list-command.md) — `gcal tasks list` コマンド (#46)
 
 ### Phase 11: Google Tasks - Foundation
 
