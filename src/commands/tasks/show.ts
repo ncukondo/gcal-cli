@@ -21,8 +21,13 @@ function detailLine(label: string, value: string): string {
   return `${label}:`.padEnd(LABEL_WIDTH) + value;
 }
 
+function stripMilliseconds(iso: string): string {
+  return iso.replace(/\.\d{3}Z$/, "Z");
+}
+
 function formatTaskDetailText(task: Task): string {
   const lines: string[] = [];
+  lines.push(detailLine("ID", task.id));
   lines.push(detailLine("Title", task.title));
   lines.push(detailLine("Status", task.status));
   if (task.due) {
@@ -32,7 +37,7 @@ function formatTaskDetailText(task: Task): string {
     lines.push(detailLine("Notes", task.notes));
   }
   lines.push(detailLine("List", task.list_title));
-  lines.push(detailLine("Updated", task.updated));
+  lines.push(detailLine("Updated", stripMilliseconds(task.updated)));
   return lines.join("\n");
 }
 
@@ -42,13 +47,10 @@ export async function handleTaskShow(opts: HandleTaskShowOptions): Promise<Comma
   const resolved = await resolveTaskList(client, configTaskLists, opts.list);
   const task = await getTask(client, resolved.id, resolved.title, taskId);
 
-  if (quiet) {
-    write(`${task.title}\t${task.status}\t${task.due ?? ""}`);
-    return { exitCode: ExitCode.SUCCESS };
-  }
-
   if (format === "json") {
     write(formatJsonSuccess({ task }));
+  } else if (quiet) {
+    write(`${task.title}\t${task.status}\t${task.due ?? ""}`);
   } else {
     write(formatTaskDetailText(task));
   }

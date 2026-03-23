@@ -65,12 +65,13 @@ describe("handleTaskShow", () => {
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
       const text = output.join("\n");
+      expect(text).toContain("ID:        abc123");
       expect(text).toContain("Title:     Buy groceries");
       expect(text).toContain("Status:    needsAction");
       expect(text).toContain("Due:       2026-03-25");
       expect(text).toContain("Notes:     Milk, eggs, bread");
       expect(text).toContain("List:      My Tasks");
-      expect(text).toContain("Updated:   2026-03-20T10:00:00.000Z");
+      expect(text).toContain("Updated:   2026-03-20T10:00:00Z");
     });
 
     it("omits due line when task has no due date", async () => {
