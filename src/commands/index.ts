@@ -91,7 +91,9 @@ export function registerCommands(program: Command): void {
     try {
       const config = loadConfig(fsAdapter);
       const oauth2Client = await getAuthenticatedClient(fsAdapter);
-      const tasksClient = createGoogleTasksClient(google.tasks({ version: "v1", auth: oauth2Client }));
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
       const result = await handleTaskLists({
         client: tasksClient,
         format: globalOpts.format,
