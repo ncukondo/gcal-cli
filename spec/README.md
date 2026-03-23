@@ -16,6 +16,7 @@
 | [output.md](./output.md) | Output format specifications |
 | [auth.md](./auth.md) | Authentication flow |
 | [architecture.md](./architecture.md) | Project structure and module responsibilities |
+| [google-tasks.md](./google-tasks.md) | Google Tasks integration specification |
 | [testing.md](./testing.md) | Test strategy and TDD approach |
 
 ## Task Management

@@ -6,7 +6,28 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-(none)
+### Phase 11: Google Tasks - Foundation
+
+28. [028-task-types](./028-task-types.md) — Google Tasks 型定義
+29. [029-auth-tasks-scope](./029-auth-tasks-scope.md) — OAuth スコープに Tasks を追加
+30. [030-tasks-api-wrapper](./030-tasks-api-wrapper.md) — Google Tasks API ラッパー
+
+### Phase 12: Google Tasks - Read Commands
+
+31. [031-tasks-lists-command](./031-tasks-lists-command.md) — `gcal tasks lists` コマンド
+32. [032-tasks-list-command](./032-tasks-list-command.md) — `gcal tasks list` コマンド
+33. [033-tasks-show-command](./033-tasks-show-command.md) — `gcal tasks show` コマンド
+
+### Phase 13: Google Tasks - Write Commands
+
+34. [034-tasks-add-command](./034-tasks-add-command.md) — `gcal tasks add` コマンド
+35. [035-tasks-update-command](./035-tasks-update-command.md) — `gcal tasks update` コマンド
+36. [036-tasks-done-undone-command](./036-tasks-done-undone-command.md) — `gcal tasks done` / `gcal tasks undone` コマンド
+37. [037-tasks-delete-command](./037-tasks-delete-command.md) — `gcal tasks delete` コマンド
+
+### Phase 14: Google Tasks - Config Integration
+
+38. [038-init-task-lists](./038-init-task-lists.md) — `gcal init` にタスクリスト設定を追加
 
 ## In Progress
 

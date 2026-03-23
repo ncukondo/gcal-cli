@@ -7,7 +7,10 @@
 ```
 https://www.googleapis.com/auth/calendar.readonly
 https://www.googleapis.com/auth/calendar.events
+https://www.googleapis.com/auth/tasks
 ```
+
+Note: `tasks` scope is required for Google Tasks integration. Users upgrading from a previous version need to re-authenticate (`gcal auth`) to grant the new scope.
 
 ### Authentication Steps
 
@@ -41,7 +44,7 @@ https://www.googleapis.com/auth/calendar.events
 Users need to create OAuth credentials in Google Cloud Console:
 
 1. Create project at https://console.cloud.google.com
-2. Enable Google Calendar API
+2. Enable Google Calendar API and Google Tasks API
 3. Create OAuth 2.0 credentials (Desktop app)
 4. Copy the **Client ID** and **Client Secret** from the credentials page
 

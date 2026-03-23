@@ -39,6 +39,20 @@ enabled = true
 id = "work@group.calendar.google.com"
 name = "Work Main"
 enabled = false
+
+# Task list configurations (for Google Tasks)
+# Only task lists with enabled = true are used by default
+# Command-line --list option overrides this setting
+
+[[task_lists]]
+id = "@default"
+name = "My Tasks"
+enabled = true
+
+[[task_lists]]
+id = "abc123"
+name = "Work"
+enabled = false
 ```
 
 ## Timezone Resolution
@@ -53,6 +67,12 @@ Priority order:
 1. If `-c` option is provided: use specified calendars only (overrides config)
 2. Otherwise: use calendars with `enabled = true` in config
 3. If no config exists: auto-discover calendars containing "main" in name
+
+## Task List Selection Logic
+
+1. If `--list` option is provided: use specified task list (by name or ID)
+2. Otherwise: use the first task list with `enabled = true` in config
+3. If no `task_lists` in config: use the default task list (`@default`)
 
 ## Calendar Discovery
 

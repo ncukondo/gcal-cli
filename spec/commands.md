@@ -242,6 +242,135 @@ Options:
   --calendar, -c <id>  Calendar ID to query (single)
 ```
 
+### `gcal tasks lists`
+
+List task lists from Google Tasks.
+
+```bash
+gcal tasks lists
+gcal tasks lists -f json
+gcal tasks lists -q          # ID only
+```
+
+### `gcal tasks list`
+
+List tasks in a task list. Shows only incomplete tasks by default.
+
+```bash
+gcal tasks list [options]
+
+Options:
+  --list, -l <name|id>    Task list name or ID (default: first enabled or @default)
+  --all                   Include completed tasks
+  --completed             Show completed tasks only
+  --due-before <date>     Tasks due before date (YYYY-MM-DD)
+  --due-after <date>      Tasks due after date (YYYY-MM-DD)
+```
+
+Examples:
+```bash
+gcal tasks list
+gcal tasks list --all
+gcal tasks list --completed
+gcal tasks list --list "Work"
+gcal tasks list --due-before 2026-03-30
+gcal tasks list -f json
+gcal tasks list -q
+```
+
+Quiet mode (`-q`): `[□/☑] Title (due: MM/DD)` per line.
+
+### `gcal tasks show`
+
+Show task details.
+
+```bash
+gcal tasks show <task-id> [options]
+
+Options:
+  --list, -l <name|id>    Task list name or ID
+```
+
+Quiet mode (`-q`): `Title\tStatus\tDue` (TSV, 1 line).
+
+### `gcal tasks add`
+
+Create a new task.
+
+```bash
+gcal tasks add [options]
+
+Options:
+  --title, -t <title>     Task title (required)
+  --notes, -n <text>      Notes
+  --due <date>            Due date (YYYY-MM-DD)
+  --list, -l <name|id>    Task list name or ID
+  --parent <task-id>      Parent task ID (create as subtask)
+```
+
+Examples:
+```bash
+gcal tasks add -t "Buy groceries"
+gcal tasks add -t "Write report" --due 2026-03-26 --notes "Q1 summary"
+gcal tasks add -t "Subtask" --parent abc123
+gcal tasks add -t "Work item" --list "Work"
+```
+
+Quiet mode (`-q`): Task ID only.
+
+### `gcal tasks update`
+
+Update an existing task.
+
+```bash
+gcal tasks update <task-id> [options]
+
+Options:
+  --title, -t <title>     New title
+  --notes, -n <text>      New notes
+  --due <date>            New due date (YYYY-MM-DD)
+  --list, -l <name|id>    Task list name or ID
+```
+
+Quiet mode (`-q`): Task ID only.
+
+### `gcal tasks done`
+
+Mark a task as completed.
+
+```bash
+gcal tasks done <task-id> [options]
+
+Options:
+  --list, -l <name|id>    Task list name or ID
+```
+
+Quiet mode (`-q`): Task ID only.
+
+### `gcal tasks undone`
+
+Mark a task as incomplete.
+
+```bash
+gcal tasks undone <task-id> [options]
+
+Options:
+  --list, -l <name|id>    Task list name or ID
+```
+
+Quiet mode (`-q`): Task ID only.
+
+### `gcal tasks delete`
+
+Delete a task.
+
+```bash
+gcal tasks delete <task-id> [options]
+
+Options:
+  --list, -l <name|id>    Task list name or ID
+```
+
 ### `gcal auth`
 
 Manage OAuth authentication.

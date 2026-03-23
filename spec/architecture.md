@@ -22,9 +22,20 @@ gcal-cli/
 │   │   ├── update.ts         # gcal update
 │   │   ├── delete.ts         # gcal delete
 │   │   ├── calendars.ts      # gcal calendars
-│   │   └── auth.ts           # gcal auth
+│   │   ├── auth.ts           # gcal auth
+│   │   └── tasks/
+│   │       ├── index.ts      # tasks subcommand registration
+│   │       ├── lists.ts      # gcal tasks lists
+│   │       ├── list.ts       # gcal tasks list
+│   │       ├── show.ts       # gcal tasks show
+│   │       ├── add.ts        # gcal tasks add
+│   │       ├── update.ts     # gcal tasks update
+│   │       ├── done.ts       # gcal tasks done
+│   │       ├── undone.ts     # gcal tasks undone
+│   │       └── delete.ts     # gcal tasks delete
 │   ├── lib/
 │   │   ├── api.ts            # Google Calendar API wrapper
+│   │   ├── tasks-api.ts      # Google Tasks API wrapper
 │   │   ├── auth.ts           # OAuth handling
 │   │   ├── config.ts         # Config file management
 │   │   ├── timezone.ts       # Timezone resolution
@@ -62,6 +73,13 @@ Each command file exports a function that:
 - Handles pagination
 - Normalizes response data to internal types
 - Supports both timed and all-day events
+
+### `src/lib/tasks-api.ts`
+
+- Wraps Google Tasks API calls
+- Handles pagination
+- Normalizes response data to internal types (Task, TaskList)
+- Supports CRUD operations and status changes (done/undone)
 
 ### `src/lib/auth.ts`
 
