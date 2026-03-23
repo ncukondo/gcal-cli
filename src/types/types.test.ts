@@ -8,6 +8,11 @@ import type {
   ErrorResponse,
   EventStatus,
   Transparency,
+  TaskStatus,
+  TaskList,
+  Task,
+  TaskListConfig,
+  AppConfig,
 } from "./index.ts";
 import { ExitCode } from "./index.ts";
 
@@ -185,6 +190,86 @@ describe("Transparency", () => {
     for (const value of values) {
       expect(isType<Transparency>(value)).toBe(true);
     }
+  });
+});
+
+describe("TaskStatus", () => {
+  it("accepts needsAction and completed", () => {
+    const statuses: TaskStatus[] = ["needsAction", "completed"];
+    expect(statuses).toHaveLength(2);
+    for (const status of statuses) {
+      expect(isType<TaskStatus>(status)).toBe(true);
+    }
+  });
+});
+
+describe("TaskList", () => {
+  it("accepts a spec-compliant task list object", () => {
+    const taskList: TaskList = {
+      id: "tl_1",
+      title: "My Tasks",
+      updated: "2026-03-20T10:00:00Z",
+    };
+    expect(isType<TaskList>(taskList)).toBe(true);
+  });
+});
+
+describe("Task", () => {
+  it("accepts a spec-compliant task object", () => {
+    const task: Task = {
+      id: "task_1",
+      title: "Buy groceries",
+      notes: "Milk, eggs, bread",
+      status: "needsAction",
+      due: "2026-03-25T00:00:00Z",
+      completed: null,
+      list_id: "tl_1",
+      list_title: "My Tasks",
+      parent: null,
+      updated: "2026-03-20T10:00:00Z",
+    };
+    expect(isType<Task>(task)).toBe(true);
+  });
+
+  it("accepts a completed task with nullable fields", () => {
+    const task: Task = {
+      id: "task_2",
+      title: "Done task",
+      notes: null,
+      status: "completed",
+      due: null,
+      completed: "2026-03-21T15:00:00Z",
+      list_id: "tl_1",
+      list_title: "My Tasks",
+      parent: "task_1",
+      updated: "2026-03-21T15:00:00Z",
+    };
+    expect(isType<Task>(task)).toBe(true);
+  });
+});
+
+describe("TaskListConfig", () => {
+  it("accepts a spec-compliant task list config", () => {
+    const config: TaskListConfig = {
+      id: "tl_1",
+      name: "My Tasks",
+      enabled: true,
+    };
+    expect(isType<TaskListConfig>(config)).toBe(true);
+  });
+});
+
+describe("AppConfig with task_lists", () => {
+  it("accepts AppConfig with task_lists field", () => {
+    const config: AppConfig = {
+      default_format: "text",
+      calendars: [],
+      task_lists: [
+        { id: "tl_1", name: "My Tasks", enabled: true },
+      ],
+    };
+    expect(isType<AppConfig>(config)).toBe(true);
+    expect(config.task_lists).toHaveLength(1);
   });
 });
 
