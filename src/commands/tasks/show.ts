@@ -1,8 +1,9 @@
 import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
-import { getTask, listTaskLists } from "../../lib/tasks-api.ts";
+import { getTask } from "../../lib/tasks-api.ts";
 import { formatJsonSuccess } from "../../lib/output.ts";
 import { ExitCode } from "../../types/index.ts";
 import type { CommandResult, OutputFormat, Task, TaskListConfig } from "../../types/index.ts";
+import { resolveTaskList } from "./resolve.ts";
 
 export interface HandleTaskShowOptions {
   client: GoogleTasksClient;
@@ -12,43 +13,6 @@ export interface HandleTaskShowOptions {
   write: (msg: string) => void;
   configTaskLists: TaskListConfig[];
   list?: string;
-}
-
-function resolveTaskListFromConfig(
-  configLists: TaskListConfig[],
-  listOption?: string,
-): { id: string; title: string } | null {
-  if (!listOption) {
-    const enabled = configLists.find((c) => c.enabled);
-    if (enabled) return { id: enabled.id, title: enabled.name };
-    return null;
-  }
-
-  const byName = configLists.find((c) => c.name === listOption);
-  if (byName) return { id: byName.id, title: byName.name };
-
-  const byId = configLists.find((c) => c.id === listOption);
-  if (byId) return { id: byId.id, title: byId.name };
-
-  return null;
-}
-
-async function resolveTaskList(
-  client: GoogleTasksClient,
-  configLists: TaskListConfig[],
-  listOption?: string,
-): Promise<{ id: string; title: string }> {
-  const fromConfig = resolveTaskListFromConfig(configLists, listOption);
-  if (fromConfig) return fromConfig;
-
-  if (listOption) {
-    const apiLists = await listTaskLists(client);
-    const byTitle = apiLists.find((l) => l.title === listOption);
-    if (byTitle) return { id: byTitle.id, title: byTitle.title };
-    return { id: listOption, title: listOption };
-  }
-
-  return { id: "@default", title: "My Tasks" };
 }
 
 const LABEL_WIDTH = 11;
