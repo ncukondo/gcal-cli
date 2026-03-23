@@ -1,6 +1,9 @@
 import * as z from "zod";
 import type { Calendar, CalendarEvent, ErrorCode, Transparency } from "../types/index.ts";
 import { AuthError } from "./auth.ts";
+import { MAX_PAGES, mapApiError } from "./api-utils.ts";
+
+export { MAX_PAGES };
 
 export class ApiError extends Error {
   constructor(
@@ -11,8 +14,6 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
-
-export const MAX_PAGES = 100;
 
 const EventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]).catch("confirmed");
 const TransparencySchema = z.enum(["opaque", "transparent"]).catch("opaque");
@@ -335,30 +336,9 @@ export async function deleteEvent(
   }
 }
 
-function isGoogleApiError(error: unknown): error is Error & { code: number } {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "number"
-  );
-}
-
 export function isAuthRequiredError(error: unknown): boolean {
   return (
     (error instanceof ApiError || error instanceof AuthError) &&
     (error.code === "AUTH_REQUIRED" || error.code === "AUTH_EXPIRED")
   );
-}
-
-function mapApiError(error: unknown): never {
-  if (isGoogleApiError(error)) {
-    if (error.code === 401 || error.code === 403) {
-      throw new ApiError("AUTH_REQUIRED", error.message);
-    }
-    if (error.code === 404) {
-      throw new ApiError("NOT_FOUND", error.message);
-    }
-    throw new ApiError("API_ERROR", error.message);
-  }
-  throw error;
 }
