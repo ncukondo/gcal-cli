@@ -1,82 +1,49 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
-import type { GoogleRawTask } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import type { TaskListConfig } from "../../types/index.ts";
 import { handleTaskList } from "./list.ts";
+import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeRawTask(overrides: Partial<GoogleRawTask> & { title: string }): GoogleRawTask {
-  return {
-    id: overrides.id ?? `task-${overrides.title.toLowerCase().replace(/\s+/g, "-")}`,
-    title: overrides.title,
-    notes: overrides.notes ?? null,
-    status: overrides.status ?? "needsAction",
-    due: overrides.due ?? null,
-    completed: overrides.completed ?? null,
-    deleted: false,
-    hidden: false,
-    parent: overrides.parent ?? null,
-    position: "00000000000000000000",
-    updated: overrides.updated ?? "2026-03-20T10:00:00.000Z",
-  };
+function makeListClient(tasks: ReturnType<typeof makeRawTask>[]) {
+  return makeClient({ tasksList: { data: { items: tasks, nextPageToken: undefined } } });
 }
 
-function makeClient(tasks: GoogleRawTask[]): GoogleTasksClient {
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: {
-          items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-          nextPageToken: undefined,
-        },
-      }),
-    },
-    tasks: {
-      list: vi.fn().mockResolvedValue({
-        data: { items: tasks, nextPageToken: undefined },
-      }),
-      get: vi.fn(),
-      insert: vi.fn(),
-      patch: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
-}
-
-const sampleTasks: GoogleRawTask[] = [
-  makeRawTask({ title: "Buy groceries", due: "2026-03-25T00:00:00.000Z" }),
+const sampleTasks = [
   makeRawTask({
+    id: "task-buy-groceries",
+    title: "Buy groceries",
+    due: "2026-03-25T00:00:00.000Z",
+  }),
+  makeRawTask({
+    id: "task-write-report",
     title: "Write report",
     due: "2026-03-26T00:00:00.000Z",
     notes: "Q1 summary for marketing team",
   }),
-  makeRawTask({ title: "Call dentist" }),
+  makeRawTask({ id: "task-call-dentist", title: "Call dentist" }),
 ];
 
 const completedTask = makeRawTask({
+  id: "task-fix-login-bug",
   title: "Fix login bug",
   status: "completed",
   completed: "2026-03-22T14:30:00.000Z",
+  updated: "2026-03-20T10:00:00.000Z",
 });
 
 const completedTaskWithDue = makeRawTask({
+  id: "task-submit-tax-forms",
   title: "Submit tax forms",
   status: "completed",
   due: "2026-03-20T00:00:00.000Z",
   completed: "2026-03-19T10:00:00.000Z",
+  updated: "2026-03-20T10:00:00.000Z",
 });
-
-const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskList", () => {
   describe("text output", () => {
     it("shows only needsAction tasks by default with correct formatting", async () => {
-      const client = makeClient([...sampleTasks]);
+      const client = makeListClient([...sampleTasks]);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -97,7 +64,7 @@ describe("handleTaskList", () => {
     });
 
     it("shows completed tasks with ☑ and completed date when --all", async () => {
-      const client = makeClient([...sampleTasks, completedTask]);
+      const client = makeListClient([...sampleTasks, completedTask]);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -116,7 +83,7 @@ describe("handleTaskList", () => {
     });
 
     it("shows both due date and completed date for completed tasks with due", async () => {
-      const client = makeClient([completedTaskWithDue]);
+      const client = makeListClient([completedTaskWithDue]);
       const { output, write } = makeOutput();
 
       await handleTaskList({
@@ -133,7 +100,7 @@ describe("handleTaskList", () => {
     });
 
     it("shows only completed tasks when --completed", async () => {
-      const client = makeClient([...sampleTasks, completedTask]);
+      const client = makeListClient([...sampleTasks, completedTask]);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -155,10 +122,11 @@ describe("handleTaskList", () => {
 
     it("shows notes only first line indented", async () => {
       const multilineNotes = makeRawTask({
+        id: "task-multi",
         title: "Multi note task",
         notes: "First line of notes\nSecond line ignored",
       });
-      const client = makeClient([multilineNotes]);
+      const client = makeListClient([multilineNotes]);
       const { output, write } = makeOutput();
 
       await handleTaskList({
@@ -177,7 +145,7 @@ describe("handleTaskList", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { write } = makeOutput();
 
       await handleTaskList({
@@ -194,7 +162,7 @@ describe("handleTaskList", () => {
     });
 
     it("uses first enabled list from config when no --list", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { write } = makeOutput();
 
       await handleTaskList({
@@ -214,7 +182,7 @@ describe("handleTaskList", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       // Override tasklists.list to return multiple lists
       client.tasklists.list = vi.fn().mockResolvedValue({
         data: {
@@ -245,7 +213,7 @@ describe("handleTaskList", () => {
     });
 
     it("uses --list value directly as ID if not found in config", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { write } = makeOutput();
 
       await handleTaskList({
@@ -265,7 +233,7 @@ describe("handleTaskList", () => {
 
   describe("due date filters", () => {
     it("filters tasks with --due-before (inclusive)", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -286,7 +254,7 @@ describe("handleTaskList", () => {
     });
 
     it("filters tasks with --due-after", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -309,7 +277,7 @@ describe("handleTaskList", () => {
 
   describe("date validation", () => {
     it("returns error for invalid --due-before date", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -326,7 +294,7 @@ describe("handleTaskList", () => {
     });
 
     it("returns error for invalid --due-after date", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -343,7 +311,7 @@ describe("handleTaskList", () => {
     });
 
     it("accepts valid YYYY-MM-DD dates", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { write } = makeOutput();
 
       const result = await handleTaskList({
@@ -362,7 +330,7 @@ describe("handleTaskList", () => {
 
   describe("quiet output", () => {
     it("outputs task lines without header", async () => {
-      const client = makeClient([...sampleTasks, completedTask]);
+      const client = makeListClient([...sampleTasks, completedTask]);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -382,7 +350,7 @@ describe("handleTaskList", () => {
     });
 
     it("quiet --all includes completed tasks", async () => {
-      const client = makeClient([...sampleTasks, completedTask]);
+      const client = makeListClient([...sampleTasks, completedTask]);
       const { output, write } = makeOutput();
 
       await handleTaskList({
@@ -402,7 +370,7 @@ describe("handleTaskList", () => {
 
   describe("json output", () => {
     it("returns tasks in success envelope with count and list info", async () => {
-      const client = makeClient(sampleTasks);
+      const client = makeListClient(sampleTasks);
       const { output, write } = makeOutput();
 
       const result = await handleTaskList({
@@ -429,7 +397,7 @@ describe("handleTaskList", () => {
     });
 
     it("json --completed returns only completed tasks", async () => {
-      const client = makeClient([...sampleTasks, completedTask]);
+      const client = makeListClient([...sampleTasks, completedTask]);
       const { output, write } = makeOutput();
 
       await handleTaskList({
@@ -450,7 +418,7 @@ describe("handleTaskList", () => {
 
   describe("API options", () => {
     it("passes showCompleted=true to API when --all", async () => {
-      const client = makeClient([]);
+      const client = makeListClient([]);
       const { write } = makeOutput();
 
       await handleTaskList({
@@ -468,7 +436,7 @@ describe("handleTaskList", () => {
     });
 
     it("passes showCompleted=true to API when --completed", async () => {
-      const client = makeClient([]);
+      const client = makeListClient([]);
       const { write } = makeOutput();
 
       await handleTaskList({

@@ -2,35 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
 import { handleTaskLists } from "./lists.ts";
+import { makeClient, makeOutput } from "./test-helpers.ts";
 
-function makeClient(
-  taskLists: { id: string; title: string; updated: string }[],
-): GoogleTasksClient {
-  const items = taskLists.map((tl) => ({
-    id: tl.id,
-    title: tl.title,
-    updated: tl.updated,
-  }));
-
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: { items, nextPageToken: undefined },
-      }),
-    },
-    tasks: {
-      list: vi.fn(),
-      get: vi.fn(),
-      insert: vi.fn(),
-      patch: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
+function makeTasklistsClient(taskLists: { id: string; title: string; updated: string }[]) {
+  return makeClient({
+    tasklistsList: { data: { items: taskLists, nextPageToken: undefined } },
+  });
 }
 
 const sampleTaskLists = [
@@ -42,7 +19,7 @@ const sampleTaskLists = [
 describe("handleTaskLists", () => {
   describe("text output", () => {
     it("shows task lists with checkboxes when config has task_lists", async () => {
-      const client = makeClient(sampleTaskLists);
+      const client = makeTasklistsClient(sampleTaskLists);
       const { output, write } = makeOutput();
 
       const result = await handleTaskLists({
@@ -66,7 +43,7 @@ describe("handleTaskLists", () => {
     });
 
     it("shows all lists as [x] when config has no task_lists", async () => {
-      const client = makeClient(sampleTaskLists);
+      const client = makeTasklistsClient(sampleTaskLists);
       const { output, write } = makeOutput();
 
       const result = await handleTaskLists({
@@ -88,7 +65,7 @@ describe("handleTaskLists", () => {
 
   describe("quiet output", () => {
     it("outputs only task list IDs", async () => {
-      const client = makeClient(sampleTaskLists);
+      const client = makeTasklistsClient(sampleTaskLists);
       const { output, write } = makeOutput();
 
       const result = await handleTaskLists({
@@ -107,7 +84,7 @@ describe("handleTaskLists", () => {
 
   describe("json output", () => {
     it("returns task lists in success envelope with count", async () => {
-      const client = makeClient(sampleTaskLists);
+      const client = makeTasklistsClient(sampleTaskLists);
       const { output, write } = makeOutput();
 
       const result = await handleTaskLists({
@@ -135,7 +112,7 @@ describe("handleTaskLists", () => {
     });
 
     it("defaults enabled to true when config has no task_lists", async () => {
-      const client = makeClient([sampleTaskLists[0]!]);
+      const client = makeTasklistsClient([sampleTaskLists[0]!]);
       const { output, write } = makeOutput();
 
       await handleTaskLists({
@@ -151,7 +128,7 @@ describe("handleTaskLists", () => {
     });
 
     it("reflects disabled state from config", async () => {
-      const client = makeClient([sampleTaskLists[2]!]);
+      const client = makeTasklistsClient([sampleTaskLists[2]!]);
       const { output, write } = makeOutput();
 
       await handleTaskLists({

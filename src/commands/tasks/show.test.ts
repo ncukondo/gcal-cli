@@ -1,57 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GoogleTasksClient, GoogleRawTask } from "../../lib/tasks-api.ts";
+import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import type { TaskListConfig } from "../../types/index.ts";
 import { handleTaskShow } from "./show.ts";
+import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeRawTask(overrides: Partial<GoogleRawTask> = {}): GoogleRawTask {
-  return {
-    id: "id" in overrides ? overrides.id : "abc123",
-    title: "title" in overrides ? overrides.title : "Buy groceries",
-    notes: "notes" in overrides ? overrides.notes : "Milk, eggs, bread",
-    status: "status" in overrides ? overrides.status : "needsAction",
-    due: "due" in overrides ? overrides.due : "2026-03-25T00:00:00.000Z",
-    completed: overrides.completed ?? null,
-    deleted: false,
-    hidden: false,
-    parent: overrides.parent ?? null,
-    position: "00000000000000000000",
-    updated: overrides.updated ?? "2026-03-20T10:00:00.000Z",
-  };
+const showDefaults = {
+  id: "abc123" as const,
+  notes: "Milk, eggs, bread",
+  due: "2026-03-25T00:00:00.000Z",
+  updated: "2026-03-20T10:00:00.000Z",
+};
+
+function makeGetClient(rawTask = makeRawTask(showDefaults)) {
+  return makeClient({ get: { data: rawTask } });
 }
-
-function makeClient(rawTask: GoogleRawTask): GoogleTasksClient {
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: {
-          items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-          nextPageToken: undefined,
-        },
-      }),
-    },
-    tasks: {
-      list: vi.fn(),
-      get: vi.fn().mockResolvedValue({ data: rawTask }),
-      insert: vi.fn(),
-      patch: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
-}
-
-const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskShow", () => {
   describe("text output", () => {
     it("shows task details in label-value format", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskShow({
@@ -75,8 +42,8 @@ describe("handleTaskShow", () => {
     });
 
     it("omits due line when task has no due date", async () => {
-      const raw = makeRawTask({ due: null });
-      const client = makeClient(raw);
+      const raw = makeRawTask({ ...showDefaults, due: null });
+      const client = makeGetClient(raw);
       const { output, write } = makeOutput();
 
       await handleTaskShow({
@@ -93,8 +60,8 @@ describe("handleTaskShow", () => {
     });
 
     it("omits notes line when task has no notes", async () => {
-      const raw = makeRawTask({ notes: null });
-      const client = makeClient(raw);
+      const raw = makeRawTask({ ...showDefaults, notes: null });
+      const client = makeGetClient(raw);
       const { output, write } = makeOutput();
 
       await handleTaskShow({
@@ -113,8 +80,7 @@ describe("handleTaskShow", () => {
 
   describe("json output", () => {
     it("returns task in success envelope", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskShow({
@@ -143,8 +109,7 @@ describe("handleTaskShow", () => {
 
   describe("quiet output", () => {
     it("outputs TSV: Title, Status, Due", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskShow({
@@ -161,8 +126,8 @@ describe("handleTaskShow", () => {
     });
 
     it("outputs empty string for due when no due date", async () => {
-      const raw = makeRawTask({ due: null });
-      const client = makeClient(raw);
+      const raw = makeRawTask({ ...showDefaults, due: null });
+      const client = makeGetClient(raw);
       const { output, write } = makeOutput();
 
       await handleTaskShow({
@@ -180,8 +145,7 @@ describe("handleTaskShow", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { write } = makeOutput();
 
       await handleTaskShow({
@@ -197,8 +161,7 @@ describe("handleTaskShow", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { write } = makeOutput();
 
       await handleTaskShow({
@@ -218,8 +181,7 @@ describe("handleTaskShow", () => {
     });
 
     it("uses first enabled config list when no --list", async () => {
-      const raw = makeRawTask();
-      const client = makeClient(raw);
+      const client = makeGetClient();
       const { write } = makeOutput();
 
       await handleTaskShow({

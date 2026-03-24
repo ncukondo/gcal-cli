@@ -1,56 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GoogleTasksClient, GoogleRawTask } from "../../lib/tasks-api.ts";
+import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import type { TaskListConfig } from "../../types/index.ts";
 import { handleTaskAdd } from "./add.ts";
+import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeRawTask(overrides: Partial<GoogleRawTask> = {}): GoogleRawTask {
-  return {
-    id: "id" in overrides ? overrides.id : "new-task-id",
-    title: "title" in overrides ? overrides.title : "Buy groceries",
-    notes: "notes" in overrides ? overrides.notes : null,
-    status: "status" in overrides ? overrides.status : "needsAction",
-    due: "due" in overrides ? overrides.due : null,
-    completed: overrides.completed ?? null,
-    deleted: false,
-    hidden: false,
-    parent: overrides.parent ?? null,
-    position: "00000000000000000000",
-    updated: overrides.updated ?? "2026-03-24T10:00:00.000Z",
-  };
+const newTask = makeRawTask({ id: "new-task-id" });
+
+function makeInsertClient(rawTask = newTask) {
+  return makeClient({ insert: { data: rawTask } });
 }
-
-function makeClient(rawTask?: GoogleRawTask): GoogleTasksClient {
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: {
-          items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-          nextPageToken: undefined,
-        },
-      }),
-    },
-    tasks: {
-      list: vi.fn(),
-      get: vi.fn(),
-      insert: vi.fn().mockResolvedValue({ data: rawTask ?? makeRawTask() }),
-      patch: vi.fn(),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
-}
-
-const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskAdd", () => {
   describe("text output", () => {
     it("shows created message with title and id", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -68,11 +31,12 @@ describe("handleTaskAdd", () => {
 
     it("passes notes and due to API", async () => {
       const raw = makeRawTask({
+        id: "new-task-id",
         title: "Write report",
         notes: "Q1 summary",
         due: "2026-03-26T00:00:00.000Z",
       });
-      const client = makeClient(raw);
+      const client = makeInsertClient(raw);
       const { write } = makeOutput();
 
       await handleTaskAdd({
@@ -97,7 +61,7 @@ describe("handleTaskAdd", () => {
     });
 
     it("passes parent to API as query param", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       await handleTaskAdd({
@@ -118,7 +82,7 @@ describe("handleTaskAdd", () => {
 
   describe("json output", () => {
     it("returns task in success envelope with message", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -143,7 +107,7 @@ describe("handleTaskAdd", () => {
 
   describe("quiet output", () => {
     it("outputs task ID only", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -162,7 +126,7 @@ describe("handleTaskAdd", () => {
 
   describe("validation", () => {
     it("returns error when title is empty string", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -179,7 +143,7 @@ describe("handleTaskAdd", () => {
     });
 
     it("returns JSON error when title is empty in json format", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -198,7 +162,7 @@ describe("handleTaskAdd", () => {
     });
 
     it("returns error for invalid due date format", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -216,7 +180,7 @@ describe("handleTaskAdd", () => {
     });
 
     it("returns error for invalid date like 2026-02-30", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       const result = await handleTaskAdd({
@@ -235,7 +199,7 @@ describe("handleTaskAdd", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       await handleTaskAdd({
@@ -253,7 +217,7 @@ describe("handleTaskAdd", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const client = makeClient();
+      const client = makeInsertClient();
       const { write } = makeOutput();
 
       await handleTaskAdd({

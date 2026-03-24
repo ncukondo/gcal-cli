@@ -1,56 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GoogleTasksClient, GoogleRawTask } from "../../lib/tasks-api.ts";
+import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import type { TaskListConfig } from "../../types/index.ts";
 import { handleTaskUndone } from "./undone.ts";
+import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeRawTask(overrides: Partial<GoogleRawTask> = {}): GoogleRawTask {
-  return {
-    id: "id" in overrides ? overrides.id : "task-123",
-    title: "title" in overrides ? overrides.title : "Buy groceries",
-    notes: "notes" in overrides ? overrides.notes : null,
-    status: "status" in overrides ? overrides.status : "needsAction",
-    due: "due" in overrides ? overrides.due : null,
-    completed: overrides.completed ?? null,
-    deleted: false,
-    hidden: false,
-    parent: overrides.parent ?? null,
-    position: "00000000000000000000",
-    updated: overrides.updated ?? "2026-03-24T10:00:00.000Z",
-  };
+const reopenedTask = makeRawTask();
+
+function makePatchClient(rawTask = reopenedTask) {
+  return makeClient({ patch: { data: rawTask } });
 }
-
-function makeClient(rawTask?: GoogleRawTask): GoogleTasksClient {
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: {
-          items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-          nextPageToken: undefined,
-        },
-      }),
-    },
-    tasks: {
-      list: vi.fn(),
-      get: vi.fn(),
-      insert: vi.fn(),
-      patch: vi.fn().mockResolvedValue({ data: rawTask ?? makeRawTask() }),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
-}
-
-const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskUndone", () => {
   describe("text output", () => {
     it("shows reopened message with title and id", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUndone({
@@ -67,7 +30,7 @@ describe("handleTaskUndone", () => {
     });
 
     it("calls patch with status needsAction and completed null", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUndone({
@@ -89,7 +52,7 @@ describe("handleTaskUndone", () => {
 
   describe("json output", () => {
     it("returns task in success envelope with message", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUndone({
@@ -114,7 +77,7 @@ describe("handleTaskUndone", () => {
 
   describe("quiet output", () => {
     it("outputs task ID only", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUndone({
@@ -133,7 +96,7 @@ describe("handleTaskUndone", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUndone({
@@ -151,7 +114,7 @@ describe("handleTaskUndone", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUndone({
