@@ -337,15 +337,18 @@ describe("handleInit", () => {
       const fs = makeFs();
       const opts = makeOpts({
         fs,
-        listTaskLists: vi.fn().mockResolvedValue([
-          makeTaskList({ id: "@default", title: "My Tasks" }),
-          makeTaskList({ id: "abc123", title: "Work" }),
-        ]),
+        listTaskLists: vi
+          .fn()
+          .mockResolvedValue([
+            makeTaskList({ id: "@default", title: "My Tasks" }),
+            makeTaskList({ id: "abc123", title: "Work" }),
+          ]),
       });
 
       await handleInit(opts);
 
-      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
+        .calls[0]![1] as string;
       const parsed = parseConfig(writtenToml);
       expect(parsed.task_lists).toHaveLength(2);
     });
@@ -354,15 +357,18 @@ describe("handleInit", () => {
       const fs = makeFs();
       const opts = makeOpts({
         fs,
-        listTaskLists: vi.fn().mockResolvedValue([
-          makeTaskList({ id: "@default", title: "My Tasks" }),
-          makeTaskList({ id: "abc123", title: "Work" }),
-        ]),
+        listTaskLists: vi
+          .fn()
+          .mockResolvedValue([
+            makeTaskList({ id: "@default", title: "My Tasks" }),
+            makeTaskList({ id: "abc123", title: "Work" }),
+          ]),
       });
 
       await handleInit(opts);
 
-      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
+        .calls[0]![1] as string;
       const parsed = parseConfig(writtenToml);
       const defaultList = parsed.task_lists.find((t) => t.id === "@default");
       const workList = parsed.task_lists.find((t) => t.id === "abc123");
@@ -375,15 +381,18 @@ describe("handleInit", () => {
       const opts = makeOpts({
         fs,
         all: true,
-        listTaskLists: vi.fn().mockResolvedValue([
-          makeTaskList({ id: "@default", title: "My Tasks" }),
-          makeTaskList({ id: "abc123", title: "Work" }),
-        ]),
+        listTaskLists: vi
+          .fn()
+          .mockResolvedValue([
+            makeTaskList({ id: "@default", title: "My Tasks" }),
+            makeTaskList({ id: "abc123", title: "Work" }),
+          ]),
       });
 
       await handleInit(opts);
 
-      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
+        .calls[0]![1] as string;
       const parsed = parseConfig(writtenToml);
       expect(parsed.task_lists.every((t) => t.enabled)).toBe(true);
     });
@@ -392,10 +401,12 @@ describe("handleInit", () => {
       const output: string[] = [];
       const opts = makeOpts({
         write: (msg) => output.push(msg),
-        listTaskLists: vi.fn().mockResolvedValue([
-          makeTaskList({ id: "@default", title: "My Tasks" }),
-          makeTaskList({ id: "abc123", title: "Work" }),
-        ]),
+        listTaskLists: vi
+          .fn()
+          .mockResolvedValue([
+            makeTaskList({ id: "@default", title: "My Tasks" }),
+            makeTaskList({ id: "abc123", title: "Work" }),
+          ]),
       });
 
       await handleInit(opts);
@@ -411,9 +422,9 @@ describe("handleInit", () => {
       const opts = makeOpts({
         format: "json",
         write: (msg) => output.push(msg),
-        listTaskLists: vi.fn().mockResolvedValue([
-          makeTaskList({ id: "@default", title: "My Tasks" }),
-        ]),
+        listTaskLists: vi
+          .fn()
+          .mockResolvedValue([makeTaskList({ id: "@default", title: "My Tasks" })]),
       });
 
       await handleInit(opts);
@@ -429,7 +440,8 @@ describe("handleInit", () => {
 
       await handleInit(opts);
 
-      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
+        .calls[0]![1] as string;
       expect(writtenToml).not.toContain("task_lists");
     });
 
@@ -445,7 +457,8 @@ describe("handleInit", () => {
       const result = await handleInit(opts);
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
-      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
+        .calls[0]![1] as string;
       expect(writtenToml).not.toContain("task_lists");
     });
   });

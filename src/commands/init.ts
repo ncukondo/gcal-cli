@@ -1,6 +1,12 @@
 import path from "node:path";
 import { Command } from "commander";
-import type { Calendar, CommandResult, OutputFormat, TaskList, TaskListConfig } from "../types/index.ts";
+import type {
+  Calendar,
+  CommandResult,
+  OutputFormat,
+  TaskList,
+  TaskListConfig,
+} from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { generateConfigToml, getDefaultConfigPath } from "../lib/config.ts";
 import { isAuthRequiredError } from "../lib/api.ts";
@@ -105,7 +111,11 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
   const timezone = resolveTimezone(opts.timezone);
 
   // Generate TOML and write
-  const toml = generateConfigToml(configCalendars, timezone, configTaskLists.length > 0 ? configTaskLists : undefined);
+  const toml = generateConfigToml(
+    configCalendars,
+    timezone,
+    configTaskLists.length > 0 ? configTaskLists : undefined,
+  );
   const dir = path.dirname(configPath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath, toml);

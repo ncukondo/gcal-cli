@@ -372,9 +372,7 @@ describe("generateConfigToml", () => {
   });
 
   it("generates TOML with task_lists section", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "primary", name: "Main Calendar", enabled: true },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
     const taskLists: TaskListConfig[] = [
       { id: "@default", name: "My Tasks", enabled: true },
       { id: "abc123", name: "Work", enabled: false },
@@ -388,9 +386,7 @@ describe("generateConfigToml", () => {
   });
 
   it("round-trips task_lists through parseConfig", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "primary", name: "Main Calendar", enabled: true },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
     const taskLists: TaskListConfig[] = [
       { id: "@default", name: "My Tasks", enabled: true },
       { id: "abc123", name: "Work", enabled: false },
@@ -401,17 +397,13 @@ describe("generateConfigToml", () => {
   });
 
   it("omits task_lists section when not provided", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "primary", name: "Main Calendar", enabled: true },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
     const toml = generateConfigToml(calendars, "Asia/Tokyo");
     expect(toml).not.toContain("task_lists");
   });
 
   it("omits task_lists section when empty array", () => {
-    const calendars: CalendarConfig[] = [
-      { id: "primary", name: "Main Calendar", enabled: true },
-    ];
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
     const toml = generateConfigToml(calendars, "Asia/Tokyo", []);
     expect(toml).not.toContain("task_lists");
   });
