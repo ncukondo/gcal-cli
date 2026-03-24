@@ -8,7 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 13: Google Tasks - Write Commands
 
-34. [034-tasks-add-command](./034-tasks-add-command.md) — `gcal tasks add` コマンド
 35. [035-tasks-update-command](./035-tasks-update-command.md) — `gcal tasks update` コマンド
 36. [036-tasks-done-undone-command](./036-tasks-done-undone-command.md) — `gcal tasks done` / `gcal tasks undone` コマンド
 37. [037-tasks-delete-command](./037-tasks-delete-command.md) — `gcal tasks delete` コマンド
@@ -26,6 +25,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 31. [031-tasks-lists-command](./completed/031-tasks-lists-command.md) — `gcal tasks lists` コマンド (#45)
 32. [032-tasks-list-command](./completed/032-tasks-list-command.md) — `gcal tasks list` コマンド (#46)
 33. [033-tasks-show-command](./completed/033-tasks-show-command.md) — `gcal tasks show` コマンド (#47)
+
+### Phase 13: Google Tasks - Write Commands
+
+34. [034-tasks-add-command](./completed/034-tasks-add-command.md) — `gcal tasks add` コマンド (#48)
 
 ### Phase 11: Google Tasks - Foundation
 
