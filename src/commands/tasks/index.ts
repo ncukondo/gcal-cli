@@ -9,6 +9,7 @@ export function createTasksCommand(): {
   updateCmd: Command;
   doneCmd: Command;
   undoneCmd: Command;
+  deleteCmd: Command;
 } {
   const tasksCmd = new Command("tasks").description("Manage Google Tasks");
 
@@ -60,5 +61,11 @@ export function createTasksCommand(): {
     .option("-l, --list <name-or-id>", "Task list name or ID");
   tasksCmd.addCommand(undoneCmd);
 
-  return { tasksCmd, listsCmd, listCmd, showCmd, addCmd, updateCmd, doneCmd, undoneCmd };
+  const deleteCmd = new Command("delete")
+    .description("Delete a task")
+    .argument("<task-id>", "Task ID to delete")
+    .option("-l, --list <name-or-id>", "Task list name or ID");
+  tasksCmd.addCommand(deleteCmd);
+
+  return { tasksCmd, listsCmd, listCmd, showCmd, addCmd, updateCmd, doneCmd, undoneCmd, deleteCmd };
 }

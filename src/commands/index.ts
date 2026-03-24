@@ -17,6 +17,7 @@ import { handleTaskAdd, type HandleTaskAddOptions } from "./tasks/add.ts";
 import { handleTaskUpdate, type HandleTaskUpdateOptions } from "./tasks/update.ts";
 import { handleTaskDone, type HandleTaskDoneOptions } from "./tasks/done.ts";
 import { handleTaskUndone, type HandleTaskUndoneOptions } from "./tasks/undone.ts";
+import { handleTaskDelete, type HandleTaskDeleteOptions } from "./tasks/delete.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import type { GoogleTasksClient } from "../lib/tasks-api.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
@@ -131,6 +132,7 @@ export function registerCommands(program: Command): void {
     updateCmd: tasksUpdateCmd,
     doneCmd: tasksDoneCmd,
     undoneCmd: tasksUndoneCmd,
+    deleteCmd: tasksDeleteCmd,
   } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
@@ -256,6 +258,14 @@ export function registerCommands(program: Command): void {
       const opts: HandleTaskUndoneOptions = { ...deps, taskId };
       if (undoneOpts.list !== undefined) opts.list = undoneOpts.list;
       return handleTaskUndone(opts);
+    });
+  });
+  tasksDeleteCmd.action(async (taskId: string) => {
+    const deleteOpts = tasksDeleteCmd.opts<{ list?: string }>();
+    await runTaskAction(program, (deps) => {
+      const opts: HandleTaskDeleteOptions = { ...deps, taskId };
+      if (deleteOpts.list !== undefined) opts.list = deleteOpts.list;
+      return handleTaskDelete(opts);
     });
   });
   program.addCommand(tasksCmd);
