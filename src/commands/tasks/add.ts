@@ -1,4 +1,4 @@
-import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
+import type { CreateTaskInput, GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { createTask } from "../../lib/tasks-api.ts";
 import { formatJsonError, formatJsonSuccess } from "../../lib/output.ts";
 import { ExitCode } from "../../types/index.ts";
@@ -52,7 +52,7 @@ export async function handleTaskAdd(opts: HandleTaskAddOptions): Promise<Command
 
   const resolved = await resolveTaskList(client, configTaskLists, opts.list);
 
-  const input: { title: string; notes?: string; due?: string; parent?: string } = { title };
+  const input: CreateTaskInput = { title };
   if (opts.notes !== undefined) {
     input.notes = opts.notes;
   }
