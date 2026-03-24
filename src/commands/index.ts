@@ -12,6 +12,7 @@ import { createInitCommand, handleInit } from "./init.ts";
 import { createTasksCommand } from "./tasks/index.ts";
 import { handleTaskLists } from "./tasks/lists.ts";
 import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
+import { handleTaskShow, type HandleTaskShowOptions } from "./tasks/show.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -85,7 +86,12 @@ export function registerCommands(program: Command): void {
   });
   program.addCommand(calendarsCmd);
 
-  const { tasksCmd, listsCmd: tasksListsCmd, listCmd: tasksListCmd } = createTasksCommand();
+  const {
+    tasksCmd,
+    listsCmd: tasksListsCmd,
+    listCmd: tasksListCmd,
+    showCmd: tasksShowCmd,
+  } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
     try {
@@ -134,6 +140,30 @@ export function registerCommands(program: Command): void {
       if (listOpts.dueBefore !== undefined) opts.dueBefore = listOpts.dueBefore;
       if (listOpts.dueAfter !== undefined) opts.dueAfter = listOpts.dueAfter;
       const result = await handleTaskList(opts);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksShowCmd.action(async (taskId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const showOpts = tasksShowCmd.opts<{ list?: string }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskShowOptions = {
+        client: tasksClient,
+        taskId,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (showOpts.list !== undefined) opts.list = showOpts.list;
+      const result = await handleTaskShow(opts);
       process.exit(result.exitCode);
     } catch (error) {
       handleError(error, globalOpts.format);
