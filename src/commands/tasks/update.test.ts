@@ -345,9 +345,7 @@ describe("handleTaskUpdate", () => {
           list: vi.fn(),
           get: vi.fn(),
           insert: vi.fn(),
-          patch: vi
-            .fn()
-            .mockRejectedValue(Object.assign(new Error("Server Error"), { code: 500 })),
+          patch: vi.fn().mockRejectedValue(Object.assign(new Error("Server Error"), { code: 500 })),
           delete: vi.fn(),
         },
       };

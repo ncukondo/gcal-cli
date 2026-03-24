@@ -29,8 +29,7 @@ export async function handleTaskUpdate(opts: HandleTaskUpdateOptions): Promise<C
   const { client, taskId, format, quiet, write, configTaskLists } = opts;
 
   // Validate at least one update option
-  const hasUpdate =
-    opts.title !== undefined || opts.notes !== undefined || opts.due !== undefined;
+  const hasUpdate = opts.title !== undefined || opts.notes !== undefined || opts.due !== undefined;
 
   if (!hasUpdate) {
     const msg = "at least one update option must be provided (--title, --notes, or --due)";
