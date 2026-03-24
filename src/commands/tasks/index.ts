@@ -7,6 +7,8 @@ export function createTasksCommand(): {
   showCmd: Command;
   addCmd: Command;
   updateCmd: Command;
+  doneCmd: Command;
+  undoneCmd: Command;
 } {
   const tasksCmd = new Command("tasks").description("Manage Google Tasks");
 
@@ -46,5 +48,17 @@ export function createTasksCommand(): {
     .option("-l, --list <name-or-id>", "Task list name or ID");
   tasksCmd.addCommand(updateCmd);
 
-  return { tasksCmd, listsCmd, listCmd, showCmd, addCmd, updateCmd };
+  const doneCmd = new Command("done")
+    .description("Mark a task as completed")
+    .argument("<task-id>", "Task ID to complete")
+    .option("-l, --list <name-or-id>", "Task list name or ID");
+  tasksCmd.addCommand(doneCmd);
+
+  const undoneCmd = new Command("undone")
+    .description("Mark a task as not completed")
+    .argument("<task-id>", "Task ID to reopen")
+    .option("-l, --list <name-or-id>", "Task list name or ID");
+  tasksCmd.addCommand(undoneCmd);
+
+  return { tasksCmd, listsCmd, listCmd, showCmd, addCmd, updateCmd, doneCmd, undoneCmd };
 }

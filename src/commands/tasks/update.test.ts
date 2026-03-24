@@ -1,56 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GoogleTasksClient, GoogleRawTask } from "../../lib/tasks-api.ts";
+import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import type { TaskListConfig } from "../../types/index.ts";
 import { handleTaskUpdate } from "./update.ts";
+import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeRawTask(overrides: Partial<GoogleRawTask> = {}): GoogleRawTask {
-  return {
-    id: "id" in overrides ? overrides.id : "task-123",
-    title: "title" in overrides ? overrides.title : "Updated title",
-    notes: "notes" in overrides ? overrides.notes : null,
-    status: "status" in overrides ? overrides.status : "needsAction",
-    due: "due" in overrides ? overrides.due : null,
-    completed: overrides.completed ?? null,
-    deleted: false,
-    hidden: false,
-    parent: overrides.parent ?? null,
-    position: "00000000000000000000",
-    updated: overrides.updated ?? "2026-03-24T10:00:00.000Z",
-  };
+const updatedTask = makeRawTask({ title: "Updated title" });
+
+function makePatchClient(rawTask = updatedTask) {
+  return makeClient({ patch: { data: rawTask } });
 }
-
-function makeClient(rawTask?: GoogleRawTask): GoogleTasksClient {
-  return {
-    tasklists: {
-      list: vi.fn().mockResolvedValue({
-        data: {
-          items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-          nextPageToken: undefined,
-        },
-      }),
-    },
-    tasks: {
-      list: vi.fn(),
-      get: vi.fn(),
-      insert: vi.fn(),
-      patch: vi.fn().mockResolvedValue({ data: rawTask ?? makeRawTask() }),
-      delete: vi.fn(),
-    },
-  };
-}
-
-function makeOutput(): { output: string[]; write: (msg: string) => void } {
-  const output: string[] = [];
-  return { output, write: (msg: string) => output.push(msg) };
-}
-
-const defaultConfig: TaskListConfig[] = [];
 
 describe("handleTaskUpdate", () => {
   describe("text output", () => {
     it("shows updated message with title and id", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -68,7 +31,7 @@ describe("handleTaskUpdate", () => {
     });
 
     it("passes title to API via patch", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -89,8 +52,8 @@ describe("handleTaskUpdate", () => {
     });
 
     it("passes notes to API", async () => {
-      const raw = makeRawTask({ notes: "New notes" });
-      const client = makeClient(raw);
+      const raw = makeRawTask({ title: "Updated title", notes: "New notes" });
+      const client = makePatchClient(raw);
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -111,8 +74,8 @@ describe("handleTaskUpdate", () => {
     });
 
     it("passes due date to API in RFC 3339 format", async () => {
-      const raw = makeRawTask({ due: "2026-03-30T00:00:00.000Z" });
-      const client = makeClient(raw);
+      const raw = makeRawTask({ title: "Updated title", due: "2026-03-30T00:00:00.000Z" });
+      const client = makePatchClient(raw);
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -138,7 +101,7 @@ describe("handleTaskUpdate", () => {
         notes: "New notes",
         due: "2026-03-30T00:00:00.000Z",
       });
-      const client = makeClient(raw);
+      const client = makePatchClient(raw);
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -167,7 +130,7 @@ describe("handleTaskUpdate", () => {
 
   describe("json output", () => {
     it("returns task in success envelope with message", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -193,7 +156,7 @@ describe("handleTaskUpdate", () => {
 
   describe("quiet output", () => {
     it("outputs task ID only", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -213,7 +176,7 @@ describe("handleTaskUpdate", () => {
 
   describe("validation", () => {
     it("returns error when no update options provided", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -231,7 +194,7 @@ describe("handleTaskUpdate", () => {
     });
 
     it("returns JSON error when no update options in json format", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -250,7 +213,7 @@ describe("handleTaskUpdate", () => {
     });
 
     it("returns error for invalid due date format", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -268,7 +231,7 @@ describe("handleTaskUpdate", () => {
     });
 
     it("returns error for invalid date like 2026-02-30", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       const result = await handleTaskUpdate({
@@ -287,7 +250,7 @@ describe("handleTaskUpdate", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -306,7 +269,7 @@ describe("handleTaskUpdate", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const client = makeClient();
+      const client = makePatchClient();
       const { write } = makeOutput();
 
       await handleTaskUpdate({
@@ -337,7 +300,6 @@ describe("handleTaskUpdate", () => {
           list: vi.fn().mockResolvedValue({
             data: {
               items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-              nextPageToken: undefined,
             },
           }),
         },

@@ -85,7 +85,7 @@ describe("createGoogleCalendarApi", () => {
 
   it("passes pageToken parameter to calendarList.list", async () => {
     const mockList = vi.fn().mockResolvedValue({
-      data: { items: [], nextPageToken: undefined },
+      data: { items: [] },
     });
     const mockCalendar = {
       calendarList: { list: mockList },
