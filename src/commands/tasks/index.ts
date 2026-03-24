@@ -5,6 +5,7 @@ export function createTasksCommand(): {
   listsCmd: Command;
   listCmd: Command;
   showCmd: Command;
+  addCmd: Command;
 } {
   const tasksCmd = new Command("tasks").description("Manage Google Tasks");
 
@@ -26,5 +27,14 @@ export function createTasksCommand(): {
     .option("-l, --list <name-or-id>", "Task list name or ID");
   tasksCmd.addCommand(showCmd);
 
-  return { tasksCmd, listsCmd, listCmd, showCmd };
+  const addCmd = new Command("add")
+    .description("Create a new task")
+    .requiredOption("-t, --title <title>", "Task title")
+    .option("-n, --notes <text>", "Notes")
+    .option("--due <date>", "Due date (YYYY-MM-DD)")
+    .option("-l, --list <name-or-id>", "Task list name or ID")
+    .option("--parent <task-id>", "Parent task ID (create as subtask)");
+  tasksCmd.addCommand(addCmd);
+
+  return { tasksCmd, listsCmd, listCmd, showCmd, addCmd };
 }
