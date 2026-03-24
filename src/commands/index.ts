@@ -13,6 +13,7 @@ import { createTasksCommand } from "./tasks/index.ts";
 import { handleTaskLists } from "./tasks/lists.ts";
 import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
 import { handleTaskShow, type HandleTaskShowOptions } from "./tasks/show.ts";
+import { handleTaskAdd, type HandleTaskAddOptions } from "./tasks/add.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -91,6 +92,7 @@ export function registerCommands(program: Command): void {
     listsCmd: tasksListsCmd,
     listCmd: tasksListCmd,
     showCmd: tasksShowCmd,
+    addCmd: tasksAddCmd,
   } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
@@ -164,6 +166,39 @@ export function registerCommands(program: Command): void {
       };
       if (showOpts.list !== undefined) opts.list = showOpts.list;
       const result = await handleTaskShow(opts);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksAddCmd.action(async () => {
+    const globalOpts = resolveGlobalOptions(program);
+    const addOpts = tasksAddCmd.opts<{
+      title: string;
+      notes?: string;
+      due?: string;
+      list?: string;
+      parent?: string;
+    }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskAddOptions = {
+        client: tasksClient,
+        title: addOpts.title,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (addOpts.notes !== undefined) opts.notes = addOpts.notes;
+      if (addOpts.due !== undefined) opts.due = addOpts.due;
+      if (addOpts.list !== undefined) opts.list = addOpts.list;
+      if (addOpts.parent !== undefined) opts.parent = addOpts.parent;
+      const result = await handleTaskAdd(opts);
       process.exit(result.exitCode);
     } catch (error) {
       handleError(error, globalOpts.format);

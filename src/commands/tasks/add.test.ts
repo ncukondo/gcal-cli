@@ -290,7 +290,9 @@ describe("handleTaskAdd", () => {
         tasks: {
           list: vi.fn(),
           get: vi.fn(),
-          insert: vi.fn().mockRejectedValue(Object.assign(new Error("Server Error"), { code: 500 })),
+          insert: vi
+            .fn()
+            .mockRejectedValue(Object.assign(new Error("Server Error"), { code: 500 })),
           patch: vi.fn(),
           delete: vi.fn(),
         },
