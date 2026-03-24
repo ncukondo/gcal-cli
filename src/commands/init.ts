@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Command } from "commander";
-import type { Calendar, CommandResult, OutputFormat } from "../types/index.ts";
+import type { Calendar, CommandResult, OutputFormat, TaskList, TaskListConfig } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { generateConfigToml, getDefaultConfigPath } from "../lib/config.ts";
 import { isAuthRequiredError } from "../lib/api.ts";
@@ -14,6 +14,7 @@ export interface InitFsAdapter {
 
 export interface HandleInitOptions {
   listCalendars: () => Promise<Calendar[]>;
+  listTaskLists?: () => Promise<TaskList[]>;
   requestAuth?: () => Promise<void>;
   fs: InitFsAdapter;
   format: OutputFormat;
@@ -85,17 +86,33 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
     enabled: all || cal.primary,
   }));
 
+  // Fetch task lists (skip on error - Tasks API scope may not be available)
+  let configTaskLists: TaskListConfig[] = [];
+  if (opts.listTaskLists) {
+    try {
+      const taskLists = await opts.listTaskLists();
+      configTaskLists = taskLists.map((tl) => ({
+        id: tl.id,
+        name: tl.title,
+        enabled: all || tl.id === "@default",
+      }));
+    } catch {
+      // Tasks API not available - skip task lists
+    }
+  }
+
   // Resolve timezone
   const timezone = resolveTimezone(opts.timezone);
 
   // Generate TOML and write
-  const toml = generateConfigToml(configCalendars, timezone);
+  const toml = generateConfigToml(configCalendars, timezone, configTaskLists.length > 0 ? configTaskLists : undefined);
   const dir = path.dirname(configPath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath, toml);
 
   // Output results
   const enabledCalendars = configCalendars.filter((c) => c.enabled);
+  const enabledTaskLists = configTaskLists.filter((t) => t.enabled);
 
   if (quiet) {
     write(configPath);
@@ -103,25 +120,38 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
   }
 
   if (format === "json") {
-    write(
-      formatJsonSuccess({
-        path: configPath,
-        timezone,
-        calendars: configCalendars.map((c) => ({
-          id: c.id,
-          name: c.name,
-          enabled: c.enabled,
-        })),
-        enabled_count: enabledCalendars.length,
-        total_count: configCalendars.length,
-      }),
-    );
+    const data: Record<string, unknown> = {
+      path: configPath,
+      timezone,
+      calendars: configCalendars.map((c) => ({
+        id: c.id,
+        name: c.name,
+        enabled: c.enabled,
+      })),
+      enabled_count: enabledCalendars.length,
+      total_count: configCalendars.length,
+    };
+    if (configTaskLists.length > 0) {
+      data.task_lists = configTaskLists.map((t) => ({
+        id: t.id,
+        name: t.name,
+        enabled: t.enabled,
+      }));
+    }
+    write(formatJsonSuccess(data));
   } else {
     write(`Config file created: ${configPath}`);
     write("");
     write("Enabled calendars:");
     for (const cal of enabledCalendars) {
       write(`  - ${cal.name} (${cal.id})`);
+    }
+    if (enabledTaskLists.length > 0) {
+      write("");
+      write("Enabled task lists:");
+      for (const tl of enabledTaskLists) {
+        write(`  - ${tl.name} (${tl.id})`);
+      }
     }
     write("");
     write(`Timezone: ${timezone}`);

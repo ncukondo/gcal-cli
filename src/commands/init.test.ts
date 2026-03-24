@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { Calendar } from "../types/index.ts";
+import type { Calendar, TaskList } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { ApiError } from "../lib/api.ts";
 import { parseConfig } from "../lib/config.ts";
@@ -321,5 +321,132 @@ describe("handleInit", () => {
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     expect(requestAuth).toHaveBeenCalled();
     expect(listCalendars).toHaveBeenCalledTimes(2);
+  });
+
+  describe("task lists", () => {
+    function makeTaskList(overrides: Partial<TaskList> = {}): TaskList {
+      return {
+        id: "@default",
+        title: "My Tasks",
+        updated: "2026-01-01T00:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    it("includes task_lists in generated config when listTaskLists provided", async () => {
+      const fs = makeFs();
+      const opts = makeOpts({
+        fs,
+        listTaskLists: vi.fn().mockResolvedValue([
+          makeTaskList({ id: "@default", title: "My Tasks" }),
+          makeTaskList({ id: "abc123", title: "Work" }),
+        ]),
+      });
+
+      await handleInit(opts);
+
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const parsed = parseConfig(writtenToml);
+      expect(parsed.task_lists).toHaveLength(2);
+    });
+
+    it("enables only default task list by default", async () => {
+      const fs = makeFs();
+      const opts = makeOpts({
+        fs,
+        listTaskLists: vi.fn().mockResolvedValue([
+          makeTaskList({ id: "@default", title: "My Tasks" }),
+          makeTaskList({ id: "abc123", title: "Work" }),
+        ]),
+      });
+
+      await handleInit(opts);
+
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const parsed = parseConfig(writtenToml);
+      const defaultList = parsed.task_lists.find((t) => t.id === "@default");
+      const workList = parsed.task_lists.find((t) => t.id === "abc123");
+      expect(defaultList?.enabled).toBe(true);
+      expect(workList?.enabled).toBe(false);
+    });
+
+    it("--all enables all task lists", async () => {
+      const fs = makeFs();
+      const opts = makeOpts({
+        fs,
+        all: true,
+        listTaskLists: vi.fn().mockResolvedValue([
+          makeTaskList({ id: "@default", title: "My Tasks" }),
+          makeTaskList({ id: "abc123", title: "Work" }),
+        ]),
+      });
+
+      await handleInit(opts);
+
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      const parsed = parseConfig(writtenToml);
+      expect(parsed.task_lists.every((t) => t.enabled)).toBe(true);
+    });
+
+    it("shows enabled task lists in text output", async () => {
+      const output: string[] = [];
+      const opts = makeOpts({
+        write: (msg) => output.push(msg),
+        listTaskLists: vi.fn().mockResolvedValue([
+          makeTaskList({ id: "@default", title: "My Tasks" }),
+          makeTaskList({ id: "abc123", title: "Work" }),
+        ]),
+      });
+
+      await handleInit(opts);
+
+      const text = output.join("\n");
+      expect(text).toContain("Enabled task lists:");
+      expect(text).toContain("My Tasks (@default)");
+      expect(text).not.toContain("Work (abc123)");
+    });
+
+    it("includes task_lists in JSON output", async () => {
+      const output: string[] = [];
+      const opts = makeOpts({
+        format: "json",
+        write: (msg) => output.push(msg),
+        listTaskLists: vi.fn().mockResolvedValue([
+          makeTaskList({ id: "@default", title: "My Tasks" }),
+        ]),
+      });
+
+      await handleInit(opts);
+
+      const json = JSON.parse(output[0]!);
+      expect(json.data.task_lists).toBeInstanceOf(Array);
+      expect(json.data.task_lists).toHaveLength(1);
+    });
+
+    it("skips task lists when listTaskLists is not provided", async () => {
+      const fs = makeFs();
+      const opts = makeOpts({ fs });
+
+      await handleInit(opts);
+
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      expect(writtenToml).not.toContain("task_lists");
+    });
+
+    it("skips task lists when listTaskLists throws an error", async () => {
+      const fs = makeFs();
+      const output: string[] = [];
+      const opts = makeOpts({
+        fs,
+        write: (msg) => output.push(msg),
+        listTaskLists: vi.fn().mockRejectedValue(new Error("Tasks API not available")),
+      });
+
+      const result = await handleInit(opts);
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+      expect(writtenToml).not.toContain("task_lists");
+    });
   });
 });
