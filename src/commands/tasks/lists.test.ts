@@ -6,7 +6,7 @@ import { makeClient, makeOutput } from "./test-helpers.ts";
 
 function makeTasklistsClient(taskLists: { id: string; title: string; updated: string }[]) {
   return makeClient({
-    tasklistsList: { data: { items: taskLists, nextPageToken: undefined } },
+    tasklistsList: { data: { items: taskLists } },
   });
 }
 

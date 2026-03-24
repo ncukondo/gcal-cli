@@ -5,7 +5,7 @@ import { handleTaskList } from "./list.ts";
 import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
 function makeListClient(tasks: ReturnType<typeof makeRawTask>[]) {
-  return makeClient({ tasksList: { data: { items: tasks, nextPageToken: undefined } } });
+  return makeClient({ tasksList: { data: { items: tasks } } });
 }
 
 const sampleTasks = [
@@ -190,7 +190,6 @@ describe("handleTaskList", () => {
             { id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" },
             { id: "work-id", title: "Work", updated: "2026-03-21T10:00:00Z" },
           ],
-          nextPageToken: undefined,
         },
       });
       const { write } = makeOutput();
@@ -462,7 +461,6 @@ describe("handleTaskList", () => {
           list: vi.fn().mockResolvedValue({
             data: {
               items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-              nextPageToken: undefined,
             },
           }),
         },

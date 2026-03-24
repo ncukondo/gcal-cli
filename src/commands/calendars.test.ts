@@ -15,7 +15,7 @@ function makeApi(calendars: Partial<Calendar>[]): GoogleCalendarApi {
   return {
     calendarList: {
       list: vi.fn().mockResolvedValue({
-        data: { items, nextPageToken: undefined },
+        data: { items },
       }),
     },
     events: {

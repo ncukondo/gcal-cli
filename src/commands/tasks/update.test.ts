@@ -300,7 +300,6 @@ describe("handleTaskUpdate", () => {
           list: vi.fn().mockResolvedValue({
             data: {
               items: [{ id: "@default", title: "My Tasks", updated: "2026-03-20T10:00:00Z" }],
-              nextPageToken: undefined,
             },
           }),
         },
