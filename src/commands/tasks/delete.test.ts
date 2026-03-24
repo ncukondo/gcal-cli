@@ -4,14 +4,10 @@ import { ExitCode } from "../../types/index.ts";
 import { handleTaskDelete } from "./delete.ts";
 import { makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
-function makeDeleteClient() {
-  return makeClient();
-}
-
 describe("handleTaskDelete", () => {
   describe("text output", () => {
     it("shows deleted message with id", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskDelete({
@@ -28,7 +24,7 @@ describe("handleTaskDelete", () => {
     });
 
     it("calls delete with correct params", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { write } = makeOutput();
 
       await handleTaskDelete({
@@ -49,7 +45,7 @@ describe("handleTaskDelete", () => {
 
   describe("json output", () => {
     it("returns deleted_id in success envelope with message", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskDelete({
@@ -71,7 +67,7 @@ describe("handleTaskDelete", () => {
 
   describe("quiet output", () => {
     it("outputs nothing", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { output, write } = makeOutput();
 
       const result = await handleTaskDelete({
@@ -90,7 +86,7 @@ describe("handleTaskDelete", () => {
 
   describe("task list resolution", () => {
     it("uses @default when no --list and no config", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { write } = makeOutput();
 
       await handleTaskDelete({
@@ -108,7 +104,7 @@ describe("handleTaskDelete", () => {
     });
 
     it("resolves --list by name from config", async () => {
-      const client = makeDeleteClient();
+      const client = makeClient();
       const { write } = makeOutput();
 
       await handleTaskDelete({
