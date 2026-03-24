@@ -14,6 +14,7 @@ import { handleTaskLists } from "./tasks/lists.ts";
 import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
 import { handleTaskShow, type HandleTaskShowOptions } from "./tasks/show.ts";
 import { handleTaskAdd, type HandleTaskAddOptions } from "./tasks/add.ts";
+import { handleTaskUpdate, type HandleTaskUpdateOptions } from "./tasks/update.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -93,6 +94,7 @@ export function registerCommands(program: Command): void {
     listCmd: tasksListCmd,
     showCmd: tasksShowCmd,
     addCmd: tasksAddCmd,
+    updateCmd: tasksUpdateCmd,
   } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
@@ -199,6 +201,38 @@ export function registerCommands(program: Command): void {
       if (addOpts.list !== undefined) opts.list = addOpts.list;
       if (addOpts.parent !== undefined) opts.parent = addOpts.parent;
       const result = await handleTaskAdd(opts);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksUpdateCmd.action(async (taskId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const updateOpts = tasksUpdateCmd.opts<{
+      title?: string;
+      notes?: string;
+      due?: string;
+      list?: string;
+    }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskUpdateOptions = {
+        client: tasksClient,
+        taskId,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (updateOpts.title !== undefined) opts.title = updateOpts.title;
+      if (updateOpts.notes !== undefined) opts.notes = updateOpts.notes;
+      if (updateOpts.due !== undefined) opts.due = updateOpts.due;
+      if (updateOpts.list !== undefined) opts.list = updateOpts.list;
+      const result = await handleTaskUpdate(opts);
       process.exit(result.exitCode);
     } catch (error) {
       handleError(error, globalOpts.format);
