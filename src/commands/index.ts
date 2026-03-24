@@ -15,6 +15,8 @@ import { handleTaskList, type HandleTaskListOptions } from "./tasks/list.ts";
 import { handleTaskShow, type HandleTaskShowOptions } from "./tasks/show.ts";
 import { handleTaskAdd, type HandleTaskAddOptions } from "./tasks/add.ts";
 import { handleTaskUpdate, type HandleTaskUpdateOptions } from "./tasks/update.ts";
+import { handleTaskDone, type HandleTaskDoneOptions } from "./tasks/done.ts";
+import { handleTaskUndone, type HandleTaskUndoneOptions } from "./tasks/undone.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import { resolveGlobalOptions, handleError } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
@@ -95,6 +97,8 @@ export function registerCommands(program: Command): void {
     showCmd: tasksShowCmd,
     addCmd: tasksAddCmd,
     updateCmd: tasksUpdateCmd,
+    doneCmd: tasksDoneCmd,
+    undoneCmd: tasksUndoneCmd,
   } = createTasksCommand();
   tasksListsCmd.action(async () => {
     const globalOpts = resolveGlobalOptions(program);
@@ -233,6 +237,54 @@ export function registerCommands(program: Command): void {
       if (updateOpts.due !== undefined) opts.due = updateOpts.due;
       if (updateOpts.list !== undefined) opts.list = updateOpts.list;
       const result = await handleTaskUpdate(opts);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksDoneCmd.action(async (taskId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const doneOpts = tasksDoneCmd.opts<{ list?: string }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskDoneOptions = {
+        client: tasksClient,
+        taskId,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (doneOpts.list !== undefined) opts.list = doneOpts.list;
+      const result = await handleTaskDone(opts);
+      process.exit(result.exitCode);
+    } catch (error) {
+      handleError(error, globalOpts.format);
+    }
+  });
+  tasksUndoneCmd.action(async (taskId: string) => {
+    const globalOpts = resolveGlobalOptions(program);
+    const undoneOpts = tasksUndoneCmd.opts<{ list?: string }>();
+    try {
+      const config = loadConfig(fsAdapter);
+      const oauth2Client = await getAuthenticatedClient(fsAdapter);
+      const tasksClient = createGoogleTasksClient(
+        google.tasks({ version: "v1", auth: oauth2Client }),
+      );
+      const opts: HandleTaskUndoneOptions = {
+        client: tasksClient,
+        taskId,
+        format: globalOpts.format,
+        quiet: globalOpts.quiet,
+        write: (msg) => process.stdout.write(msg + "\n"),
+        configTaskLists: config.task_lists,
+      };
+      if (undoneOpts.list !== undefined) opts.list = undoneOpts.list;
+      const result = await handleTaskUndone(opts);
       process.exit(result.exitCode);
     } catch (error) {
       handleError(error, globalOpts.format);
