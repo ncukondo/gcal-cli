@@ -518,6 +518,7 @@ export function registerCommands(program: Command): void {
         format: globalOpts.format,
         quiet: globalOpts.quiet,
         write,
+        writeErr: (msg) => process.stderr.write(msg + "\n"),
         force: initOpts.force ?? false,
         all: initOpts.all ?? false,
         local: initOpts.local ?? false,

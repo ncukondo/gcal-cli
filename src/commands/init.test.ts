@@ -448,9 +448,11 @@ describe("handleInit", () => {
     it("skips task lists when listTaskLists throws an error", async () => {
       const fs = makeFs();
       const output: string[] = [];
+      const errOutput: string[] = [];
       const opts = makeOpts({
         fs,
         write: (msg) => output.push(msg),
+        writeErr: (msg) => errOutput.push(msg),
         listTaskLists: vi.fn().mockRejectedValue(new Error("Tasks API not available")),
       });
 
@@ -460,6 +462,7 @@ describe("handleInit", () => {
       const writtenToml = (fs.writeFileSync as ReturnType<typeof vi.fn>).mock
         .calls[0]![1] as string;
       expect(writtenToml).not.toContain("task_lists");
+      expect(errOutput.join("\n")).toContain("[init] Tasks API unavailable, skipping task lists");
     });
   });
 });

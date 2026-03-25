@@ -26,6 +26,7 @@ export interface HandleInitOptions {
   format: OutputFormat;
   quiet: boolean;
   write: (msg: string) => void;
+  writeErr?: (msg: string) => void;
   force: boolean;
   all: boolean;
   local: boolean;
@@ -38,6 +39,7 @@ function resolveTimezone(cliTimezone?: string): string {
 
 export async function handleInit(opts: HandleInitOptions): Promise<CommandResult> {
   const { fs, format, quiet, write, force, all, local, requestAuth } = opts;
+  const writeErr = quiet ? () => {} : (opts.writeErr ?? (() => {}));
 
   // Determine output path
   const configPath = local ? `${process.cwd()}/gcal-cli.toml` : getDefaultConfigPath();
@@ -103,7 +105,7 @@ export async function handleInit(opts: HandleInitOptions): Promise<CommandResult
         enabled: all || tl.id === "@default",
       }));
     } catch {
-      // Tasks API not available - skip task lists
+      writeErr("[init] Tasks API unavailable, skipping task lists");
     }
   }
 
