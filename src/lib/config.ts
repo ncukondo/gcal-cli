@@ -108,7 +108,11 @@ function escapeTomlString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-export function generateConfigToml(calendars: CalendarConfig[], timezone?: string): string {
+export function generateConfigToml(
+  calendars: CalendarConfig[],
+  timezone?: string,
+  taskLists?: TaskListConfig[],
+): string {
   const lines: string[] = [];
 
   if (timezone) {
@@ -122,6 +126,16 @@ export function generateConfigToml(calendars: CalendarConfig[], timezone?: strin
     lines.push(`name = "${escapeTomlString(cal.name)}"`);
     lines.push(`enabled = ${String(cal.enabled)}`);
     lines.push("");
+  }
+
+  if (taskLists && taskLists.length > 0) {
+    for (const tl of taskLists) {
+      lines.push("[[task_lists]]");
+      lines.push(`id = "${escapeTomlString(tl.id)}"`);
+      lines.push(`name = "${escapeTomlString(tl.name)}"`);
+      lines.push(`enabled = ${String(tl.enabled)}`);
+      lines.push("");
+    }
   }
 
   return lines.join("\n");

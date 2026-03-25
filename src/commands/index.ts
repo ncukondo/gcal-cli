@@ -31,6 +31,7 @@ import {
 } from "../lib/auth.ts";
 import { createReadlinePrompt } from "../lib/prompt.ts";
 import { listCalendars, listEvents, createEvent, getEvent } from "../lib/api.ts";
+import { listTaskLists } from "../lib/tasks-api.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { resolveTimezone } from "../lib/timezone.ts";
 import { resolveEventCalendar } from "../lib/resolve-calendar.ts";
@@ -485,6 +486,13 @@ export function registerCommands(program: Command): void {
           const api = await getApi();
           return listCalendars(api);
         },
+        listTaskLists: async () => {
+          const oauth2Client = await getAuthenticatedClient(fsAdapter);
+          const tasksClient = createGoogleTasksClient(
+            google.tasks({ version: "v1", auth: oauth2Client }),
+          );
+          return listTaskLists(tasksClient);
+        },
         requestAuth: async () => {
           apiRef = null;
           const promptFn = createReadlinePrompt();
@@ -510,6 +518,7 @@ export function registerCommands(program: Command): void {
         format: globalOpts.format,
         quiet: globalOpts.quiet,
         write,
+        writeErr: (msg) => process.stderr.write(msg + "\n"),
         force: initOpts.force ?? false,
         all: initOpts.all ?? false,
         local: initOpts.local ?? false,

@@ -8,7 +8,7 @@ import {
   generateConfigToml,
   getDefaultConfigPath,
 } from "./config.ts";
-import type { AppConfig, CalendarConfig } from "../types/index.ts";
+import type { AppConfig, CalendarConfig, TaskListConfig } from "../types/index.ts";
 
 describe("findConfigPath", () => {
   beforeEach(() => {
@@ -369,5 +369,42 @@ describe("generateConfigToml", () => {
     const parsed = parseConfig(toml);
     expect(parsed.calendars).toEqual([]);
     expect(parsed.timezone).toBe("UTC");
+  });
+
+  it("generates TOML with task_lists section", () => {
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
+    const taskLists: TaskListConfig[] = [
+      { id: "@default", name: "My Tasks", enabled: true },
+      { id: "abc123", name: "Work", enabled: false },
+    ];
+    const toml = generateConfigToml(calendars, "Asia/Tokyo", taskLists);
+    expect(toml).toContain("[[task_lists]]");
+    expect(toml).toContain('id = "@default"');
+    expect(toml).toContain('name = "My Tasks"');
+    expect(toml).toContain('id = "abc123"');
+    expect(toml).toContain('name = "Work"');
+  });
+
+  it("round-trips task_lists through parseConfig", () => {
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
+    const taskLists: TaskListConfig[] = [
+      { id: "@default", name: "My Tasks", enabled: true },
+      { id: "abc123", name: "Work", enabled: false },
+    ];
+    const toml = generateConfigToml(calendars, "Asia/Tokyo", taskLists);
+    const parsed = parseConfig(toml);
+    expect(parsed.task_lists).toEqual(taskLists);
+  });
+
+  it("omits task_lists section when not provided", () => {
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
+    const toml = generateConfigToml(calendars, "Asia/Tokyo");
+    expect(toml).not.toContain("task_lists");
+  });
+
+  it("omits task_lists section when empty array", () => {
+    const calendars: CalendarConfig[] = [{ id: "primary", name: "Main Calendar", enabled: true }];
+    const toml = generateConfigToml(calendars, "Asia/Tokyo", []);
+    expect(toml).not.toContain("task_lists");
   });
 });
