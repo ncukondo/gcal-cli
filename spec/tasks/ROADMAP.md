@@ -6,15 +6,13 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 13: Google Tasks - Write Commands
-
-### Phase 14: Google Tasks - Config Integration
-
-38. [038-init-task-lists](./038-init-task-lists.md) — `gcal init` にタスクリスト設定を追加
-
 ## In Progress
 
 ## Completed
+
+### Phase 14: Google Tasks - Config Integration
+
+38. [038-init-task-lists](./completed/038-init-task-lists.md) — `gcal init` にタスクリスト設定を追加 (#52)
 
 ### Phase 12: Google Tasks - Read Commands
 
