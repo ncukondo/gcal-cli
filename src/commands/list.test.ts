@@ -743,3 +743,95 @@ describe("createListCommand", () => {
     expect(opts.calendar).toEqual(["cal1", "cal2"]);
   });
 });
+
+describe("handleList --busy all-day warning", () => {
+  const conference = makeEvent({
+    id: "conf",
+    all_day: true,
+    start: "2026-09-05",
+    end: "2026-09-07",
+    title: "日本看護研究学会第52回学術集会",
+    transparency: "transparent",
+  });
+  const freeTimed = makeEvent({
+    id: "confcall",
+    start: "2026-09-05T08:00:00+09:00",
+    end: "2026-09-05T09:00:00+09:00",
+    title: "外来カンファ",
+    transparency: "transparent",
+  });
+
+  function makeSingleCalendarDeps(events: CalendarEvent[]) {
+    const writeErr = vi.fn();
+    const deps = makeDeps({
+      listEvents: vi.fn().mockResolvedValue(events),
+      loadConfig: vi
+        .fn()
+        .mockReturnValue(
+          makeConfig({ calendars: [{ id: "primary", name: "Main Calendar", enabled: true }] }),
+        ),
+      writeErr,
+    });
+    return { deps, writeErr };
+  }
+
+  const range = { from: "2026-09-05", to: "2026-09-06", timezone: "Asia/Tokyo" } as const;
+
+  it("warns with count and title when --busy hides an all-day event", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference]);
+
+    await handleList({ ...range, busy: true, format: "text", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).toContain("1 all-day event is hidden by --busy");
+    expect(warning).toContain("日本看護研究学会第52回学術集会");
+  });
+
+  it("does not mention timed events dropped by --busy", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference, freeTimed]);
+
+    await handleList({ ...range, busy: true, format: "text", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).not.toContain("外来カンファ");
+  });
+
+  it("does not warn without --busy", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference]);
+
+    await handleList({ ...range, format: "text", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).not.toContain("hidden by --busy");
+  });
+
+  it("does not warn for --free", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference]);
+
+    await handleList({ ...range, free: true, format: "text", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).not.toContain("hidden by --busy");
+  });
+
+  it("still warns in --quiet mode since the notice goes to stderr", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference]);
+
+    await handleList({ ...range, busy: true, format: "text", quiet: true }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).toContain("hidden by --busy");
+  });
+
+  it("still warns in JSON mode without touching stdout", async () => {
+    const { deps, writeErr } = makeSingleCalendarDeps([conference]);
+    const write = vi.fn();
+    deps.write = write;
+
+    await handleList({ ...range, busy: true, format: "json", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).toContain("hidden by --busy");
+    expect(() => JSON.parse(write.mock.calls[0]![0] as string)).not.toThrow();
+  });
+});

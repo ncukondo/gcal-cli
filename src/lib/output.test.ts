@@ -8,6 +8,7 @@ import {
   formatCalendarListText,
   formatEventDetailText,
   formatQuietText,
+  formatHiddenAllDayWarning,
   errorCodeToExitCode,
 } from "./output.ts";
 
@@ -149,7 +150,7 @@ describe("formatEventListText", () => {
     expect(result).toContain("2026-12-31 (Thu)");
   });
 
-  it("does not show transparency tag for all-day events", () => {
+  it("shows [busy] tag for opaque all-day events", () => {
     const events = [
       makeEvent({
         all_day: true,
@@ -160,8 +161,24 @@ describe("formatEventListText", () => {
       }),
     ];
     const result = formatEventListText(events);
-    expect(result).not.toContain("[busy]");
-    expect(result).not.toContain("[free]");
+    expect(result).toContain("[busy]");
+  });
+
+  // Google Calendar marks all-day events as free by default, so the tag is the
+  // only on-screen clue that --busy would hide them.
+  it("shows [free] tag for transparent all-day events", () => {
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-09-05",
+        end: "2026-09-07",
+        title: "学会",
+        transparency: "transparent",
+      }),
+    ];
+    const result = formatEventListText(events);
+    expect(result).toContain("  [All Day 1/2]   学会 (Main Calendar) [free]");
+    expect(result).toContain("  [All Day 2/2]   学会 (Main Calendar) [free]");
   });
 
   it("returns empty string for empty event list", () => {
@@ -205,12 +222,12 @@ describe("formatEventListText", () => {
     const result = formatEventListText(events);
     const expected = [
       "2026-01-24 (Sat)",
-      "  [All Day]     Company Holiday (Main Calendar)",
+      "  [All Day]     Company Holiday (Main Calendar) [busy]",
       "  10:00-11:00   Team Meeting (Main Calendar) [busy]",
       "  14:00-15:00   Focus Time (Work Calendar) [free]",
       "",
       "2026-01-25 (Sun)",
-      "  [All Day]     Vacation (Main Calendar)",
+      "  [All Day]     Vacation (Main Calendar) [busy]",
     ].join("\n");
     expect(result).toBe(expected);
   });
@@ -228,10 +245,10 @@ describe("formatEventListText", () => {
       const result = formatEventListText(events);
       const expected = [
         "2026-12-05 (Sat)",
-        "  [All Day 1/2]   Aコース (Main Calendar)",
+        "  [All Day 1/2]   Aコース (Main Calendar) [busy]",
         "",
         "2026-12-06 (Sun)",
-        "  [All Day 2/2]   Aコース (Main Calendar)",
+        "  [All Day 2/2]   Aコース (Main Calendar) [busy]",
       ].join("\n");
       expect(result).toBe(expected);
     });
@@ -256,11 +273,11 @@ describe("formatEventListText", () => {
       const result = formatEventListText(events);
       const expected = [
         "2026-12-05 (Sat)",
-        "  [All Day 1/2]   Aコース (Main Calendar)",
+        "  [All Day 1/2]   Aコース (Main Calendar) [busy]",
         "  10:00-11:00     Team Meeting (Main Calendar) [busy]",
         "",
         "2026-12-06 (Sun)",
-        "  [All Day 2/2]   Aコース (Main Calendar)",
+        "  [All Day 2/2]   Aコース (Main Calendar) [busy]",
       ].join("\n");
       expect(result).toBe(expected);
     });
@@ -296,7 +313,7 @@ describe("formatEventListText", () => {
       const result = formatEventListText(events);
       const dayHeaders = result.split("\n").filter((line) => line.startsWith("2026-"));
       expect(dayHeaders).toEqual(["2026-12-05 (Sat)", "2026-12-06 (Sun)", "2026-12-07 (Mon)"]);
-      expect(result).toContain("  [All Day 2/3]   Aコース (Main Calendar)");
+      expect(result).toContain("  [All Day 2/3]   Aコース (Main Calendar) [busy]");
       expect(result).toContain("  09:00-10:00     Team Meeting (Main Calendar) [busy]");
     });
   });
@@ -307,7 +324,10 @@ describe("formatEventListText", () => {
         makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-08", title: "Aコース" }),
       ];
       const result = formatEventListText(events, { from: "2026-12-06", to: "2026-12-06" });
-      const expected = ["2026-12-06 (Sun)", "  [All Day 2/3]   Aコース (Main Calendar)"].join("\n");
+      const expected = [
+        "2026-12-06 (Sun)",
+        "  [All Day 2/3]   Aコース (Main Calendar) [busy]",
+      ].join("\n");
       expect(result).toBe(expected);
     });
 
@@ -405,7 +425,7 @@ describe("formatSearchResultText", () => {
       }),
     ];
     const result = formatSearchResultText("holiday", events);
-    expect(result).toContain("2026-01-24 [All Day]    Company Holiday (Main Calendar)");
+    expect(result).toContain("2026-01-24 [All Day]    Company Holiday (Main Calendar) [busy]");
   });
 
   it("annotates the period on multi-day all-day events", () => {
@@ -419,7 +439,7 @@ describe("formatSearchResultText", () => {
       }),
     ];
     const result = formatSearchResultText("A", events);
-    expect(result).toContain("2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar)");
+    expect(result).toContain("2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar) [busy]");
   });
 
   it("annotates the end date on timed events crossing midnight", () => {
@@ -723,5 +743,47 @@ describe("errorCodeToExitCode", () => {
 
   it("maps CONFIG_ERROR to exit code 1", () => {
     expect(errorCodeToExitCode("CONFIG_ERROR")).toBe(1);
+  });
+});
+
+describe("formatHiddenAllDayWarning", () => {
+  function allDay(title: string, start: string): CalendarEvent {
+    return makeEvent({ all_day: true, start, end: start, title, transparency: "transparent" });
+  }
+
+  it("lists the count and the title of each hidden event", () => {
+    const result = formatHiddenAllDayWarning([
+      allDay("日本看護研究学会第52回学術集会", "2026-09-05"),
+      allDay("【宿泊】ホテルココ・グラン高崎", "2026-09-05"),
+    ]);
+    expect(result).toBe(
+      [
+        "Note: 2 all-day events are hidden by --busy (Google Calendar marks all-day events as free by default):",
+        "  2026-09-05  日本看護研究学会第52回学術集会",
+        "  2026-09-05  【宿泊】ホテルココ・グラン高崎",
+      ].join("\n"),
+    );
+  });
+
+  it("uses singular wording for a single event", () => {
+    const result = formatHiddenAllDayWarning([allDay("学会", "2026-09-05")]);
+    expect(result).toContain("1 all-day event is hidden by --busy");
+  });
+
+  it("caps the list at 5 entries and reports the remainder", () => {
+    const events = Array.from({ length: 8 }, (_, i) =>
+      allDay(`Event ${i + 1}`, `2026-09-0${i + 1}`),
+    );
+    const result = formatHiddenAllDayWarning(events);
+    const lines = result.split("\n");
+    expect(lines[0]).toContain("8 all-day events are hidden");
+    expect(lines).toHaveLength(7);
+    expect(lines[1]).toContain("Event 1");
+    expect(lines[5]).toContain("Event 5");
+    expect(lines[6]).toBe("  ... and 3 more");
+  });
+
+  it("returns an empty string when nothing is hidden", () => {
+    expect(formatHiddenAllDayWarning([])).toBe("");
   });
 });

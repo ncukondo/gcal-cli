@@ -47,3 +47,24 @@ export function applyFilters(events: CalendarEvent[], options: FilterOptions): C
   const afterTransparency = filterByTransparency(events, options.transparency);
   return filterByStatus(afterTransparency, options);
 }
+
+/**
+ * All-day events that `--busy` removes from the result.
+ *
+ * Google Calendar marks all-day events as `transparent` by default, so `--busy`
+ * silently drops real commitments the user never chose to mark as free. Callers
+ * surface these so a booked day cannot look empty.
+ *
+ * Only `--busy` is reported: `--free` explicitly asks for open time, and timed
+ * events dropped by `--busy` match what the user asked for.
+ */
+export function findHiddenAllDayEvents(
+  events: CalendarEvent[],
+  options: FilterOptions,
+): CalendarEvent[] {
+  if (options.transparency !== "busy") return [];
+
+  return filterByStatus(events, options).filter(
+    (event) => event.all_day && event.transparency === "transparent",
+  );
+}

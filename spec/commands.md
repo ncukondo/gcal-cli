@@ -58,7 +58,13 @@ gcal list --today --busy
 gcal list --days 7 --confirmed
 ```
 
-Quiet mode (`-q`): Compact one-line format: `MM/DD HH:MM-HH:MM Title`. Stderr messages suppressed.
+`--busy` caveat: Google Calendar marks all-day events as free by default, so
+`--busy` hides most of them and a fully booked day can look empty. Any all-day
+event it hides is reported on stderr with its date and title. See
+[output.md](./output.md#--busy-and-all-day-events).
+
+Quiet mode (`-q`): Compact one-line format: `MM/DD HH:MM-HH:MM Title`. Warnings
+still go to stderr, so stdout stays clean for piping.
 
 ### `gcal search`
 
@@ -101,7 +107,12 @@ Searching: 2026-01-25 to 2026-02-24
 Tip: Use --days <n> or --from/--to to change the search range.
 ```
 
-Quiet mode (`-q`): Same compact format as `list` (`MM/DD HH:MM-HH:MM Title`). Stderr messages suppressed.
+`--busy` hides all-day events for the same reason as `list`, and reports them on
+stderr in the same format.
+
+Quiet mode (`-q`): Same compact format as `list` (`MM/DD HH:MM-HH:MM Title`).
+Unlike `list`, `search` suppresses **all** stderr messages under `--quiet`,
+including the `--busy` notice.
 
 ### `gcal add`
 
