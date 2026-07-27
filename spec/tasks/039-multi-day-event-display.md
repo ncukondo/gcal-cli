@@ -95,11 +95,16 @@ export function expandEventsByDay(events: CalendarEvent[], range?: DayRange): Ev
 
 ## E2E Test
 
-認証が必要なため未実行。マージ前に手動で確認する。
+`tests/e2e/multi-day-events.test.ts` として実装（実行結果: 31/31 pass）。
 
-- [ ] 複数日の終日イベントを作成し、`gcal list --from <2日目> --to <2日目>` でそのイベントが表示されること
-- [ ] `gcal list --from <初日> --to <最終日>` で全ての日付グループに `[All Day n/m]` 付きで表示されること
-- [ ] `gcal list -f json` の出力が変わっていないこと
+`test:e2e` スクリプトは `Bun.spawn` を使う `tests/e2e/helpers.ts` を Node 上の vitest で実行していたため
+`ReferenceError: Bun is not defined` で全滅していた（本タスク以前からの不具合）。`bun run --bun vitest` に修正。
+
+- [x] 複数日の終日イベントを作成し、`gcal list --from <2日目> --to <2日目>` でそのイベントが表示されること
+- [x] `gcal list --from <初日> --to <最終日>` で全ての日付グループに `[All Day n/m]` 付きで表示されること
+- [x] `gcal list --quiet` で占有日ごとに1行出力されること
+- [x] `gcal list -f json` の出力が変わっていないこと（1件のみ・元の start/end を保持）
+- [x] 日をまたぐ時刻指定イベントが両日に各日の実占有時間帯で表示されること
 
 ## Acceptance Criteria
 
