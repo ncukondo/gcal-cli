@@ -8,6 +8,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
+### Phase 15: Bug Fixes
+
+39. [039-multi-day-event-display](./039-multi-day-event-display.md) — 複数日にまたがるイベントを全ての日付グループに表示 (#53)
+
 ## Completed
 
 ### Phase 14: Google Tasks - Config Integration
