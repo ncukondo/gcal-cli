@@ -8,11 +8,12 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
+## Completed
+
 ### Phase 15: Bug Fixes
 
-39. [039-multi-day-event-display](./039-multi-day-event-display.md) — 複数日にまたがるイベントを全ての日付グループに表示 (#53)
-
-## Completed
+39. [039-multi-day-event-display](./completed/039-multi-day-event-display.md) — 複数日にまたがるイベントを全ての日付グループに表示 (#53)
+40. [040-all-day-free-busy](./completed/040-all-day-free-busy.md) — 終日イベントの free/busy を可視化し、--busy による非表示を通知 (#55)
 
 ### Phase 14: Google Tasks - Config Integration
 

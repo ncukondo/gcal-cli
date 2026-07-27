@@ -70,7 +70,7 @@ Note: 3 all-day events are hidden by --busy (Google Calendar marks all-day event
 ### Out of Scope
 
 `gcal add` の終日イベントが `transparency: opaque` 固定で Google UI（`transparent`）と逆になる件
-（`src/commands/add.ts:80`）。破壊的変更になるため #55 の補足に記載して別途検討する。
+（`src/commands/add.ts:80`）。**メンテナ判断により現状維持**（opaque デフォルトのままとする）。
 
 ## Implementation Steps
 
