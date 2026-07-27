@@ -6,6 +6,8 @@ import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../l
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters } from "../lib/filter.ts";
 import { formatEventListText, formatJsonSuccess, formatQuietText } from "../lib/output.ts";
+import type { DayRange } from "../lib/event-days.ts";
+import { addDaysToDateString } from "../lib/date-utils.ts";
 import { collect } from "./shared.ts";
 import { addDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -77,6 +79,20 @@ export function resolveDateRange(
     timeMin: formatDateTimeInZone(todayStart, timezone),
     timeMax: formatDateTimeInZone(end, timezone),
   };
+}
+
+/**
+ * Convert the API query window into the inclusive range of calendar dates the
+ * text output should cover. `timeMax` is exclusive, so a midnight boundary
+ * belongs to the previous day.
+ */
+export function toDayRange(range: Pick<DateRange, "timeMin" | "timeMax">): DayRange {
+  const from = range.timeMin.slice(0, 10);
+  const endsAtMidnight = range.timeMax.slice(11, 16) === "00:00";
+  const to = endsAtMidnight
+    ? addDaysToDateString(range.timeMax.slice(0, 10), -1)
+    : range.timeMax.slice(0, 10);
+  return { from, to: to < from ? from : to };
 }
 
 export interface ListHandlerDeps {
@@ -167,11 +183,14 @@ export async function handleList(
   // Output
   if (options.format === "json") {
     deps.write(formatJsonSuccess({ events: filtered, count: filtered.length }));
-  } else if (options.quiet) {
-    deps.write(formatQuietText(filtered));
   } else {
-    const text = formatEventListText(filtered);
-    deps.write(text || "No events found.");
+    const dayRange = toDayRange(dateRange);
+    if (options.quiet) {
+      deps.write(formatQuietText(filtered, dayRange));
+    } else {
+      const text = formatEventListText(filtered, dayRange);
+      deps.write(text || "No events found.");
+    }
   }
 
   return { exitCode: ExitCode.SUCCESS };

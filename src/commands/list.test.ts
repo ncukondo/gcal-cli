@@ -1,7 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { CalendarEvent, AppConfig } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
-import { resolveDateRange, handleList, createListCommand, type ListHandlerDeps } from "./list.ts";
+import {
+  resolveDateRange,
+  toDayRange,
+  handleList,
+  createListCommand,
+  type ListHandlerDeps,
+} from "./list.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -120,6 +126,35 @@ describe("resolveDateRange", () => {
     expect(() => resolveDateRange({ days: -1 }, tz, now)).toThrow(
       "--days must be a positive integer",
     );
+  });
+});
+
+describe("toDayRange", () => {
+  it("converts an exclusive midnight timeMax to an inclusive last date", () => {
+    expect(
+      toDayRange({
+        timeMin: "2026-12-06T00:00:00+09:00",
+        timeMax: "2026-12-07T00:00:00+09:00",
+      }),
+    ).toEqual({ from: "2026-12-06", to: "2026-12-06" });
+  });
+
+  it("keeps the timeMax date when it carries a time of day", () => {
+    expect(
+      toDayRange({
+        timeMin: "2026-12-06T10:00:00+09:00",
+        timeMax: "2026-12-08T15:00:00+09:00",
+      }),
+    ).toEqual({ from: "2026-12-06", to: "2026-12-08" });
+  });
+
+  it("never returns a range that ends before it starts", () => {
+    expect(
+      toDayRange({
+        timeMin: "2026-12-06T00:00:00+09:00",
+        timeMax: "2026-12-06T00:00:00+09:00",
+      }),
+    ).toEqual({ from: "2026-12-06", to: "2026-12-06" });
   });
 });
 
@@ -462,6 +497,129 @@ describe("handleList", () => {
     const result = await handleList({ today: true, format: "text", quiet: false }, deps);
 
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
+  });
+
+  describe("multi-day events", () => {
+    const course = makeEvent({
+      id: "course",
+      all_day: true,
+      start: "2026-12-05",
+      end: "2026-12-07",
+      title: "Aコース",
+    });
+
+    function makeSingleCalendarDeps(events: CalendarEvent[]) {
+      const write = vi.fn();
+      const deps = makeDeps({
+        listEvents: vi.fn().mockResolvedValue(events),
+        loadConfig: vi
+          .fn()
+          .mockReturnValue(
+            makeConfig({ calendars: [{ id: "primary", name: "Main Calendar", enabled: true }] }),
+          ),
+        write,
+      });
+      return { deps, write };
+    }
+
+    it("shows a spanning all-day event when only its second day is requested", async () => {
+      const { deps, write } = makeSingleCalendarDeps([course]);
+
+      await handleList(
+        {
+          from: "2026-12-06",
+          to: "2026-12-06",
+          format: "text",
+          quiet: false,
+          timezone: "Asia/Tokyo",
+        },
+        deps,
+      );
+
+      const output = write.mock.calls[0]![0] as string;
+      expect(output).toContain("2026-12-06 (Sun)");
+      expect(output).toContain("[All Day 2/2]");
+      expect(output).toContain("Aコース");
+    });
+
+    it("does not render day groups outside the requested range", async () => {
+      const { deps, write } = makeSingleCalendarDeps([course]);
+
+      await handleList(
+        {
+          from: "2026-12-06",
+          to: "2026-12-06",
+          format: "text",
+          quiet: false,
+          timezone: "Asia/Tokyo",
+        },
+        deps,
+      );
+
+      const output = write.mock.calls[0]![0] as string;
+      expect(output).not.toContain("2026-12-05");
+      expect(output).not.toContain("2026-12-07");
+    });
+
+    it("shows the event under every occupied day of a wider range", async () => {
+      const { deps, write } = makeSingleCalendarDeps([course]);
+
+      await handleList(
+        {
+          from: "2026-12-04",
+          to: "2026-12-07",
+          format: "text",
+          quiet: false,
+          timezone: "Asia/Tokyo",
+        },
+        deps,
+      );
+
+      const output = write.mock.calls[0]![0] as string;
+      expect(output).toContain("2026-12-05 (Sat)");
+      expect(output).toContain("[All Day 1/2]");
+      expect(output).toContain("2026-12-06 (Sun)");
+      expect(output).toContain("[All Day 2/2]");
+    });
+
+    it("expands multi-day events in --quiet output too", async () => {
+      const { deps, write } = makeSingleCalendarDeps([course]);
+
+      await handleList(
+        {
+          from: "2026-12-04",
+          to: "2026-12-07",
+          format: "text",
+          quiet: true,
+          timezone: "Asia/Tokyo",
+        },
+        deps,
+      );
+
+      const output = write.mock.calls[0]![0] as string;
+      expect(output).toContain("12/05 All day");
+      expect(output).toContain("12/06 All day");
+    });
+
+    it("leaves JSON output untouched", async () => {
+      const { deps, write } = makeSingleCalendarDeps([course]);
+
+      await handleList(
+        {
+          from: "2026-12-06",
+          to: "2026-12-06",
+          format: "json",
+          quiet: false,
+          timezone: "Asia/Tokyo",
+        },
+        deps,
+      );
+
+      const output = JSON.parse(write.mock.calls[0]![0] as string);
+      expect(output.data.count).toBe(1);
+      expect(output.data.events[0].start).toBe("2026-12-05");
+      expect(output.data.events[0].end).toBe("2026-12-07");
+    });
   });
 });
 

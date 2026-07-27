@@ -1,5 +1,8 @@
 import type { Calendar, CalendarEvent, ErrorCode } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
+import { expandEventsByDay, type DayRange, type EventDay } from "./event-days.ts";
+
+export type { DayRange } from "./event-days.ts";
 
 export function formatJsonSuccess(data: unknown): string {
   return JSON.stringify({ success: true, data }, null, 2);
@@ -11,73 +14,95 @@ export function formatJsonError(code: ErrorCode, message: string): string {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-function getDateKey(event: CalendarEvent): string {
-  if (event.all_day) {
-    return event.start;
-  }
-  return event.start.slice(0, 10);
-}
+/** Width of `HH:MM-HH:MM`; wider labels grow the column for the whole output. */
+const TIME_COL_MIN_WIDTH = 11;
 
 function getDayOfWeek(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00Z");
   return DAY_NAMES[date.getUTCDay()] ?? "???";
 }
 
-export function formatTimeRange(event: CalendarEvent): string {
-  if (event.all_day) {
-    return "[All Day]";
+/** "2026-12-06" -> "12/06" */
+function toMonthDay(dateStr: string): string {
+  return `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}`;
+}
+
+function timeColumnWidth(labels: string[]): number {
+  return Math.max(TIME_COL_MIN_WIDTH, ...labels.map((label) => label.length));
+}
+
+/**
+ * Label for one day of an event: the portion of that day the event occupies,
+ * or `[All Day n/m]` when an all-day event spans several days.
+ */
+export function formatTimeRange(day: EventDay): string {
+  if (day.event.all_day) {
+    return day.dayCount === 1 ? "[All Day]" : `[All Day ${day.dayIndex}/${day.dayCount}]`;
   }
-  const startTime = event.start.slice(11, 16);
-  const endTime = event.end.slice(11, 16);
-  return `${startTime}-${endTime}`;
+  return `${day.startTime}-${day.endTime}`;
+}
+
+/**
+ * Label for a whole event on a single line. Search lists one row per event
+ * rather than per day, so a multi-day span is annotated inline.
+ */
+function formatEventSpanLabel(event: CalendarEvent): string {
+  const days = expandEventsByDay([event]);
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return "";
+
+  if (event.all_day) {
+    return days.length === 1
+      ? "[All Day]"
+      : `[All Day ${toMonthDay(first.date)}-${toMonthDay(last.date)}]`;
+  }
+  return first.date === last.date
+    ? `${first.startTime}-${last.endTime}`
+    : `${first.startTime}-${toMonthDay(last.date)} ${last.endTime}`;
 }
 
 function transparencyTag(event: CalendarEvent): string {
   return event.transparency === "transparent" ? "[free]" : "[busy]";
 }
 
-export function formatEventListText(events: CalendarEvent[]): string {
-  if (events.length === 0) return "";
+/**
+ * Group events by the days they occupy. Events spanning several days appear
+ * under each of them; `range` limits which days are rendered.
+ */
+export function formatEventListText(events: CalendarEvent[], range?: DayRange): string {
+  const days = expandEventsByDay(events, range);
+  if (days.length === 0) return "";
 
-  const groups = new Map<string, CalendarEvent[]>();
-  for (const event of events) {
-    const key = getDateKey(event);
-    const group = groups.get(key);
+  const labels = days.map(formatTimeRange);
+  const width = timeColumnWidth(labels);
+
+  const groups = new Map<string, string[]>();
+  for (let i = 0; i < days.length; i++) {
+    const day = days[i]!;
+    const { event } = day;
+    const time = labels[i]!.padEnd(width);
+    const tag = event.all_day ? "" : ` ${transparencyTag(event)}`;
+    const line = `  ${time}   ${event.title} (${event.calendar_name})${tag}`;
+
+    const group = groups.get(day.date);
     if (group) {
-      group.push(event);
+      group.push(line);
     } else {
-      groups.set(key, [event]);
+      groups.set(day.date, [line]);
     }
   }
 
   const lines: string[] = [];
   let first = true;
-  for (const [dateKey, groupEvents] of groups) {
+  for (const [date, groupLines] of groups) {
     if (!first) lines.push("");
     first = false;
-    lines.push(`${dateKey} (${getDayOfWeek(dateKey)})`);
-    for (const event of groupEvents) {
-      const time = formatTimeRange(event).padEnd(11);
-      if (event.all_day) {
-        lines.push(`  ${time}   ${event.title} (${event.calendar_name})`);
-      } else {
-        const tag = transparencyTag(event);
-        lines.push(`  ${time}   ${event.title} (${event.calendar_name}) ${tag}`);
-      }
-    }
+    lines.push(`${date} (${getDayOfWeek(date)})`);
+    lines.push(...groupLines);
   }
 
   return lines.join("\n");
-}
-
-function formatSearchEventLine(event: CalendarEvent): string {
-  const date = getDateKey(event);
-  const time = formatTimeRange(event).padEnd(11);
-  if (event.all_day) {
-    return `${date} ${time}  ${event.title} (${event.calendar_name})`;
-  }
-  const tag = transparencyTag(event);
-  return `${date} ${time}  ${event.title} (${event.calendar_name}) ${tag}`;
 }
 
 export function formatSearchResultText(query: string, events: CalendarEvent[]): string {
@@ -85,31 +110,51 @@ export function formatSearchResultText(query: string, events: CalendarEvent[]): 
   const plural = count === 1 ? "event" : "events";
   if (count === 0) return `Found 0 events matching "${query}".`;
 
-  const header = `Found ${count} ${plural} matching "${query}":`;
+  const labels = events.map(formatEventSpanLabel);
+  const width = timeColumnWidth(labels);
 
-  const lines = [header, ""];
-  for (const event of events) {
-    lines.push(formatSearchEventLine(event));
+  const lines = [`Found ${count} ${plural} matching "${query}":`, ""];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i]!;
+    const date = event.start.slice(0, 10);
+    const time = labels[i]!.padEnd(width);
+    const tag = event.all_day ? "" : ` ${transparencyTag(event)}`;
+    lines.push(`${date} ${time}  ${event.title} (${event.calendar_name})${tag}`);
   }
   return lines.join("\n");
 }
 
-export function formatQuietText(events: CalendarEvent[]): string {
-  if (events.length === 0) return "No events found.";
+interface QuietRow {
+  date: string;
+  label: string;
+  title: string;
+}
 
-  const lines: string[] = [];
-  for (const event of events) {
-    const month = event.start.slice(5, 7);
-    const day = event.start.slice(8, 10);
-    const datePrefix = `${month}/${day}`;
-    if (event.all_day) {
-      lines.push(`${datePrefix} All day      ${event.title}`);
-    } else {
-      const time = formatTimeRange(event);
-      lines.push(`${datePrefix} ${time}  ${event.title}`);
-    }
-  }
-  return lines.join("\n");
+/**
+ * Minimal one-line-per-entry output. Passing `range` switches to a day-oriented
+ * view where multi-day events get a line per day; without it each event is
+ * listed once (used by search).
+ */
+export function formatQuietText(events: CalendarEvent[], range?: DayRange): string {
+  const rows: QuietRow[] = range
+    ? expandEventsByDay(events, range).map((day) => ({
+        date: day.date,
+        label: day.event.all_day ? "All day" : `${day.startTime}-${day.endTime}`,
+        title: day.event.title,
+      }))
+    : events.map((event) => ({
+        date: event.start.slice(0, 10),
+        label: event.all_day
+          ? "All day"
+          : `${event.start.slice(11, 16)}-${event.end.slice(11, 16)}`,
+        title: event.title,
+      }));
+
+  if (rows.length === 0) return "No events found.";
+
+  return rows
+    .map((row) => `${toMonthDay(row.date)} ${row.label.padEnd(TIME_COL_MIN_WIDTH)}  ${row.title}`)
+    .join("\n");
 }
 
 const CALENDAR_ID_MAX = 15;
