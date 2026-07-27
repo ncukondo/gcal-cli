@@ -78,21 +78,24 @@ export function expandEventsByDay(events: CalendarEvent[], range?: DayRange): Ev
 
 ## Implementation Steps
 
-- [ ] `src/lib/event-days.test.ts`: `expandEventsByDay()` の失敗テストを書く（終日単日 / 終日複数日 / clip / 日またぎ時刻 / 終了 00:00 / 3日以上）
-- [ ] `src/lib/event-days.ts`: `expandEventsByDay()` を実装
-- [ ] `src/lib/output.test.ts`: `formatEventListText()` の複数日展開・`[All Day n/m]`・動的列幅の失敗テストを追加
-- [ ] `src/lib/output.ts`: `formatEventListText(events, range?)` を `expandEventsByDay()` ベースに書き換え、グループキーを日付昇順で明示的にソート
-- [ ] `src/lib/output.ts`: `formatTimeRange()` を `EventDay` 対応にし、`[All Day n/m]` を出力
-- [ ] `src/lib/output.test.ts` / `src/lib/output.ts`: `formatQuietText(events, range?)` の日別展開を追加
-- [ ] `src/lib/output.test.ts` / `src/lib/output.ts`: `formatSearchEventLine()` の終日ラベルに期間を併記
-- [ ] `src/commands/list.ts`: `dateRange` から `DayRange` を導出して `formatEventListText` / `formatQuietText` に渡す
-- [ ] `src/commands/list.test.ts`: 2日目単独指定で複数日イベントが表示されることを確認するテストを追加
-- [ ] `spec/output.md`: 複数日イベントの表示例と列幅の説明を追加
-- [ ] `bun run test` pass
-- [ ] `bun run lint` pass
-- [ ] `bun run format:check` pass
+- [x] `src/lib/event-days.test.ts`: `expandEventsByDay()` の失敗テストを書く（終日単日 / 終日複数日 / clip / 日またぎ時刻 / 終了 00:00 / 3日以上）
+- [x] `src/lib/event-days.ts`: `expandEventsByDay()` を実装
+- [x] `src/lib/output.test.ts`: `formatEventListText()` の複数日展開・`[All Day n/m]`・動的列幅の失敗テストを追加
+- [x] `src/lib/output.ts`: `formatEventListText(events, range?)` を `expandEventsByDay()` ベースに書き換え、グループキーを日付昇順で明示的にソート（ソートは `expandEventsByDay()` 側に集約）
+- [x] `src/lib/output.ts`: `formatTimeRange()` を `EventDay` 対応にし、`[All Day n/m]` を出力
+- [x] `src/lib/output.test.ts` / `src/lib/output.ts`: `formatQuietText(events, range?)` の日別展開を追加
+- [x] `src/lib/output.test.ts` / `src/lib/output.ts`: search 行の終日ラベルに期間を併記（`formatEventSpanLabel()`）
+- [x] `src/commands/list.ts`: `dateRange` から `DayRange` を導出して `formatEventListText` / `formatQuietText` に渡す（`toDayRange()`）
+- [x] `src/commands/list.test.ts`: 2日目単独指定で複数日イベントが表示されることを確認するテストを追加
+- [x] `spec/output.md`: 複数日イベントの表示例と列幅の説明を追加
+- [x] `bun run test` pass (unit 677 / integration 72)
+- [x] `bun run lint` pass
+- [x] `bun run format:check` pass
+- [x] `bun run typecheck` pass
 
 ## E2E Test
+
+認証が必要なため未実行。マージ前に手動で確認する。
 
 - [ ] 複数日の終日イベントを作成し、`gcal list --from <2日目> --to <2日目>` でそのイベントが表示されること
 - [ ] `gcal list --from <初日> --to <最終日>` で全ての日付グループに `[All Day n/m]` 付きで表示されること
@@ -100,16 +103,16 @@ export function expandEventsByDay(events: CalendarEvent[], range?: DayRange): Ev
 
 ## Acceptance Criteria
 
-- [ ] 複数日にまたがる終日イベントが、占有する全ての日付グループに表示される
-- [ ] 終日ラベルに `[All Day 1/2]` の形式で日目が併記される（単日イベントは `[All Day]` のまま）
-- [ ] 終日イベントの `end` exclusive が正しく扱われる（`12-05`〜`12-07` は2日間）
-- [ ] 表示範囲外の日付グループが生成されない
-- [ ] 日をまたぐ時刻指定イベントが両日に、各日の実占有時間帯で表示される
-- [ ] 終了が丁度 00:00 の時刻指定イベントで翌日のグループが生成されない
-- [ ] `--quiet` 出力でも複数日イベントが全ての日に表示される
-- [ ] `search` の終日イベント行に期間が併記される
-- [ ] JSON 出力は変更されない
-- [ ] 既存テストが pass する
+- [x] 複数日にまたがる終日イベントが、占有する全ての日付グループに表示される
+- [x] 終日ラベルに `[All Day 1/2]` の形式で日目が併記される（単日イベントは `[All Day]` のまま）
+- [x] 終日イベントの `end` exclusive が正しく扱われる（`12-05`〜`12-07` は2日間）
+- [x] 表示範囲外の日付グループが生成されない
+- [x] 日をまたぐ時刻指定イベントが両日に、各日の実占有時間帯で表示される
+- [x] 終了が丁度 00:00 の時刻指定イベントで翌日のグループが生成されない
+- [x] `--quiet` 出力でも複数日イベントが全ての日に表示される
+- [x] `search` の終日イベント行に期間が併記される
+- [x] JSON 出力は変更されない
+- [x] 既存テストが pass する
 
 ## Out of Scope
 
