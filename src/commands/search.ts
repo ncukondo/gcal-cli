@@ -1,9 +1,14 @@
 import { Command } from "commander";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { listEvents } from "../lib/api.ts";
-import { applyFilters } from "../lib/filter.ts";
+import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
-import { formatJsonSuccess, formatSearchResultText, formatQuietText } from "../lib/output.ts";
+import {
+  formatHiddenAllDayWarning,
+  formatJsonSuccess,
+  formatSearchResultText,
+  formatQuietText,
+} from "../lib/output.ts";
 import { collect } from "./shared.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { addDays } from "date-fns";
@@ -91,6 +96,12 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
   if (opts.confirmed !== undefined) filterOpts.confirmed = opts.confirmed;
   if (opts.includeTentative !== undefined) filterOpts.includeTentative = opts.includeTentative;
   const filtered = applyFilters(allEvents, filterOpts);
+
+  // Google Calendar marks all-day events as free, so --busy silently drops them.
+  const hiddenAllDay = findHiddenAllDayEvents(allEvents, filterOpts);
+  if (hiddenAllDay.length > 0) {
+    writeErr(formatHiddenAllDayWarning(hiddenAllDay));
+  }
 
   if (format === "json") {
     write(

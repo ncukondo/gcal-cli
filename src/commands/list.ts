@@ -4,8 +4,13 @@ import { ExitCode } from "../types/index.ts";
 import type { ListEventsOptions } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
-import { applyFilters } from "../lib/filter.ts";
-import { formatEventListText, formatJsonSuccess, formatQuietText } from "../lib/output.ts";
+import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
+import {
+  formatEventListText,
+  formatHiddenAllDayWarning,
+  formatJsonSuccess,
+  formatQuietText,
+} from "../lib/output.ts";
 import type { DayRange } from "../lib/event-days.ts";
 import { addDaysToDateString } from "../lib/date-utils.ts";
 import { collect } from "./shared.ts";
@@ -179,6 +184,12 @@ export async function handleList(
   if (options.confirmed) filterOpts.confirmed = true;
   if (options.includeTentative) filterOpts.includeTentative = true;
   const filtered = applyFilters(allEvents, filterOpts);
+
+  // A day booked solid with all-day events would otherwise come back empty.
+  const hiddenAllDay = findHiddenAllDayEvents(allEvents, filterOpts);
+  if (hiddenAllDay.length > 0) {
+    writeErr(formatHiddenAllDayWarning(hiddenAllDay));
+  }
 
   // Output
   if (options.format === "json") {

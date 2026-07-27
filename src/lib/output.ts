@@ -82,8 +82,7 @@ export function formatEventListText(events: CalendarEvent[], range?: DayRange): 
     const day = days[i]!;
     const { event } = day;
     const time = labels[i]!.padEnd(width);
-    const tag = event.all_day ? "" : ` ${transparencyTag(event)}`;
-    const line = `  ${time}   ${event.title} (${event.calendar_name})${tag}`;
+    const line = `  ${time}   ${event.title} (${event.calendar_name}) ${transparencyTag(event)}`;
 
     const group = groups.get(day.date);
     if (group) {
@@ -118,9 +117,36 @@ export function formatSearchResultText(query: string, events: CalendarEvent[]): 
     const event = events[i]!;
     const date = event.start.slice(0, 10);
     const time = labels[i]!.padEnd(width);
-    const tag = event.all_day ? "" : ` ${transparencyTag(event)}`;
-    lines.push(`${date} ${time}  ${event.title} (${event.calendar_name})${tag}`);
+    lines.push(
+      `${date} ${time}  ${event.title} (${event.calendar_name}) ${transparencyTag(event)}`,
+    );
   }
+  return lines.join("\n");
+}
+
+const HIDDEN_EVENT_LIST_MAX = 5;
+
+/**
+ * Warning for all-day events that `--busy` removed from the result.
+ *
+ * Google Calendar marks all-day events as free by default, so a fully booked
+ * day can otherwise come back empty. Titles are listed so the user can judge
+ * whether the day is really open.
+ */
+export function formatHiddenAllDayWarning(events: CalendarEvent[]): string {
+  if (events.length === 0) return "";
+
+  const verb = events.length === 1 ? "event is" : "events are";
+  const lines = [
+    `Note: ${events.length} all-day ${verb} hidden by --busy ` +
+      `(Google Calendar marks all-day events as free by default):`,
+  ];
+  for (const event of events.slice(0, HIDDEN_EVENT_LIST_MAX)) {
+    lines.push(`  ${event.start.slice(0, 10)}  ${event.title}`);
+  }
+  const remaining = events.length - HIDDEN_EVENT_LIST_MAX;
+  if (remaining > 0) lines.push(`  ... and ${remaining} more`);
+
   return lines.join("\n");
 }
 

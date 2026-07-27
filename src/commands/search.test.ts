@@ -458,6 +458,63 @@ describe("search command", () => {
     });
   });
 
+  describe("--busy all-day warning", () => {
+    const conference = makeEvent({
+      id: "conf",
+      all_day: true,
+      start: "2026-09-05",
+      end: "2026-09-07",
+      title: "日本看護研究学会第52回学術集会",
+      transparency: "transparent",
+    });
+    const freeTimed = makeEvent({
+      id: "confcall",
+      title: "外来カンファ",
+      transparency: "transparent",
+    });
+
+    it("warns with count and title when --busy hides an all-day event", async () => {
+      const { errOutput } = await runSearch(makeMockApi([conference]), {
+        query: "学会",
+        busy: true,
+      });
+      const warning = errOutput.join("\n");
+      expect(warning).toContain("1 all-day event is hidden by --busy");
+      expect(warning).toContain("日本看護研究学会第52回学術集会");
+    });
+
+    it("does not mention timed events dropped by --busy", async () => {
+      const { errOutput } = await runSearch(makeMockApi([conference, freeTimed]), {
+        query: "カンファ",
+        busy: true,
+      });
+      expect(errOutput.join("\n")).not.toContain("外来カンファ");
+    });
+
+    it("does not warn without --busy", async () => {
+      const { errOutput } = await runSearch(makeMockApi([conference]), { query: "学会" });
+      expect(errOutput.join("\n")).not.toContain("hidden by --busy");
+    });
+
+    it("does not warn for --free", async () => {
+      const { errOutput } = await runSearch(makeMockApi([conference]), {
+        query: "学会",
+        free: true,
+      });
+      expect(errOutput.join("\n")).not.toContain("hidden by --busy");
+    });
+
+    // handleSearch silences stderr entirely in quiet mode.
+    it("does not warn in --quiet mode", async () => {
+      const { errOutput } = await runSearch(makeMockApi([conference]), {
+        query: "学会",
+        busy: true,
+        quiet: true,
+      });
+      expect(errOutput).toEqual([]);
+    });
+  });
+
   describe("--days parser", () => {
     it("parses --days with radix 10", () => {
       const cmd = createSearchCommand();

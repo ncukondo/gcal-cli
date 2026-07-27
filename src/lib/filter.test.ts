@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../types/index.ts";
-import { applyFilters, filterByStatus, filterByTransparency } from "./filter.ts";
+import {
+  applyFilters,
+  filterByStatus,
+  filterByTransparency,
+  findHiddenAllDayEvents,
+} from "./filter.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -161,5 +166,96 @@ describe("applyFilters", () => {
   it("returns empty array for empty input", () => {
     const result = applyFilters([], { transparency: "busy" });
     expect(result).toEqual([]);
+  });
+});
+
+describe("findHiddenAllDayEvents", () => {
+  const freeAllDay = makeEvent({
+    id: "ad1",
+    title: "学会",
+    all_day: true,
+    start: "2026-09-05",
+    end: "2026-09-07",
+    transparency: "transparent",
+  });
+  const busyAllDay = makeEvent({
+    id: "ad2",
+    title: "Blocked Day",
+    all_day: true,
+    start: "2026-09-08",
+    end: "2026-09-09",
+    transparency: "opaque",
+  });
+  const freeTimed = makeEvent({ id: "t1", title: "外来カンファ", transparency: "transparent" });
+  const busyTimed = makeEvent({ id: "t2", title: "登壇", transparency: "opaque" });
+
+  const events = [freeAllDay, busyAllDay, freeTimed, busyTimed];
+
+  it("returns all-day events dropped by --busy", () => {
+    expect(findHiddenAllDayEvents(events, { transparency: "busy" })).toEqual([freeAllDay]);
+  });
+
+  it("does not report timed events dropped by --busy", () => {
+    const result = findHiddenAllDayEvents(events, { transparency: "busy" });
+    expect(result).not.toContain(freeTimed);
+  });
+
+  it("does not report all-day events that survive --busy", () => {
+    const result = findHiddenAllDayEvents(events, { transparency: "busy" });
+    expect(result).not.toContain(busyAllDay);
+  });
+
+  it("returns nothing for --free", () => {
+    expect(findHiddenAllDayEvents(events, { transparency: "free" })).toEqual([]);
+  });
+
+  it("returns nothing when no transparency filter is active", () => {
+    expect(findHiddenAllDayEvents(events, {})).toEqual([]);
+  });
+
+  it("excludes events that the status filter would drop anyway", () => {
+    const cancelledAllDay = makeEvent({
+      id: "ad3",
+      title: "Cancelled Trip",
+      all_day: true,
+      start: "2026-09-10",
+      end: "2026-09-11",
+      transparency: "transparent",
+      status: "cancelled",
+    });
+    const tentativeAllDay = makeEvent({
+      id: "ad4",
+      title: "Maybe Trip",
+      all_day: true,
+      start: "2026-09-12",
+      end: "2026-09-13",
+      transparency: "transparent",
+      status: "tentative",
+    });
+    const result = findHiddenAllDayEvents([freeAllDay, cancelledAllDay, tentativeAllDay], {
+      transparency: "busy",
+    });
+    expect(result).toEqual([freeAllDay]);
+  });
+
+  it("includes tentative all-day events when --include-tentative is set", () => {
+    const tentativeAllDay = makeEvent({
+      id: "ad4",
+      title: "Maybe Trip",
+      all_day: true,
+      start: "2026-09-12",
+      end: "2026-09-13",
+      transparency: "transparent",
+      status: "tentative",
+    });
+    const result = findHiddenAllDayEvents([freeAllDay, tentativeAllDay], {
+      transparency: "busy",
+      includeTentative: true,
+    });
+    expect(result).toEqual([freeAllDay, tentativeAllDay]);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(findHiddenAllDayEvents([], { transparency: "busy" })).toEqual([]);
   });
 });

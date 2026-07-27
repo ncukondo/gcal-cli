@@ -8,12 +8,12 @@ Human-readable format for terminal use.
 
 ```
 2026-01-24 (Fri)
-  [All Day]     Company Holiday (Main Calendar)
+  [All Day]     Company Holiday (Main Calendar) [busy]
   10:00-11:00   Team Meeting (Main Calendar) [busy]
   14:00-15:00   Focus Time (Work Calendar) [free]
 
 2026-01-25 (Sat)
-  [All Day]     Vacation (Main Calendar)
+  [All Day]     Vacation (Main Calendar) [busy]
 ```
 
 #### Multi-day Events
@@ -24,11 +24,11 @@ all-day events keep the plain `[All Day]` label.
 
 ```
 2026-12-05 (Sat)
-  [All Day 1/2]   Aコース (Main Calendar)
+  [All Day 1/2]   Aコース (Main Calendar) [free]
   10:00-11:00     Team Meeting (Main Calendar) [busy]
 
 2026-12-06 (Sun)
-  [All Day 2/2]   Aコース (Main Calendar)
+  [All Day 2/2]   Aコース (Main Calendar) [free]
 ```
 
 Notes:
@@ -43,6 +43,37 @@ Notes:
   does not appear on the following day.
 - The time column widens to fit the longest label in the output, so a listing
   without multi-day events keeps the 11-character `HH:MM-HH:MM` width.
+
+#### Availability Tags
+
+Every event row ends with `[busy]` or `[free]`, all-day events included.
+
+Google Calendar marks all-day events as **free** by default, so most of them
+show `[free]` even when the day is fully committed. The tag is what makes that
+visible — without it, `--busy` appears to drop events for no reason.
+
+#### `--busy` and All-day Events
+
+`--busy` keeps only `opaque` events, which removes most all-day events. Because
+that can make a fully booked day look empty, the hidden events are reported on
+**stderr** (stdout stays clean for piping):
+
+```
+Note: 3 all-day events are hidden by --busy (Google Calendar marks all-day events as free by default):
+  2026-09-05  日本看護研究学会第52回学術集会
+  2026-09-05  【宿泊】ホテルココ・グラン高崎（朝食付）
+  2026-09-05  Stay at ホテルココ・グラン高崎
+```
+
+Rules:
+
+- Only `--busy` triggers the notice. `--free` explicitly asks for open time, and
+  timed events dropped by `--busy` match what was requested, so neither is
+  reported.
+- At most 5 titles are listed; the rest are summarised as `... and N more`.
+- `gcal list` emits the notice in every mode including `--quiet` and `-f json`.
+  `gcal search` suppresses all stderr output under `--quiet`, so the notice is
+  omitted there.
 
 ### `gcal search` Text Output
 
@@ -60,7 +91,7 @@ annotated inline:
 ```
 Found 2 events matching "A":
 
-2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar)
+2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar) [free]
 2026-12-05 23:00-12/06 01:00      Night Shift (Main Calendar) [busy]
 ```
 
