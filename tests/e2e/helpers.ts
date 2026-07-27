@@ -134,3 +134,9 @@ export class TestCleanup {
     this.eventIds = [];
   }
 }
+
+/**
+ * Timeout for E2E suites. Every test spawns the CLI and makes a real API round
+ * trip, so vitest's 5s default is too tight once the machine is loaded.
+ */
+export const E2E_TIMEOUT = 30_000;
