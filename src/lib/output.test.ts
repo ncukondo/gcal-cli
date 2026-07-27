@@ -214,6 +214,120 @@ describe("formatEventListText", () => {
     ].join("\n");
     expect(result).toBe(expected);
   });
+
+  describe("multi-day events", () => {
+    it("shows a multi-day all-day event under every day it occupies", () => {
+      const events = [
+        makeEvent({
+          all_day: true,
+          start: "2026-12-05",
+          end: "2026-12-07",
+          title: "Aコース",
+        }),
+      ];
+      const result = formatEventListText(events);
+      const expected = [
+        "2026-12-05 (Sat)",
+        "  [All Day 1/2]   Aコース (Main Calendar)",
+        "",
+        "2026-12-06 (Sun)",
+        "  [All Day 2/2]   Aコース (Main Calendar)",
+      ].join("\n");
+      expect(result).toBe(expected);
+    });
+
+    it("keeps [All Day] without a counter for single-day all-day events", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-06", title: "Holiday" }),
+      ];
+      expect(formatEventListText(events)).toContain("[All Day]  ");
+      expect(formatEventListText(events)).not.toContain("1/1");
+    });
+
+    it("widens the time column so multi-day labels stay aligned", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-07", title: "Aコース" }),
+        makeEvent({
+          start: "2026-12-05T10:00:00+09:00",
+          end: "2026-12-05T11:00:00+09:00",
+          title: "Team Meeting",
+        }),
+      ];
+      const result = formatEventListText(events);
+      const expected = [
+        "2026-12-05 (Sat)",
+        "  [All Day 1/2]   Aコース (Main Calendar)",
+        "  10:00-11:00     Team Meeting (Main Calendar) [busy]",
+        "",
+        "2026-12-06 (Sun)",
+        "  [All Day 2/2]   Aコース (Main Calendar)",
+      ].join("\n");
+      expect(result).toBe(expected);
+    });
+
+    it("splits a timed event crossing midnight into each day's occupied range", () => {
+      const events = [
+        makeEvent({
+          start: "2026-12-05T23:00:00+09:00",
+          end: "2026-12-06T01:00:00+09:00",
+          title: "Night Shift",
+        }),
+      ];
+      const result = formatEventListText(events);
+      const expected = [
+        "2026-12-05 (Sat)",
+        "  23:00-24:00   Night Shift (Main Calendar) [busy]",
+        "",
+        "2026-12-06 (Sun)",
+        "  00:00-01:00   Night Shift (Main Calendar) [busy]",
+      ].join("\n");
+      expect(result).toBe(expected);
+    });
+
+    it("orders day groups chronologically when a span interleaves other events", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-08", title: "Aコース" }),
+        makeEvent({
+          start: "2026-12-06T09:00:00+09:00",
+          end: "2026-12-06T10:00:00+09:00",
+          title: "Team Meeting",
+        }),
+      ];
+      const result = formatEventListText(events);
+      const dayHeaders = result.split("\n").filter((line) => line.startsWith("2026-"));
+      expect(dayHeaders).toEqual(["2026-12-05 (Sat)", "2026-12-06 (Sun)", "2026-12-07 (Mon)"]);
+      expect(result).toContain("  [All Day 2/3]   Aコース (Main Calendar)");
+      expect(result).toContain("  09:00-10:00     Team Meeting (Main Calendar) [busy]");
+    });
+  });
+
+  describe("range clipping", () => {
+    it("shows only the requested day but keeps the original day number", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-08", title: "Aコース" }),
+      ];
+      const result = formatEventListText(events, { from: "2026-12-06", to: "2026-12-06" });
+      const expected = ["2026-12-06 (Sun)", "  [All Day 2/3]   Aコース (Main Calendar)"].join("\n");
+      expect(result).toBe(expected);
+    });
+
+    it("does not create day groups outside the range", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-08", title: "Aコース" }),
+      ];
+      const result = formatEventListText(events, { from: "2026-12-06", to: "2026-12-07" });
+      expect(result).not.toContain("2026-12-05");
+      expect(result).toContain("2026-12-06");
+      expect(result).toContain("2026-12-07");
+    });
+
+    it("returns an empty string when nothing falls inside the range", () => {
+      const events = [
+        makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-06", title: "Aコース" }),
+      ];
+      expect(formatEventListText(events, { from: "2026-12-10", to: "2026-12-12" })).toBe("");
+    });
+  });
 });
 
 describe("formatSearchResultText", () => {
@@ -292,6 +406,45 @@ describe("formatSearchResultText", () => {
     ];
     const result = formatSearchResultText("holiday", events);
     expect(result).toContain("2026-01-24 [All Day]    Company Holiday (Main Calendar)");
+  });
+
+  it("annotates the period on multi-day all-day events", () => {
+    const events = [
+      makeEvent({
+        all_day: true,
+        start: "2026-12-05",
+        end: "2026-12-07",
+        title: "Aコース",
+        calendar_name: "Main Calendar",
+      }),
+    ];
+    const result = formatSearchResultText("A", events);
+    expect(result).toContain("2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar)");
+  });
+
+  it("annotates the end date on timed events crossing midnight", () => {
+    const events = [
+      makeEvent({
+        start: "2026-12-05T23:00:00+09:00",
+        end: "2026-12-06T01:00:00+09:00",
+        title: "Night Shift",
+        calendar_name: "Main Calendar",
+      }),
+    ];
+    const result = formatSearchResultText("night", events);
+    expect(result).toContain("2026-12-05 23:00-12/06 01:00  Night Shift (Main Calendar) [busy]");
+  });
+
+  it("keeps single-day rows unpadded when no multi-day event is present", () => {
+    const events = [
+      makeEvent({
+        start: "2026-01-24T10:00:00+09:00",
+        end: "2026-01-24T11:00:00+09:00",
+        title: "Team Meeting",
+      }),
+    ];
+    const result = formatSearchResultText("meeting", events);
+    expect(result).toContain("2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]");
   });
 
   it("returns no-results message for empty list", () => {
@@ -498,6 +651,52 @@ describe("formatQuietText", () => {
     const result = formatQuietText(events);
     expect(result).toContain("01/24 10:00-11:00  Meeting");
     expect(result).toContain("01/25 14:00-15:00  Review");
+  });
+
+  it("keeps one line per event when no range is given (search)", () => {
+    const events = [
+      makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-07", title: "Aコース" }),
+    ];
+    expect(formatQuietText(events)).toBe("12/05 All day      Aコース");
+  });
+
+  it("expands multi-day events to one line per day when a range is given", () => {
+    const events = [
+      makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-07", title: "Aコース" }),
+    ];
+    const result = formatQuietText(events, { from: "2026-12-01", to: "2026-12-31" });
+    expect(result).toBe(["12/05 All day      Aコース", "12/06 All day      Aコース"].join("\n"));
+  });
+
+  it("clips expanded days to the range", () => {
+    const events = [
+      makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-08", title: "Aコース" }),
+    ];
+    const result = formatQuietText(events, { from: "2026-12-06", to: "2026-12-06" });
+    expect(result).toBe("12/06 All day      Aコース");
+  });
+
+  it("shows each day's occupied range for a timed event crossing midnight", () => {
+    const events = [
+      makeEvent({
+        start: "2026-12-05T23:00:00+09:00",
+        end: "2026-12-06T01:00:00+09:00",
+        title: "Night Shift",
+      }),
+    ];
+    const result = formatQuietText(events, { from: "2026-12-01", to: "2026-12-31" });
+    expect(result).toBe(
+      ["12/05 23:00-24:00  Night Shift", "12/06 00:00-01:00  Night Shift"].join("\n"),
+    );
+  });
+
+  it("returns 'No events found.' when the range excludes everything", () => {
+    const events = [
+      makeEvent({ all_day: true, start: "2026-12-05", end: "2026-12-06", title: "Aコース" }),
+    ];
+    expect(formatQuietText(events, { from: "2026-12-10", to: "2026-12-12" })).toBe(
+      "No events found.",
+    );
   });
 });
 

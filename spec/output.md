@@ -16,6 +16,34 @@ Human-readable format for terminal use.
   [All Day]     Vacation (Main Calendar)
 ```
 
+#### Multi-day Events
+
+An event is listed under **every day it occupies**, not just its start date.
+All-day events spanning multiple days carry a `n/m` day counter; single-day
+all-day events keep the plain `[All Day]` label.
+
+```
+2026-12-05 (Sat)
+  [All Day 1/2]   Aコース (Main Calendar)
+  10:00-11:00     Team Meeting (Main Calendar) [busy]
+
+2026-12-06 (Sun)
+  [All Day 2/2]   Aコース (Main Calendar)
+```
+
+Notes:
+
+- The Google Calendar API reports the all-day `end` as **exclusive**:
+  `2026-12-05`–`2026-12-07` is a two-day event (12/05 and 12/06).
+- The day counter reflects the event's full span even when the requested range
+  shows only part of it (`gcal list --from 2026-12-06 --to 2026-12-06` prints
+  `[All Day 2/2]`). Days outside the requested range are not rendered.
+- Timed events crossing midnight are shown on each day with that day's occupied
+  range (`23:00-24:00`, then `00:00-01:00`). An event ending exactly at `00:00`
+  does not appear on the following day.
+- The time column widens to fit the longest label in the output, so a listing
+  without multi-day events keeps the 11-character `HH:MM-HH:MM` width.
+
 ### `gcal search` Text Output
 
 ```
@@ -24,6 +52,16 @@ Found 3 events matching "meeting":
 2026-01-24 10:00-11:00  Team Meeting (Main Calendar) [busy]
 2026-01-28 09:00-10:00  Project Meeting (Main Calendar) [busy]
 2026-02-01 14:00-15:00  Review Meeting (Work Calendar) [busy]
+```
+
+Search lists one row per event rather than per day, so a multi-day span is
+annotated inline:
+
+```
+Found 2 events matching "A":
+
+2026-12-05 [All Day 12/05-12/06]  Aコース (Main Calendar)
+2026-12-05 23:00-12/06 01:00      Night Shift (Main Calendar) [busy]
 ```
 
 ### `gcal calendars` Text Output
@@ -50,7 +88,19 @@ Minimal output for scripting and piping. JSON mode (`-f json`) is unaffected by 
 | calendars | Calendar ID per line | `primary` |
 | init | Config file path only | `~/.config/gcal-cli/config.toml` |
 
+`gcal list --quiet` expands multi-day events to one line per occupied day, in
+the same way as the text output:
+
+```
+12/05 All day      Aコース
+12/06 All day      Aコース
+12/06 09:00-10:00  Team Meeting
+```
+
 ### `gcal search` Quiet Output
+
+Search is event-oriented, so each match stays on a single line even when it
+spans several days.
 
 ```
 01/24 10:00-11:00  Team Meeting
