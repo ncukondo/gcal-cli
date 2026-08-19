@@ -164,42 +164,65 @@ gcal delete abc123 --notify all   # キャンセル通知を送る
 
 ## Implementation Steps
 
-- [ ] `src/types/index.ts`: `AttendeeResponseStatus`, `EventAttendee` を追加し `CalendarEvent.attendees` を追加
-- [ ] `src/lib/api.test.ts`: `normalizeEvent()` が attendees を正規化する失敗テスト（未設定 → `[]`、未知の responseStatus → `needsAction`）
-- [ ] `src/lib/api.ts`: `GoogleEvent.attendees`, `GoogleEventWriteBody.attendees` を追加、`normalizeEvent()` を実装
-- [ ] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch/delete` パラメータに `sendUpdates?: string` を追加
-- [ ] `src/lib/api.test.ts` / `api.ts`: `CreateEventInput.attendees` / `sendUpdates`、`UpdateEventInput.attendees` / `sendUpdates` を `createEvent()` / `updateEvent()` / `deleteEvent()` に反映（`attendees: []` を送れば全削除になること）
-- [ ] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `sendUpdates` を通す
-- [ ] `src/commands/add.test.ts` / `add.ts`: `--attendee`（`collect` で repeatable）、`--notify`、バリデーション、de-dup、dry-run 出力
-- [ ] `src/commands/update.test.ts` / `update.ts`: `--attendee`（全置換）、`--clear-attendees`（conflict 設定）、`--notify`
-- [ ] `src/commands/delete.test.ts` / `delete.ts`: `--notify`
-- [ ] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Attendees ブロック（0件では出さない）
-- [ ] `spec/commands.md`: add / update / delete のオプション表と全置換の注意書き
-- [ ] `spec/output.md`: `Event` データ構造に `attendees`、`gcal show` の text 出力例
-- [ ] `tests/integration/add-pipeline.test.ts` / `update-pipeline.test.ts`: attendees が API 呼び出しまで届くこと
-- [ ] `bun run test` pass
-- [ ] `bun run lint` / `format:check` / `typecheck` pass
+- [x] `src/types/index.ts`: `AttendeeResponseStatus`, `EventAttendee` を追加し `CalendarEvent.attendees` を追加
+- [x] `src/lib/api.test.ts`: `normalizeEvent()` が attendees を正規化する失敗テスト（未設定 → `[]`、未知の responseStatus → `needsAction`）
+- [x] `src/lib/api.ts`: `GoogleEvent.attendees`, `GoogleEventWriteBody.attendees` を追加、`normalizeEvent()` を実装
+- [x] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch/delete` パラメータに `sendUpdates?: string` を追加
+- [x] `src/lib/api.test.ts` / `api.ts`: `CreateEventInput.attendees` / `sendUpdates`、`UpdateEventInput.attendees` / `sendUpdates` を `createEvent()` / `updateEvent()` / `deleteEvent()` に反映（`attendees: []` を送れば全削除になること）
+- [x] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `sendUpdates` を通す
+- [x] `src/commands/add.test.ts` / `add.ts`: `--attendee`（`collect` で repeatable）、`--notify`、バリデーション、de-dup、dry-run 出力
+- [x] `src/commands/update.test.ts` / `update.ts`: `--attendee`（全置換）、`--clear-attendees`（conflict 設定）、`--notify`
+- [x] `src/commands/delete.test.ts` / `delete.ts`: `--notify`
+- [x] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Attendees ブロック（0件では出さない）
+- [x] `spec/commands.md`: add / update / delete のオプション表と全置換の注意書き
+- [x] `spec/output.md`: `Event` データ構造に `attendees`、`gcal show` の text 出力例
+- [x] `tests/integration/add-pipeline.test.ts` / `update-pipeline.test.ts`: attendees が API 呼び出しまで届くこと
+- [x] `bun run test` pass
+- [x] `bun run lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
-`tests/e2e/attendees.test.ts` を新規作成する。**招待メールを実際に飛ばさないため `--notify` は指定しない**
-（`sendUpdates: none` で attendees だけ設定する）。招待先には自分自身のアドレスを使う。
+`tests/e2e/attendees.test.ts` を新規作成した。**招待メールを実際に飛ばさないため `--notify` は指定しない**
+（`sendUpdates: none` で attendees だけ設定する）。
 
-- [ ] `gcal add --attendee <self> --notify none` でイベントを作り、`gcal show -f json` の `attendees` に含まれること
-- [ ] `gcal update <id> --clear-attendees` で `attendees` が `[]` になること
-- [ ] `gcal show` の text 出力に Attendees ブロックが出ること
-- [ ] 出席者なしのイベントで `attendees` が `[]` であること（後方互換の確認）
-- [ ] 作成したイベントを cleanup で削除する
+招待先は当初「自分自身のアドレス」を想定していたが、**RFC 2606 の `example.com` アドレスに変更**した。
+自分だけを出席者にすると Google が主催者と同一視して attendees を畳んでしまうことがあり、
+アサーションが不安定になるため。`example.com` は決して配送されないので、万一通知が飛んでも実害がない。
+
+- [x] `gcal add --attendee ... --attendee ...` でイベントを作り、`gcal show -f json` の `attendees` に含まれること
+- [x] `gcal update <id> --clear-attendees` で指定した出席者が消えること
+      （主催者が残る場合があるため、`length === 0` ではなく「テスト用アドレスを含まないこと」で判定した）
+- [x] `gcal show` の text 出力に Attendees ブロックが出ること
+- [x] 出席者なしのイベントで `attendees` が `[]` であること（後方互換の確認）
+- [x] 作成したイベントを cleanup で削除する
+- [x] 不正なメールアドレス / 不正な `--notify` 値が exit code 3 になること
 
 ## Acceptance Criteria
 
-- [ ] `gcal add --attendee` で出席者付きイベントが作成できる
-- [ ] `--attendee` が複数回指定でき、重複は de-dup される
-- [ ] `--notify` 未指定では通知が飛ばない（`sendUpdates: none` が送られる）
-- [ ] `gcal update --attendee` が全置換であることがヘルプと spec に明記されている
-- [ ] `gcal update --clear-attendees` で出席者を空にできる
-- [ ] `gcal delete --notify all` でキャンセル通知が送られる
-- [ ] JSON 出力の `attendees` が常に配列（出席者なしなら `[]`）
-- [ ] 不正なメールアドレス / `--notify` 値で `INVALID_ARGS` が返る
-- [ ] text / json / quiet 全フォーマットが動作する
-- [ ] 既存テストが pass する
+- [x] `gcal add --attendee` で出席者付きイベントが作成できる
+- [x] `--attendee` が複数回指定でき、重複は de-dup される
+- [x] `--notify` 未指定では通知が飛ばない（`sendUpdates: none` が送られる）
+- [x] `gcal update --attendee` が全置換であることがヘルプと spec に明記されている
+- [x] `gcal update --clear-attendees` で出席者を空にできる
+- [x] `gcal delete --notify all` でキャンセル通知が送られる
+- [x] JSON 出力の `attendees` が常に配列（出席者なしなら `[]`）
+- [x] 不正なメールアドレス / `--notify` 値で `INVALID_ARGS` が返る
+- [x] text / json / quiet 全フォーマットが動作する
+- [x] 既存テストが pass する
+
+## Notes
+
+- `sendUpdates` は**常に明示的に送る**実装にした（未指定時は `"none"`）。API 側の既定値も
+  「通知なし」だが、Google が既定を変えても「明示的に指定しない限り通知しない」保証が
+  崩れないようにするため。既存の `events.insert` / `patch` / `delete` の呼び出しアサーションを
+  すべて更新している。
+- `AttendeeInput` に `displayName` / `responseStatus` を持たせた。041 の CLI からは email しか
+  設定しないが、043 の read-modify-write で RSVP を保持したまま差分更新するために必要になる
+  （patch は attendees 配列を全置換するため、responseStatus を送り直さないと全員の回答が
+  `needsAction` に戻ってしまう）。
+- `--notify` は `update` では「更新」とみなさない。`--notify` 単独では
+  `at least one update option must be provided` になる。
+- E2E の招待先には RFC 2606 の `example.com` アドレスを使った。`--notify` を指定しない運用と
+  合わせて、万一通知が飛んでも実在の受信箱には届かない。
+- `CalendarEvent` に必須フィールドを 1 つ足したため、テストの `makeEvent` ファクトリ 8 箇所と
+  `types.test.ts` の型リテラルを更新した。JSON 出力はフィールド追加のみで後方互換。

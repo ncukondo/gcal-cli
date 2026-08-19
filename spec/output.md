@@ -102,12 +102,12 @@ Found 2 events matching "A":
 ```
 Team Meeting
 
-Date:          2026-01-24
-Time:          10:00 - 11:00
-Calendar:      Main Calendar
-Status:        confirmed
-Availability:  busy
-Attendees:     3
+Date:         2026-01-24
+Time:         10:00 - 11:00
+Calendar:     Main Calendar
+Status:       confirmed
+Availability: busy
+Attendees:    3
   [accepted] alice@example.com (Alice) (organizer)
   [needsAction] bob@example.com
   [declined] carol@example.com (optional)
