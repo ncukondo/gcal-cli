@@ -645,6 +645,7 @@ describe("createEvent", () => {
 
     expect(api.events.insert).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       requestBody: {
         summary: "Team Meeting",
         description: "Weekly sync",
@@ -688,6 +689,7 @@ describe("createEvent", () => {
 
     expect(api.events.insert).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       requestBody: {
         summary: "Vacation",
         start: { date: "2024-03-15" },
@@ -786,6 +788,7 @@ describe("updateEvent", () => {
 
     expect(api.events.patch).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       eventId: "evt1",
       requestBody: {
         summary: "Updated Title",
@@ -822,6 +825,7 @@ describe("updateEvent", () => {
 
     expect(api.events.patch).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       eventId: "evt1",
       requestBody: {
         start: { dateTime: "2024-03-15T14:00:00-05:00", timeZone: "America/New_York" },
@@ -856,6 +860,7 @@ describe("updateEvent", () => {
 
     expect(api.events.patch).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       eventId: "evt1",
       requestBody: {
         start: { date: "2024-03-15" },
@@ -912,6 +917,125 @@ describe("updateEvent", () => {
   });
 });
 
+describe("attendees and notifications", () => {
+  const returnedEvent = {
+    id: "evt1",
+    summary: "Meeting",
+    start: { dateTime: "2024-03-15T09:00:00+09:00" },
+    end: { dateTime: "2024-03-15T10:00:00+09:00" },
+  };
+
+  const baseInput: CreateEventInput = {
+    title: "Meeting",
+    start: "2024-03-15T09:00:00+09:00",
+    end: "2024-03-15T10:00:00+09:00",
+    allDay: false,
+  };
+
+  it("createEvent sends sendUpdates: none by default", async () => {
+    const api = createMockApi({ inserted: returnedEvent });
+
+    await createEvent(api, "cal1", "Cal", baseInput);
+
+    expect(api.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ sendUpdates: "none" }),
+    );
+  });
+
+  it("createEvent sends attendees when provided", async () => {
+    const api = createMockApi({ inserted: returnedEvent });
+
+    await createEvent(api, "cal1", "Cal", {
+      ...baseInput,
+      attendees: [{ email: "alice@example.com" }, { email: "bob@example.com", optional: true }],
+      sendUpdates: "all",
+    });
+
+    expect(api.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sendUpdates: "all",
+        requestBody: expect.objectContaining({
+          attendees: [{ email: "alice@example.com" }, { email: "bob@example.com", optional: true }],
+        }),
+      }),
+    );
+  });
+
+  it("createEvent omits attendees when not provided", async () => {
+    const api = createMockApi({ inserted: returnedEvent });
+
+    await createEvent(api, "cal1", "Cal", baseInput);
+
+    const call = vi.mocked(api.events.insert).mock.calls[0]?.[0];
+    expect(call?.requestBody).not.toHaveProperty("attendees");
+  });
+
+  it("createEvent round-trips displayName and responseStatus", async () => {
+    const api = createMockApi({ inserted: returnedEvent });
+
+    await createEvent(api, "cal1", "Cal", {
+      ...baseInput,
+      attendees: [{ email: "alice@example.com", displayName: "Alice", responseStatus: "accepted" }],
+    });
+
+    expect(api.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestBody: expect.objectContaining({
+          attendees: [
+            { email: "alice@example.com", displayName: "Alice", responseStatus: "accepted" },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("updateEvent sends an empty attendees array to clear the guest list", async () => {
+    const api = createMockApi({ patched: returnedEvent });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", { attendees: [] });
+
+    expect(api.events.patch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sendUpdates: "none",
+        requestBody: { attendees: [] },
+      }),
+    );
+  });
+
+  it("updateEvent omits attendees when not provided", async () => {
+    const api = createMockApi({ patched: returnedEvent });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", { title: "Renamed" });
+
+    const call = vi.mocked(api.events.patch).mock.calls[0]?.[0];
+    expect(call?.requestBody).not.toHaveProperty("attendees");
+  });
+
+  it("deleteEvent forwards sendUpdates", async () => {
+    const api = createMockApi({});
+
+    await deleteEvent(api, "cal1", "evt1", "all");
+
+    expect(api.events.delete).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+      sendUpdates: "all",
+    });
+  });
+
+  it("deleteEvent defaults to sendUpdates: none", async () => {
+    const api = createMockApi({});
+
+    await deleteEvent(api, "cal1", "evt1");
+
+    expect(api.events.delete).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt1",
+      sendUpdates: "none",
+    });
+  });
+});
+
 describe("deleteEvent", () => {
   it("sends delete request and returns success", async () => {
     const api = createMockApi({ evt1: "exists" });
@@ -920,6 +1044,7 @@ describe("deleteEvent", () => {
 
     expect(api.events.delete).toHaveBeenCalledWith({
       calendarId: "cal1",
+      sendUpdates: "none",
       eventId: "evt1",
     });
   });

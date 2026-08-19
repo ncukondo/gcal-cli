@@ -160,6 +160,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           summary: "New Title",
         },
@@ -185,6 +186,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           start: { dateTime: "2026-02-01T14:00:00+09:00", timeZone: "Asia/Tokyo" },
           end: { dateTime: "2026-02-01T15:00:00+09:00", timeZone: "Asia/Tokyo" },
@@ -302,6 +304,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           description: "New description",
         },
@@ -319,6 +322,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           transparency: "opaque",
         },
@@ -334,6 +338,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           transparency: "transparent",
         },

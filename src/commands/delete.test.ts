@@ -70,6 +70,7 @@ describe("delete command", () => {
       expect(api.events.delete).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
       });
     });
 
