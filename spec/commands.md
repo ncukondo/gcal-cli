@@ -135,6 +135,8 @@ Options:
   --calendar, -c <id>           Target calendar (uses first enabled if omitted)
   --busy                        Mark as busy (default)
   --free                        Mark as free (transparent)
+  --attendee, -a <email>        Invite an attendee (repeatable)
+  --notify <all|external|none>  Invitation email scope (default: none)
   --dry-run                     Preview without executing
 ```
 
@@ -162,7 +164,16 @@ gcal add -t "Meeting" -s "2026-01-24T10:00" -e "2026-01-24T11:30"      # Timed, 
 gcal add -t "Standup" -s "2026-01-24T10:00" --duration 30m             # Timed, 30 min
 gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, free
 gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, with timezone
+gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite, no mail sent
+gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
 ```
+
+Attendees:
+- `--attendee` は複数回指定できる。同一アドレスは大文字小文字を無視して重複排除される。
+- `@` を含まない値はAPIを呼ばずに `INVALID_ARGS` で拒否する。
+- 招待できるのは自分が主催者のイベントのみ。他人のイベントに出席者を足すと API が 403 を返す。
+- 出席者を設定すると Google が主催者を自動的に追加するため、レスポンスの件数が指定数より 1 多くなることがある。
+- `responseStatus` を指定して作成しても、受信側の設定によっては `needsAction` にリセットされる（API の仕様）。
 
 Quiet mode (`-q`): Event ID only.
 
@@ -201,6 +212,9 @@ Options:
   --description, -d <text>      New description
   --busy                        Mark as busy
   --free                        Mark as free
+  --attendee, -a <email>        Replace the guest list (repeatable)
+  --clear-attendees             Remove all attendees
+  --notify <all|external|none>  Update email scope (default: none)
   --dry-run                     Preview without executing
 ```
 
@@ -238,7 +252,17 @@ gcal update abc123 -s "2026-03-01" -e "2026-03-03"                        # All-
 gcal update abc123 -s "2026-03-01" --duration 2d                          # All-day, 2 days
 gcal update abc123 --free                                                  # Transparency only
 gcal update abc123 --dry-run -t "Preview"                                  # Dry run
+gcal update abc123 -a alice@example.com                                    # Replace guest list
+gcal update abc123 --clear-attendees                                       # Remove all guests
 ```
+
+Attendees (**全置換**):
+- Google Calendar API は `patch` でも `attendees` 配列を**全置換**する。
+  `gcal update <id> -a alice@example.com` を実行すると、出席者は alice **のみ**になる。
+- 既存の出席者を保ったまま追加・削除する差分操作は本コマンドでは提供しない。
+- `--attendee` と `--clear-attendees` は同時に指定できない（意図の異なる 2 モードのため）。
+- `--notify` 単独では「更新」とみなさない。`--notify` だけを指定すると
+  `at least one update option must be provided` エラーになる。
 
 Quiet mode (`-q`): Event ID only.
 
@@ -250,7 +274,13 @@ Delete an event.
 gcal delete <event-id> [options]
 
 Options:
-  --calendar, -c <id>  Calendar ID to query (single)
+  --calendar, -c <id>           Calendar ID to query (single)
+  --notify <all|external|none>  Cancellation email scope (default: none)
+  --dry-run                     Preview without executing
+```
+
+```bash
+gcal delete abc123 --notify all   # Send cancellation mail to guests
 ```
 
 ### `gcal tasks lists`
