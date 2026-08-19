@@ -15,6 +15,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     html_link: "https://calendar.google.com/event?id=test",
     status: "confirmed",
     transparency: "opaque",
+    attendees: [],
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...overrides,

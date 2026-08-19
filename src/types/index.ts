@@ -44,6 +44,17 @@ export type EventStatus = "confirmed" | "tentative" | "cancelled";
 
 export type Transparency = "opaque" | "transparent";
 
+export type AttendeeResponseStatus = "needsAction" | "declined" | "tentative" | "accepted";
+
+export interface EventAttendee {
+  email: string;
+  display_name: string | null;
+  response_status: AttendeeResponseStatus;
+  optional: boolean;
+  organizer: boolean;
+  self: boolean;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -56,6 +67,7 @@ export interface CalendarEvent {
   html_link: string;
   status: EventStatus;
   transparency: Transparency;
+  attendees: EventAttendee[];
   created: string;
   updated: string;
 }

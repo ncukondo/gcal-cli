@@ -1,5 +1,11 @@
 import * as z from "zod";
-import type { Calendar, CalendarEvent, ErrorCode, Transparency } from "../types/index.ts";
+import type {
+  Calendar,
+  CalendarEvent,
+  ErrorCode,
+  EventAttendee,
+  Transparency,
+} from "../types/index.ts";
 import { AuthError } from "./auth.ts";
 import { MAX_PAGES, mapApiError } from "./api-utils.ts";
 
@@ -17,6 +23,9 @@ export class ApiError extends Error {
 
 const EventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]).catch("confirmed");
 const TransparencySchema = z.enum(["opaque", "transparent"]).catch("opaque");
+const ResponseStatusSchema = z
+  .enum(["needsAction", "declined", "tentative", "accepted"])
+  .catch("needsAction");
 
 // Abstraction over the Google Calendar API client for testability
 export interface GoogleCalendarApi {
@@ -86,6 +95,15 @@ interface UpdateEventTimeFields {
 export type UpdateEventInput = UpdateEventBase &
   (UpdateEventTimeFields | { start?: never; end?: never; allDay?: never });
 
+export interface GoogleEventAttendee {
+  email?: string | null;
+  displayName?: string | null;
+  responseStatus?: string | null;
+  optional?: boolean | null;
+  organizer?: boolean | null;
+  self?: boolean | null;
+}
+
 // Google API response types (partial, only fields we use)
 export interface GoogleEvent {
   id?: string | null;
@@ -96,6 +114,7 @@ export interface GoogleEvent {
   htmlLink?: string | null;
   status?: string | null;
   transparency?: string | null;
+  attendees?: GoogleEventAttendee[] | null;
   created?: string | null;
   updated?: string | null;
 }
@@ -105,6 +124,28 @@ export interface GoogleCalendar {
   summary?: string | null;
   description?: string | null;
   primary?: boolean | null;
+}
+
+function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined): EventAttendee[] {
+  if (!attendees) {
+    return [];
+  }
+  const result: EventAttendee[] = [];
+  for (const attendee of attendees) {
+    // Rooms and resources have no email address; they are out of scope for now.
+    if (!attendee.email) {
+      continue;
+    }
+    result.push({
+      email: attendee.email,
+      display_name: attendee.displayName ?? null,
+      response_status: ResponseStatusSchema.parse(attendee.responseStatus ?? undefined),
+      optional: attendee.optional ?? false,
+      organizer: attendee.organizer ?? false,
+      self: attendee.self ?? false,
+    });
+  }
+  return result;
 }
 
 export function normalizeEvent(
@@ -128,6 +169,7 @@ export function normalizeEvent(
     html_link: event.htmlLink ?? "",
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
+    attendees: normalizeAttendees(event.attendees),
     created: event.created ?? "",
     updated: event.updated ?? "",
   };

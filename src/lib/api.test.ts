@@ -44,6 +44,7 @@ describe("normalizeEvent", () => {
       html_link: "https://calendar.google.com/event?eid=evt1",
       status: "confirmed",
       transparency: "opaque",
+      attendees: [],
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-01T12:00:00.000Z",
     });
@@ -77,6 +78,7 @@ describe("normalizeEvent", () => {
       html_link: "https://calendar.google.com/event?eid=evt2",
       status: "tentative",
       transparency: "transparent",
+      attendees: [],
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-02T08:00:00.000Z",
     });
@@ -126,6 +128,84 @@ describe("normalizeEvent", () => {
     const result = normalizeEvent(googleEvent, "cal1", "Cal");
 
     expect(result.transparency).toBe("opaque");
+  });
+
+  it("returns an empty array when the event has no attendees", () => {
+    const googleEvent = {
+      id: "evt6",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.attendees).toEqual([]);
+  });
+
+  it("normalizes attendees", () => {
+    const googleEvent = {
+      id: "evt7",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      attendees: [
+        {
+          email: "alice@example.com",
+          displayName: "Alice",
+          responseStatus: "accepted",
+          organizer: true,
+          self: true,
+        },
+        { email: "bob@example.com", responseStatus: "needsAction", optional: true },
+      ],
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.attendees).toEqual([
+      {
+        email: "alice@example.com",
+        display_name: "Alice",
+        response_status: "accepted",
+        optional: false,
+        organizer: true,
+        self: true,
+      },
+      {
+        email: "bob@example.com",
+        display_name: null,
+        response_status: "needsAction",
+        optional: true,
+        organizer: false,
+        self: false,
+      },
+    ]);
+  });
+
+  it("falls back to needsAction for invalid attendee response statuses", () => {
+    const googleEvent = {
+      id: "evt8",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+      attendees: [{ email: "carol@example.com", responseStatus: "INVALID_STATUS" }],
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.attendees[0]?.response_status).toBe("needsAction");
+  });
+
+  it("skips attendees without an email address", () => {
+    const googleEvent = {
+      id: "evt9",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+      attendees: [{ displayName: "Room A" }, { email: "dave@example.com" }],
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.attendees).toHaveLength(1);
+    expect(result.attendees[0]?.email).toBe("dave@example.com");
   });
 });
 
