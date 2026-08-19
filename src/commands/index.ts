@@ -410,6 +410,7 @@ export function registerCommands(program: Command): void {
         format: globalOpts.format,
         quiet: globalOpts.quiet,
         dryRun: deleteOpts.dryRun ?? false,
+        notify: deleteOpts.notify,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
       process.exit(result.exitCode);
