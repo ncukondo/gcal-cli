@@ -1,13 +1,13 @@
 import { Command } from "commander";
 import { collect, meetFollowUpNote } from "./shared.ts";
-import type { GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
+import type { AttendeeInput, GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
 import { parseDuration } from "../lib/duration.ts";
 import { NOTIFY_CHOICES, parseAttendees, parseNotify } from "../lib/attendees.ts";
-import type { OutputFormat, CommandResult, CalendarEvent } from "../types/index.ts";
+import type { OutputFormat, CommandResult, CalendarEvent, EventAttendee } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -39,6 +39,10 @@ export interface UpdateHandlerOptions {
   /** Replaces the whole guest list. See spec/commands.md for the rationale. */
   attendee?: string[];
   clearAttendees?: boolean;
+  /** Adds to the current guest list, resolved by read-modify-write. */
+  addAttendee?: string[];
+  /** Drops from the current guest list, resolved by read-modify-write. */
+  removeAttendee?: string[];
   notify?: string;
   /** Attach a freshly created Google Meet conference. */
   meet?: boolean;
@@ -269,6 +273,66 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   return null;
 }
 
+/** A guest list merged against the event's current attendees, plus what changed. */
+interface AttendeeDiff {
+  merged: AttendeeInput[];
+  added: string[];
+  removed: string[];
+}
+
+/**
+ * The API replaces the whole attendees array, so every attendee we keep has to
+ * be written back with its RSVP and flags intact.
+ */
+function toAttendeeInput(attendee: EventAttendee): AttendeeInput {
+  const input: AttendeeInput = {
+    email: attendee.email,
+    responseStatus: attendee.response_status,
+  };
+  if (attendee.display_name !== null) input.displayName = attendee.display_name;
+  if (attendee.optional) input.optional = true;
+  return input;
+}
+
+function mergeAttendees(
+  current: EventAttendee[],
+  add: AttendeeInput[],
+  remove: AttendeeInput[],
+  writeStderr: (msg: string) => void,
+): AttendeeDiff {
+  // Google matches addresses case-insensitively, so the CLI has to as well.
+  const removeKeys = new Set(remove.map((a) => a.email.toLowerCase()));
+
+  const organizer = current.find((a) => a.organizer && removeKeys.has(a.email.toLowerCase()));
+  if (organizer) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      `--remove-attendee cannot remove the event organizer (${organizer.email}).`,
+    );
+  }
+
+  for (const attendee of remove) {
+    const key = attendee.email.toLowerCase();
+    if (!current.some((a) => a.email.toLowerCase() === key)) {
+      // Removing a non-attendee is a no-op so that repeating the command is safe.
+      writeStderr(`Note: ${attendee.email} is not an attendee of this event; nothing to remove.`);
+    }
+  }
+
+  const removed = current.filter((a) => removeKeys.has(a.email.toLowerCase()));
+  const merged = current.filter((a) => !removeKeys.has(a.email.toLowerCase())).map(toAttendeeInput);
+
+  const added: string[] = [];
+  for (const attendee of add) {
+    const key = attendee.email.toLowerCase();
+    if (merged.some((a) => a.email.toLowerCase() === key)) continue;
+    merged.push({ email: attendee.email });
+    added.push(attendee.email);
+  }
+
+  return { merged, added, removed: removed.map((a) => a.email) };
+}
+
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
   const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
 
@@ -282,6 +346,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     opts.free !== undefined ||
     (opts.attendee !== undefined && opts.attendee.length > 0) ||
     opts.clearAttendees === true ||
+    (opts.addAttendee !== undefined && opts.addAttendee.length > 0) ||
+    (opts.removeAttendee !== undefined && opts.removeAttendee.length > 0) ||
     opts.meet === true ||
     opts.removeMeet === true;
 
@@ -290,12 +356,37 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   }
 
   let attendees;
+  let addAttendees;
+  let removeAttendees;
   let sendUpdates;
   try {
     attendees = opts.clearAttendees ? [] : parseAttendees(opts.attendee ?? []);
+    addAttendees = parseAttendees(opts.addAttendee ?? []);
+    removeAttendees = parseAttendees(opts.removeAttendee ?? []);
     sendUpdates = parseNotify(opts.notify);
   } catch (err) {
     throw new ApiError("INVALID_ARGS", (err as Error).message);
+  }
+
+  const addKeys = new Set(addAttendees.map((a) => a.email.toLowerCase()));
+  const bothWays = removeAttendees.find((a) => addKeys.has(a.email.toLowerCase()));
+  if (bothWays) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      `${bothWays.email} is given to both --add-attendee and --remove-attendee.`,
+    );
+  }
+
+  // Only the diff options need the current guest list, so a plain update stays one call.
+  let attendeeDiff: AttendeeDiff | undefined;
+  if (addAttendees.length > 0 || removeAttendees.length > 0) {
+    const existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+    attendeeDiff = mergeAttendees(
+      existing.attendees,
+      addAttendees,
+      removeAttendees,
+      opts.writeStderr,
+    );
   }
 
   const replacesAttendees = opts.clearAttendees === true || attendees.length > 0;
@@ -304,6 +395,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   if (replacesAttendees) {
     input.attendees = attendees;
+  } else if (attendeeDiff) {
+    input.attendees = attendeeDiff.merged;
   }
   if (opts.meet) {
     input.meet = true;
@@ -350,7 +443,13 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (input.title !== undefined) changes.title = input.title;
     if (input.description !== undefined) changes.description = input.description;
     if (input.transparency !== undefined) changes.transparency = input.transparency;
-    if (replacesAttendees) changes.attendees = attendees.map((a) => a.email);
+    if (replacesAttendees) {
+      changes.attendees = attendees.map((a) => a.email);
+    } else if (attendeeDiff) {
+      changes.attendees = attendeeDiff.merged.map((a) => a.email);
+      changes.attendees_added = attendeeDiff.added;
+      changes.attendees_removed = attendeeDiff.removed;
+    }
     if (opts.notify !== undefined) changes.notify = opts.notify;
     // The requestId is minted by the API layer, so a dry run never allocates one.
     if (opts.meet) changes.meet = true;
@@ -378,7 +477,13 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
       if (changes.attendees !== undefined) {
         const list = changes.attendees as string[];
-        lines.push(`  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`);
+        let line = `  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`;
+        const diff = [
+          ...(attendeeDiff?.added ?? []).map((email) => `+${email}`),
+          ...(attendeeDiff?.removed ?? []).map((email) => `-${email}`),
+        ];
+        if (diff.length > 0) line += `   (${diff.join(", ")})`;
+        lines.push(line);
       }
       if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
       if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
@@ -439,6 +544,18 @@ export function createUpdateCommand(): Command {
   );
   cmd.option("--clear-attendees", "Remove all attendees from the event");
   cmd.option(
+    "--add-attendee <email>",
+    "Add a guest, keeping the current guest list (repeatable)",
+    collect,
+    [],
+  );
+  cmd.option(
+    "--remove-attendee <email>",
+    "Remove a guest, keeping the rest of the guest list (repeatable)",
+    collect,
+    [],
+  );
+  cmd.option(
     "--notify <scope>",
     `Send update emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
   );
@@ -453,8 +570,13 @@ export function createUpdateCommand(): Command {
 
   const attendeeOpt = cmd.options.find((o) => o.long === "--attendee")!;
   const clearAttendeesOpt = cmd.options.find((o) => o.long === "--clear-attendees")!;
-  attendeeOpt.conflicts(["clearAttendees"]);
-  clearAttendeesOpt.conflicts(["attendee"]);
+  const addAttendeeOpt = cmd.options.find((o) => o.long === "--add-attendee")!;
+  const removeAttendeeOpt = cmd.options.find((o) => o.long === "--remove-attendee")!;
+  // Whole-list replacement and per-guest edits are different intents; keep them apart.
+  attendeeOpt.conflicts(["clearAttendees", "addAttendee", "removeAttendee"]);
+  clearAttendeesOpt.conflicts(["attendee", "addAttendee", "removeAttendee"]);
+  addAttendeeOpt.conflicts(["attendee", "clearAttendees"]);
+  removeAttendeeOpt.conflicts(["attendee", "clearAttendees"]);
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;
   const durationOpt = cmd.options.find((o) => o.long === "--duration")!;
@@ -482,6 +604,8 @@ Examples:
   gcal update abc123 --dry-run -t "Preview"                                  # Dry run
   gcal update abc123 -a alice@example.com                                    # Replace guest list
   gcal update abc123 --clear-attendees                                       # Remove all guests
+  gcal update abc123 --add-attendee bob@example.com                          # Add one guest
+  gcal update abc123 --remove-attendee carol@example.com                     # Drop one guest
   gcal update abc123 --meet                                                  # Attach a Meet link
   gcal update abc123 --remove-meet                                           # Drop the Meet link
 `,

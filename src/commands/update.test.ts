@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleCalendarApi } from "../lib/api.ts";
-import type { CalendarEvent } from "../types/index.ts";
+import type { CalendarEvent, EventAttendee } from "../types/index.ts";
 import { createUpdateCommand, handleUpdate } from "./update.ts";
 import type { UpdateHandlerOptions } from "./update.ts";
 
@@ -22,6 +22,17 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     conference: null,
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeAttendee(overrides: Partial<EventAttendee> & { email: string }): EventAttendee {
+  return {
+    display_name: null,
+    response_status: "needsAction",
+    optional: false,
+    organizer: false,
+    self: false,
     ...overrides,
   };
 }
@@ -70,6 +81,14 @@ function makeMockApi(
       htmlLink: getReturn.html_link,
       status: getReturn.status,
       transparency: getReturn.transparency,
+      attendees: getReturn.attendees.map((a) => ({
+        email: a.email,
+        displayName: a.display_name,
+        responseStatus: a.response_status,
+        optional: a.optional,
+        organizer: a.organizer,
+        self: a.self,
+      })),
       created: getReturn.created,
       updated: getReturn.updated,
     },
@@ -106,6 +125,8 @@ interface RunUpdateOpts {
   getReturn?: CalendarEvent;
   attendee?: string[];
   clearAttendees?: boolean;
+  addAttendee?: string[];
+  removeAttendee?: string[];
   notify?: string;
   meet?: boolean;
   removeMeet?: boolean;
@@ -143,6 +164,8 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   if (opts.dryRun !== undefined) handlerOpts.dryRun = opts.dryRun;
   if (opts.attendee !== undefined) handlerOpts.attendee = opts.attendee;
   if (opts.clearAttendees !== undefined) handlerOpts.clearAttendees = opts.clearAttendees;
+  if (opts.addAttendee !== undefined) handlerOpts.addAttendee = opts.addAttendee;
+  if (opts.removeAttendee !== undefined) handlerOpts.removeAttendee = opts.removeAttendee;
   if (opts.notify !== undefined) handlerOpts.notify = opts.notify;
   if (opts.meet !== undefined) handlerOpts.meet = opts.meet;
   if (opts.removeMeet !== undefined) handlerOpts.removeMeet = opts.removeMeet;
@@ -868,6 +891,191 @@ describe("update command", () => {
     });
   });
 
+  describe("attendee diff (--add-attendee / --remove-attendee)", () => {
+    const alice = makeAttendee({ email: "alice@example.com", response_status: "accepted" });
+    const bob = makeAttendee({ email: "bob@example.com", response_status: "tentative" });
+
+    function patchedAttendees(api: GoogleCalendarApi): unknown {
+      const params = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      return params.requestBody.attendees;
+    }
+
+    it("--add-attendee keeps the existing guest list and appends", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      await runUpdate(api, { eventId: "evt1", addAttendee: ["carol@example.com"] });
+
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+        { email: "carol@example.com" },
+      ]);
+    });
+
+    it("--remove-attendee drops only the named address", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice, bob] }) });
+      await runUpdate(api, { eventId: "evt1", removeAttendee: ["bob@example.com"] });
+
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+      ]);
+    });
+
+    it("applies --add-attendee and --remove-attendee together", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice, bob] }) });
+      await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["carol@example.com"],
+        removeAttendee: ["bob@example.com"],
+      });
+
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+        { email: "carol@example.com" },
+      ]);
+    });
+
+    it("matches addresses case-insensitively when removing", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice, bob] }) });
+      await runUpdate(api, { eventId: "evt1", removeAttendee: ["BOB@Example.COM"] });
+
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+      ]);
+    });
+
+    it("adding an existing attendee is a no-op that preserves responseStatus", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      await runUpdate(api, { eventId: "evt1", addAttendee: ["ALICE@example.com"] });
+
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+      ]);
+    });
+
+    it("preserves displayName and optional on attendees it keeps", async () => {
+      const api = makeMockApi({
+        getReturn: makeEvent({
+          attendees: [
+            makeAttendee({ email: "dana@example.com", display_name: "Dana", optional: true }),
+          ],
+        }),
+      });
+      await runUpdate(api, { eventId: "evt1", addAttendee: ["carol@example.com"] });
+
+      expect(patchedAttendees(api)).toEqual([
+        {
+          email: "dana@example.com",
+          displayName: "Dana",
+          optional: true,
+          responseStatus: "needsAction",
+        },
+        { email: "carol@example.com" },
+      ]);
+    });
+
+    it("notes a removal of someone who is not an attendee and continues", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        removeAttendee: ["dave@example.com"],
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderrOutput.join("\n")).toContain(
+        "Note: dave@example.com is not an attendee of this event; nothing to remove.",
+      );
+      expect(patchedAttendees(api)).toEqual([
+        { email: "alice@example.com", responseStatus: "accepted" },
+      ]);
+    });
+
+    it("rejects the same address on both --add-attendee and --remove-attendee", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["bob@example.com"],
+        removeAttendee: ["BOB@example.com"],
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain(
+        "BOB@example.com is given to both --add-attendee and --remove-attendee.",
+      );
+      expect(api.events.get).not.toHaveBeenCalled();
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("rejects removing the organizer", async () => {
+      const api = makeMockApi({
+        getReturn: makeEvent({
+          attendees: [makeAttendee({ email: "boss@example.com", organizer: true }), alice],
+        }),
+      });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        removeAttendee: ["BOSS@example.com"],
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("organizer");
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("counts --add-attendee as an update on its own", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      const result = await runUpdate(api, { eventId: "evt1", addAttendee: ["carol@example.com"] });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("counts --remove-attendee as an update on its own", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        removeAttendee: ["alice@example.com"],
+      });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("does not fetch the event when neither diff option is given", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", title: "Renamed", attendee: ["alice@example.com"] });
+
+      expect(api.events.get).not.toHaveBeenCalled();
+    });
+
+    it("shows the merged guest list and the diff in a JSON dry run", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice, bob] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["carol@example.com"],
+        removeAttendee: ["bob@example.com"],
+        dryRun: true,
+        format: "json",
+      });
+
+      expect(api.events.get).toHaveBeenCalled();
+      expect(api.events.patch).not.toHaveBeenCalled();
+      const json = JSON.parse(result.output.join(""));
+      expect(json.data.changes.attendees).toEqual(["alice@example.com", "carol@example.com"]);
+      expect(json.data.changes.attendees_added).toEqual(["carol@example.com"]);
+      expect(json.data.changes.attendees_removed).toEqual(["bob@example.com"]);
+    });
+
+    it("shows the merged guest list and the diff in a text dry run", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice, bob] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["carol@example.com"],
+        removeAttendee: ["bob@example.com"],
+        dryRun: true,
+      });
+
+      expect(api.events.patch).not.toHaveBeenCalled();
+      expect(result.output.join("\n")).toContain(
+        "attendees: alice@example.com, carol@example.com   (+carol@example.com, -bob@example.com)",
+      );
+    });
+  });
+
   describe("Google Meet", () => {
     it("--meet asks for a conference with conferenceDataVersion: 1", async () => {
       const api = makeMockApi();
@@ -991,6 +1199,40 @@ describe("update command", () => {
       const result = parseUpdate(["evt1", "--meet", "--remove-meet"]);
       expect(result.error).toBeTruthy();
       expect(result.error).toContain("cannot be used with");
+    });
+
+    it("rejects --attendee and --add-attendee together", () => {
+      const result = parseUpdate([
+        "evt1",
+        "-a",
+        "alice@example.com",
+        "--add-attendee",
+        "bob@example.com",
+      ]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("rejects --clear-attendees and --remove-attendee together", () => {
+      const result = parseUpdate([
+        "evt1",
+        "--clear-attendees",
+        "--remove-attendee",
+        "bob@example.com",
+      ]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("accepts --add-attendee together with --remove-attendee", () => {
+      const result = parseUpdate([
+        "evt1",
+        "--add-attendee",
+        "bob@example.com",
+        "--remove-attendee",
+        "carol@example.com",
+      ]);
+      expect(result.error).toBeNull();
     });
 
     it("accepts event ID with --title", () => {
