@@ -696,6 +696,25 @@ describe("formatEventDetailText", () => {
     const result = formatEventDetailText(event);
     expect(result).not.toContain("Meet:");
   });
+
+  it("shows a non-Meet conference under its own label", () => {
+    const event = makeEvent({
+      meet_link: null,
+      conference: { type: "addOn", uri: "https://example.zoom.us/j/123" },
+    });
+    const result = formatEventDetailText(event);
+    // The URL must not disappear just because it is not a Meet link.
+    expect(result).toContain("Conference: https://example.zoom.us/j/123 (addOn)");
+    expect(result).not.toContain("Meet:");
+    expect(result.indexOf("Conference:")).toBeLessThan(result.indexOf("Link:"));
+  });
+
+  it("omits the conference line when there is no conference", () => {
+    const event = makeEvent({ meet_link: null, conference: null });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Meet:");
+    expect(result).not.toContain("Conference:");
+  });
 });
 
 describe("formatQuietText", () => {

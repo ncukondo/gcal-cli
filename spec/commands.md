@@ -190,7 +190,7 @@ Google Meet (`--meet`):
   `null` のままにし（Meet ではないものを Meet のリンクとして返さないため）、実際に付いた会議は
   JSON の `conference` で返した上で stderr に以下を出す。
   ```
-  Note: this calendar attached a addOn conference, not Google Meet. Conference URL: https://...
+  Note: this calendar attached a conference of type "addOn", not Google Meet. Conference URL: https://...
   ```
 - 上記 2 つの stderr 注記は `--quiet` では出さない。
 - 会議の作成そのものに失敗した場合（`createRequest.status` が `failure`）は `API_ERROR`。

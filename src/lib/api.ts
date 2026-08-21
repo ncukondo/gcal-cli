@@ -222,32 +222,30 @@ function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined)
 
 function normalizeConference(event: GoogleEvent): EventConference | null {
   const data = event.conferenceData;
-  if (!data && !event.hangoutLink) {
-    return null;
-  }
   // Phone and SIP entry points are out of scope; only the video URL is surfaced.
   const video = data?.entryPoints?.find((entry) => entry.entryPointType === "video");
-  return {
-    type: data?.conferenceSolution?.key?.type ?? null,
-    uri: video?.uri ?? event.hangoutLink ?? null,
-  };
+  const type = data?.conferenceSolution?.key?.type ?? null;
+  const uri = video?.uri ?? event.hangoutLink ?? null;
+  // A conference still being allocated has neither yet, and there is nothing to
+  // describe until it does.
+  if (type === null && uri === null) {
+    return null;
+  }
+  return { type, uri };
 }
 
 function normalizeMeetLink(event: GoogleEvent, conference: EventConference | null): string | null {
-  // hangoutLink is documented as populated only for Meet, so it settles the
-  // question on its own -- including on responses that omit conferenceSolution.
-  if (event.hangoutLink) {
-    return event.hangoutLink;
-  }
   if (!conference) {
     return null;
   }
-  // A known non-Meet solution must not be passed off as a Meet link. An absent
-  // solution stays ambiguous, and the entry point is the best answer available.
+  // A known non-Meet solution must not be passed off as a Meet link. hangoutLink
+  // cannot settle this: it predates Meet and is still set for the classic
+  // eventHangout and eventNamedHangout solutions.
   if (conference.type !== null && conference.type !== MEET_SOLUTION_TYPE) {
     return null;
   }
-  return conference.uri;
+  // An absent solution stays ambiguous, and these are the best answers available.
+  return event.hangoutLink ?? conference.uri;
 }
 
 export function normalizeEvent(
@@ -447,7 +445,7 @@ function assertConferenceNotFailed(event: GoogleEvent): void {
   if (conferenceStatus(event) === "failure") {
     // The event itself was already written, so name it -- otherwise the user
     // sees a bare failure and has no way to find or clean up what was created.
-    const saved = event.id ? ` The event was still saved as ${event.id}.` : "";
+    const saved = event.id ? ` The event was still written to the calendar as ${event.id}.` : "";
     throw new ApiError(
       "API_ERROR",
       `Google Meet conference creation failed (createRequest status: failure).${saved}`,

@@ -98,7 +98,8 @@ Found 2 events matching "A":
 ### `gcal show` Text Output
 
 出席者がいるときだけ Attendees ブロックを表示する。`Link:` の直前に置く。
-Meet リンクがあるときだけ `Meet:` 行を出し、`Link:` の直前に置く。
+会議が紐付いているときだけ `Link:` の直前に1行足す。Meet なら `Meet:`、Meet 以外なら
+`Conference: <URL> (<type>)`。Meet 以外でも URL は落とさない（参加するのに必要なため）。
 
 ```
 Team Meeting
@@ -296,16 +297,19 @@ All datetime fields include timezone offset (ISO 8601).
 
 `meet_link` は **Google Meet のときだけ**非 null になる。判定は次の順:
 
-1. `hangoutLink` があればそれ（Meet のときだけ設定されるフィールドのため、これで確定）
-2. `conference.type` が `hangoutsMeet` なら `conference.uri`
-3. `conference.type` が Meet 以外と分かっているなら `null`（Meet でないものを Meet として返さない）
-4. `conference.type` が `null`（不明）なら `conference.uri`
+1. `conference.type` が Meet 以外と分かっているなら `null`（Meet でないものを Meet として返さない）
+2. それ以外なら `hangoutLink`、無ければ `conference.uri`
+
+**`hangoutLink` の有無では判定しない。** このフィールドは Meet より前からあるもので、
+クラシック Hangouts（`eventHangout` / `eventNamedHangout`）でも設定されるため、
+Meet かどうかを決められない。判定に使えるのは `conferenceSolution.key.type` だけ。
 
 したがって Zoom などが付いたイベントは `meet_link: null` / `conference: {"type": "addOn", ...}` になる。
 
 `--meet` で作成した直後は会議の生成が終わっておらず `meet_link` も `conference` も
-`null` になることがある。その場合は数秒後に `gcal show` で取得できる
-（`spec/commands.md` の `gcal add` を参照）。
+`null` になる。`conference` は `type` と `uri` がどちらも分からないうちは
+`{"type": null, "uri": null}` ではなく `null` を返す（説明できることが何も無いため）。
+その場合は数秒後に `gcal show` で取得できる（`spec/commands.md` の `gcal add` を参照）。
 
 ### Calendar
 

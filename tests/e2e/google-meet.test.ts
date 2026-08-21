@@ -50,7 +50,7 @@ describe.runIf(creds)(
       await cleanup.deleteAll();
     });
 
-    it("add --meet attaches a conference", async () => {
+    it("add --meet attaches a conference", async (ctx) => {
       // runCli, not runCliJson: an error goes to stderr and leaves stdout empty,
       // so runCliJson would throw on the very path this guard exists to detect.
       const result = await runCli(
@@ -69,6 +69,8 @@ describe.runIf(creds)(
         console.warn(
           `[e2e] skipping Google Meet assertions; --meet failed with exit ${String(result.exitCode)}: ${result.stderr}`,
         );
+        // Reported as skipped, not as a pass that asserted nothing.
+        ctx.skip();
         return;
       }
 
@@ -142,7 +144,9 @@ describe.runIf(creds)(
         return;
       }
 
-      const { json, result } = await runCliJson(
+      const result = await runCli(
+        "-f",
+        "json",
         "add",
         "--title",
         testEventTitle("AllDayMeet"),
@@ -151,8 +155,8 @@ describe.runIf(creds)(
         "--meet",
       );
 
-      expect(result.exitCode).toBe(0);
-      const payload = json as EventPayload;
+      expect(result.exitCode, result.stderr).toBe(0);
+      const payload = JSON.parse(result.stdout) as EventPayload;
       cleanup.track(payload.data.event.id);
     });
 

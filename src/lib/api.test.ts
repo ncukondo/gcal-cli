@@ -309,6 +309,63 @@ describe("normalizeEvent", () => {
     });
   });
 
+  it("does not trust hangoutLink when the solution is classic Hangouts", () => {
+    // hangoutLink predates Meet and is still set for eventHangout /
+    // eventNamedHangout, so it cannot settle whether a conference is Meet.
+    const googleEvent = {
+      id: "evt19",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://hangouts.google.com/hangouts/_/abc",
+      conferenceData: {
+        conferenceSolution: { key: { type: "eventHangout" } },
+        entryPoints: [
+          { entryPointType: "video", uri: "https://hangouts.google.com/hangouts/_/abc" },
+        ],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference?.type).toBe("eventHangout");
+  });
+
+  it("does not trust hangoutLink when a third-party add-on is attached", () => {
+    const googleEvent = {
+      id: "evt20",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/stale-link",
+      conferenceData: {
+        conferenceSolution: { key: { type: "addOn" } },
+        entryPoints: [{ entryPointType: "video", uri: "https://example.zoom.us/j/123" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference).toEqual({ type: "addOn", uri: "https://example.zoom.us/j/123" });
+  });
+
+  it("returns a null conference while the conference is still pending", () => {
+    const googleEvent = {
+      id: "evt21",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    // Nothing is known about it yet, so there is nothing to describe.
+    expect(result.conference).toBeNull();
+    expect(result.meet_link).toBeNull();
+  });
+
   it("keeps treating a conference of unknown solution as Meet when hangoutLink is set", () => {
     // hangoutLink is documented as populated only for Meet, so it settles the
     // question even when conferenceSolution is missing from the response.

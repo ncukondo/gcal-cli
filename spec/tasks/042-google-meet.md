@@ -206,7 +206,7 @@ DRY RUN: Would create event:
 - [x] `src/lib/api.test.ts` / `api.ts`: `createEvent()` の `meet` オプション（`conferenceDataVersion: 1` が送られる / `requestId` が呼び出しごとに異なる / `meet` 未指定なら `conferenceData` も `conferenceDataVersion` も送らない）
 - [x] `src/lib/api.test.ts` / `api.ts`: pending リトライ（1回目 pending → 2回目 success で `meet_link` が埋まる / 3回 pending なら `meet_link: null` / `failure` なら `API_ERROR`）
 - [x] `src/lib/api.test.ts` / `api.ts`: `updateEvent()` の `meet` / `removeMeet`（`conferenceData: null` を送る / どちらも未指定なら `conferenceData` をリクエストに含めない）
-- [x] `src/commands/add.test.ts` / `add.ts`: `--meet`、全日イベントとの conflict、dry-run 出力、pending 時の stderr 注記
+- [x] `src/commands/add.test.ts` / `add.ts`: `--meet`、dry-run 出力、pending 時の stderr 注記
 - [x] `src/commands/update.test.ts` / `update.ts`: `--meet` / `--remove-meet`（conflict 設定）
 - [x] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Meet 行（`null` では出さない）
 - [x] `spec/commands.md`: add / update のオプションと制約
@@ -224,7 +224,7 @@ DRY RUN: Would create event:
 - [x] `meet_link` が `null` だった場合、数秒待って `gcal show -f json` で URL が取れること（リトライ付き）
 - [x] `gcal update <id> --remove-meet` 後に `meet_link` が `null` になること
 - [x] `--meet` を付けずに作ったイベントの `meet_link` が `null` であること（後方互換の確認）
-- [x] 全日イベントに `--meet` を付けると exit code 3（`INVALID_ARGS`）であること
+- [x] 全日イベントに `--meet` を付けても成功すること（当初の禁止方針は撤回済み）
 - [x] 作成したイベントを cleanup で削除する
 
 テスト環境のカレンダーが会議作成に対応していない場合はスキップできるようにする
@@ -239,7 +239,7 @@ DRY RUN: Would create event:
 - [x] `pending` のときリトライし、なお未確定ならイベント作成は成功扱いで stderr に注記が出る
 - [x] `failure` のとき `API_ERROR` になる
 - [x] `gcal update --remove-meet` で会議が削除される
-- [x] 全日イベント + `--meet` が `INVALID_ARGS` で弾かれる
+- [x] 全日イベント + `--meet` が `add` / `update` のどちらでも同じように通る
 - [x] JSON 出力に `meet_link` が含まれる（会議なしなら `null`）
 - [x] text / json / quiet 全フォーマットが動作する
 - [x] 既存テストが pass する

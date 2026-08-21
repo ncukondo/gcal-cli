@@ -43,7 +43,7 @@ export function meetFollowUpNote(event: CalendarEvent): string | null {
   const conference = event.conference;
   if (conference && conference.type !== null && conference.type !== MEET_SOLUTION_TYPE) {
     const url = conference.uri ? ` Conference URL: ${conference.uri}` : "";
-    return `Note: this calendar attached a ${conference.type} conference, not Google Meet.${url}`;
+    return `Note: this calendar attached a conference of type "${conference.type}", not Google Meet.${url}`;
   }
   if (event.meet_link === null) {
     return `Note: Google Meet link is still being generated. Run \`gcal show ${event.id}\` in a few seconds to get it.`;
@@ -97,8 +97,10 @@ export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
 /**
  * googleapis types `Schema$Event.conferenceData` as non-nullable, but the REST
  * API takes `conferenceData: null` to detach a conference from an event. Only
- * the body needs the cast; every other parameter stays type-checked, so a
- * misspelled `sendUpdates` or `conferenceDataVersion` still fails to compile.
+ * the body needs the cast, so the remaining parameters keep their types checked
+ * against the real client -- a wrongly typed `conferenceDataVersion` still fails
+ * to compile. (A spread result gets no excess-property check, so a stray extra
+ * field would pass through silently; the types above are the guard for that.)
  */
 function toEventBody(
   requestBody: Partial<GoogleEventWriteBody> | undefined,
