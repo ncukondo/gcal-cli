@@ -431,4 +431,68 @@ describe("add command pipeline: config → timezone → API → output", () => {
     const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
     expect(insertFn.mock.calls[0]![0].sendUpdates).toBe("none");
   });
+
+  it("carries --meet through as a conference request", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      { title: "Design review", start: "2026-03-01T10:00", meet: true, format: "json" },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(0);
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const params = insertFn.mock.calls[0]![0];
+    expect(params.conferenceDataVersion).toBe(1);
+    expect(params.requestBody.conferenceData.createRequest.requestId).toBeTruthy();
+  });
+
+  it("leaves conferencing out of the request when --meet is absent", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    await handleAdd({ title: "Solo focus", start: "2026-03-01T10:00", format: "json" }, deps);
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const params = insertFn.mock.calls[0]![0];
+    expect(params).not.toHaveProperty("conferenceDataVersion");
+    expect(params.requestBody).not.toHaveProperty("conferenceData");
+  });
+
+  it("rejects --meet on an all-day event before reaching the API", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      { title: "Holiday", start: "2026-03-01", meet: true, format: "json" },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(3);
+    expect(out.output()).toContain("INVALID_ARGS");
+    expect(mockApi.events.insert).not.toHaveBeenCalled();
+  });
 });
