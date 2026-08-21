@@ -239,6 +239,8 @@ Options:
   --free                        Mark as free
   --attendee, -a <email>        Replace the guest list (repeatable)
   --clear-attendees             Remove all attendees
+  --add-attendee <email>        Add a guest, keeping the current list (repeatable)
+  --remove-attendee <email>     Remove a guest, keeping the rest (repeatable)
   --notify <all|external|none>  Update email scope (default: none)
   --meet                        Create a Google Meet conference and attach it
   --remove-meet                 Remove the conference from the event
@@ -281,15 +283,52 @@ gcal update abc123 --free                                                  # Tra
 gcal update abc123 --dry-run -t "Preview"                                  # Dry run
 gcal update abc123 -a alice@example.com                                    # Replace guest list
 gcal update abc123 --clear-attendees                                       # Remove all guests
+gcal update abc123 --add-attendee bob@example.com                          # Add one guest
+gcal update abc123 --remove-attendee carol@example.com                     # Drop one guest
 gcal update abc123 --meet                                                  # Attach a Meet link
 gcal update abc123 --remove-meet                                           # Drop the Meet link
 ```
 
-Attendees (**全置換**):
+Attendees:
+
+出席者の更新には 2 つのモードがある。
+
+**全置換モード** (`--attendee` / `--clear-attendees`):
 - Google Calendar API は `patch` でも `attendees` 配列を**全置換**する。
   `gcal update <id> -a alice@example.com` を実行すると、出席者は alice **のみ**になる。
-- 既存の出席者を保ったまま追加・削除する差分操作は本コマンドでは提供しない。
+- 招待者一覧をまるごと入れ替えたいときに使う。
 - `--attendee` と `--clear-attendees` は同時に指定できない（意図の異なる 2 モードのため）。
+
+**差分モード** (`--add-attendee` / `--remove-attendee`):
+- CLI が「現在の出席者を取得 → マージ → 全置換」を代行するので、既存の出席者は保たれる。
+- どちらも指定しなかった場合、現在の出席者を取得する追加の API 呼び出しは発生しない。
+- 削除 → 追加の順にマージする。メールアドレスの比較は**大文字小文字を区別しない**。
+- 残す出席者は `responseStatus` / `displayName` / `optional` を保ったまま書き戻すため、
+  既に招待済みのアドレスを `--add-attendee` しても no-op になる（RSVP は失われない）。
+- 現在の出席者に居ないアドレスを `--remove-attendee` してもエラーにはせず、
+  stderr に注記を出して続行する（冪等な操作にするため）。
+
+  ```
+  Note: dave@example.com is not an attendee of this event; nothing to remove.
+  ```
+- 主催者（`organizer: true`）を `--remove-attendee` すると `INVALID_ARGS` で弾く。
+  送信しても API 側で復活するか 400 になるため、CLI で明示的に止める。
+- 同一アドレスを `--add-attendee` と `--remove-attendee` の両方に指定すると `INVALID_ARGS`。
+- 2 つのモードは併用できない。`--add-attendee` / `--remove-attendee` は
+  `--attendee` / `--clear-attendees` と conflict する。
+- **read-modify-write は atomic ではない。** 取得と更新の間に他のクライアントが
+  出席者を変更した場合、その変更は失われる（後勝ち）。ETag による楽観ロックは行わない。
+- dry-run はマージ結果と差分を表示する。`getEvent` は呼ぶが `patch` は送らない。
+
+  ```
+  DRY RUN: Would update event "abc123":
+    attendees: alice@example.com, bob@example.com   (+bob@example.com, -carol@example.com)
+  ```
+
+  JSON では `changes.attendees` にマージ結果、`changes.attendees_added` /
+  `changes.attendees_removed` に実際の差分が入る。
+
+`--notify`:
 - `--notify` 単独では「更新」とみなさない。`--notify` だけを指定すると
   `at least one update option must be provided` エラーになる。
 
