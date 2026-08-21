@@ -86,6 +86,20 @@ describe("mapApiError", () => {
     expect(error.message).toBe("Insufficient Permission");
   });
 
+  // Google documents these three 403 reasons as rate limit or quota exhaustion.
+  // Re-authenticating cannot clear them and costs another request while limited.
+  it.each(["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"])(
+    "maps 403 %s to RATE_LIMITED with a retry hint",
+    (reason) => {
+      const error = mapped(makeApiError(403, "Rate Limit Exceeded", reason));
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.code).toBe("RATE_LIMITED");
+      expect(error.message).toBe(
+        "Rate Limit Exceeded This is temporary; wait and retry with exponential backoff.",
+      );
+    },
+  );
+
   it("falls back to AUTH_REQUIRED for an unknown 403 reason", () => {
     const error = mapped(makeApiError(403, "Forbidden", "someReasonWeHaveNeverSeen"));
     expect(error.code).toBe("AUTH_REQUIRED");

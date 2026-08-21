@@ -34,10 +34,29 @@ const FORBIDDEN_HINTS: Readonly<Record<string, string>> = {
     "Re-authenticating will not help; only the organizer can change this event.",
 };
 
-/** The hint for the first detail naming a reason we route, or undefined. */
-function forbiddenHint(details: GoogleApiErrorDetail[] | undefined): string | undefined {
+/**
+ * Rate limits and quota exhaustion are a temporary state, not a permission or an
+ * authentication problem: the only useful action is to wait and retry. Google's
+ * error guide recommends exponential backoff and documents no Retry-After header,
+ * so do not promise the caller one. Only reasons confirmed in that guide are
+ * listed here; the routed reasons are derived from this map so the two cannot
+ * drift apart.
+ */
+const RATE_LIMIT_HINT = "This is temporary; wait and retry with exponential backoff.";
+
+const RATE_LIMIT_HINTS: Readonly<Record<string, string>> = {
+  rateLimitExceeded: RATE_LIMIT_HINT,
+  userRateLimitExceeded: RATE_LIMIT_HINT,
+  quotaExceeded: RATE_LIMIT_HINT,
+};
+
+/** The hint for the first detail naming a reason `hints` routes, or undefined. */
+function hintFor(
+  details: GoogleApiErrorDetail[] | undefined,
+  hints: Readonly<Record<string, string>>,
+): string | undefined {
   for (const detail of details ?? []) {
-    const hint = detail.reason === undefined ? undefined : FORBIDDEN_HINTS[detail.reason];
+    const hint = detail.reason === undefined ? undefined : hints[detail.reason];
     if (hint !== undefined) {
       return hint;
     }
@@ -49,9 +68,16 @@ export function mapApiError(error: unknown): never {
   if (isGoogleApiError(error)) {
     if (error.code === 403) {
       // Both carry the same array in the pinned googleapis version; read either.
-      const hint = forbiddenHint(error.errors ?? error.response?.data?.error?.errors);
-      if (hint !== undefined) {
-        throw new ApiError("FORBIDDEN", `${error.message} ${hint}`);
+      const details = error.errors ?? error.response?.data?.error?.errors;
+      // Permission first: a 403 naming a permission reason is about access, even
+      // if some other detail also mentions a limit.
+      const forbidden = hintFor(details, FORBIDDEN_HINTS);
+      if (forbidden !== undefined) {
+        throw new ApiError("FORBIDDEN", `${error.message} ${forbidden}`);
+      }
+      const rateLimited = hintFor(details, RATE_LIMIT_HINTS);
+      if (rateLimited !== undefined) {
+        throw new ApiError("RATE_LIMITED", `${error.message} ${rateLimited}`);
       }
     }
     if (error.code === 401 || error.code === 403) {
