@@ -604,6 +604,47 @@ describe("API error mapping", () => {
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
+  // mapApiError() is shared with the Calendar client, so the 403 split applies here too.
+  it("maps a 403 carrying a permission reason to FORBIDDEN", async () => {
+    const forbidden = Object.assign(new Error("Forbidden"), {
+      code: 403,
+      errors: [{ domain: "global", reason: "requiredAccessLevel", message: "Forbidden" }],
+    });
+    const client: GoogleTasksClient = {
+      tasklists: { list: vi.fn() },
+      tasks: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn().mockRejectedValue(forbidden),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const error = await createTask(client, "@default", "My Tasks", { title: "Test" }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("keeps a 403 scope error on AUTH_REQUIRED", async () => {
+    const insufficient = Object.assign(new Error("Insufficient Permission"), {
+      code: 403,
+      errors: [
+        { domain: "global", reason: "insufficientPermissions", message: "Insufficient Permission" },
+      ],
+    });
+    const client: GoogleTasksClient = {
+      tasklists: { list: vi.fn().mockRejectedValue(insufficient) },
+      tasks: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+    };
+
+    const error = await listTaskLists(client).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
+  });
+
   it("maps other HTTP errors to API_ERROR", async () => {
     const client: GoogleTasksClient = {
       tasklists: { list: vi.fn() },
