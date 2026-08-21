@@ -680,6 +680,21 @@ describe("formatEventDetailText", () => {
     ].join("\n");
     expect(result).toBe(expected);
   });
+  it("shows the Meet link just above the calendar link", () => {
+    const event = makeEvent({
+      meet_link: "https://meet.google.com/abc-defg-hij",
+      html_link: "https://calendar.google.com/event?id=test",
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("Meet: https://meet.google.com/abc-defg-hij");
+    expect(result.indexOf("Meet:")).toBeLessThan(result.indexOf("Link:"));
+  });
+
+  it("omits the Meet line when the event has no conference", () => {
+    const event = makeEvent({ meet_link: null });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Meet:");
+  });
 });
 
 describe("formatQuietText", () => {

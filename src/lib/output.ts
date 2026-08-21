@@ -252,6 +252,9 @@ export function formatEventDetailText(event: CalendarEvent): string {
   }
 
   lines.push("");
+  if (event.meet_link !== null) {
+    lines.push(`Meet: ${event.meet_link}`);
+  }
   lines.push(`Link: ${event.html_link}`);
 
   return lines.join("\n");
