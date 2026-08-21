@@ -8,17 +8,20 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 16: Meet & Attendees
 
-41. [041-attendees](./041-attendees.md) — イベントへの出席者招待 (attendees)
 42. [042-google-meet](./042-google-meet.md) — Google Meet リンクの作成・削除
 43. [043-attendee-diff-update](./043-attendee-diff-update.md) — 出席者の差分更新 (`--add-attendee` / `--remove-attendee`)
 
-順序: 41 → 42 → 43。41 と 42 は `src/lib/api.ts` の同じ型・パラメータを触るため直列に積む。
-43 は 41 の `attendees` 型と全置換パスに依存する。いずれも OAuth スコープの追加は不要
+順序: 42 → 43。42 は 41 が触った `src/lib/api.ts` の型・パラメータを引き続き拡張する。
+43 は 41 の `attendees` 型と全置換パスの上に差分更新を載せる。いずれも OAuth スコープの追加は不要
 （`calendar.events` で足りるため再認証なし）。
 
 ## In Progress
 
 ## Completed
+
+### Phase 16: Meet & Attendees
+
+41. [041-attendees](./completed/041-attendees.md) — イベントへの出席者招待 (attendees) (#58)
 
 ### Phase 15: Bug Fixes
 
