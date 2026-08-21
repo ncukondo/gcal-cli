@@ -66,6 +66,12 @@ function hintFor(
 
 export function mapApiError(error: unknown): never {
   if (isGoogleApiError(error)) {
+    // Status alone, deliberately: a status code is sturdier than a reason string
+    // and still decides the case when no reason is readable. Google documents the
+    // 429 as functionally similar to the 403 rate-limit reasons.
+    if (error.code === 429) {
+      throw new ApiError("RATE_LIMITED", `${error.message} ${RATE_LIMIT_HINT}`);
+    }
     if (error.code === 403) {
       // Both carry the same array in the pinned googleapis version; read either.
       const details = error.errors ?? error.response?.data?.error?.errors;

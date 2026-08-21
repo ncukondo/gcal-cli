@@ -152,6 +152,27 @@ describe("mapApiError", () => {
     expect(error.code).toBe("FORBIDDEN");
   });
 
+  // 429 is classified by status alone. A status code is sturdier than a reason
+  // string and still decides the case when no reason is readable; Google
+  // documents the 429 as functionally similar to the 403 rate-limit reasons.
+  it("maps 429 to RATE_LIMITED without consulting the reason", () => {
+    const error = mapped(makeApiError(429, "Too Many Requests", "rateLimitExceeded"));
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBe("RATE_LIMITED");
+    expect(error.message).toBe(
+      "Too Many Requests This is temporary; wait and retry with exponential backoff.",
+    );
+  });
+
+  it("maps 429 to RATE_LIMITED when it carries no reason at all", () => {
+    expect(mapped(makeApiError(429, "Too Many Requests")).code).toBe("RATE_LIMITED");
+  });
+
+  it("maps 429 to RATE_LIMITED even when it carries an unrelated reason", () => {
+    const error = mapped(makeApiError(429, "Too Many Requests", "requiredAccessLevel"));
+    expect(error.code).toBe("RATE_LIMITED");
+  });
+
   it("maps 404 to NOT_FOUND", () => {
     expect(mapped(makeApiError(404, "Not Found")).code).toBe("NOT_FOUND");
   });
