@@ -13,17 +13,13 @@ Tasks should be implemented in this order, respecting dependencies within each p
 43 は 41 の `attendees` 型と全置換パスの上に差分更新を載せる。OAuth スコープの追加は不要
 （`calendar.events` で足りるため再認証なし）。
 
-### Phase 17: Error Reporting
-
-44. [044-forbidden-vs-auth](./044-forbidden-vs-auth.md) — 403（権限不足）を認証エラーと区別する
-
-43 とは独立しており、順序の制約はない。042 のレビューで見つかった問題だが、原因の 401/403 統合は
-042 より前からあり、`update` / `delete` と Google Tasks 側にも同じ経路がある。
-**実装前に実 API が返す 403 の `reason` を確認する必要がある**（未確認の文字列マッチを書かないため）。
-
 ## In Progress
 
 ## Completed
+
+### Phase 17: Error Reporting
+
+44. [044-forbidden-vs-auth](./completed/044-forbidden-vs-auth.md) — 403（権限不足）を認証エラーと区別する (#60)
 
 ### Phase 16: Meet & Attendees
 
