@@ -256,6 +256,7 @@ All datetime fields include timezone offset (ISO 8601).
   "html_link": "string",
   "attendees": "EventAttendee[]",
   "meet_link": "string | null",
+  "conference": "EventConference | null",
   "created": "ISO8601 datetime",
   "updated": "ISO8601 datetime"
 }
@@ -277,14 +278,34 @@ All datetime fields include timezone offset (ISO 8601).
 }
 ```
 
-### meet_link
+### meet_link と EventConference
 
-会議が紐付いていないイベントでは `null`。`hangoutLink` を第一候補とし、無ければ
-`conferenceData.entryPoints` の `video` の URI を使う。電話などの video 以外の
-entry point は対象外。
+`conference` はイベントに紐付いている会議そのものを表す。会議が無ければ `null`。
 
-`--meet` で作成した直後は会議の生成が終わっておらず `null` になることがある。
-その場合は数秒後に `gcal show` で取得できる（`spec/commands.md` の `gcal add` を参照）。
+```json
+{
+  "type": "string | null",
+  "uri": "string | null"
+}
+```
+
+`type` は Google が実際に割り当てた会議方式（`hangoutsMeet` / `eventHangout` /
+`eventNamedHangout` / サードパーティ会議アドオンは `addOn`）。レスポンスに
+`conferenceSolution` が無い場合は `null`。`uri` は `entryPoints` の `video` の URI で、
+電話などの video 以外の entry point は対象外。
+
+`meet_link` は **Google Meet のときだけ**非 null になる。判定は次の順:
+
+1. `hangoutLink` があればそれ（Meet のときだけ設定されるフィールドのため、これで確定）
+2. `conference.type` が `hangoutsMeet` なら `conference.uri`
+3. `conference.type` が Meet 以外と分かっているなら `null`（Meet でないものを Meet として返さない）
+4. `conference.type` が `null`（不明）なら `conference.uri`
+
+したがって Zoom などが付いたイベントは `meet_link: null` / `conference: {"type": "addOn", ...}` になる。
+
+`--meet` で作成した直後は会議の生成が終わっておらず `meet_link` も `conference` も
+`null` になることがある。その場合は数秒後に `gcal show` で取得できる
+（`spec/commands.md` の `gcal add` を参照）。
 
 ### Calendar
 

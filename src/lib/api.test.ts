@@ -46,6 +46,7 @@ describe("normalizeEvent", () => {
       transparency: "opaque",
       attendees: [],
       meet_link: null,
+      conference: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-01T12:00:00.000Z",
     });
@@ -81,6 +82,7 @@ describe("normalizeEvent", () => {
       transparency: "transparent",
       attendees: [],
       meet_link: null,
+      conference: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-02T08:00:00.000Z",
     });
@@ -267,6 +269,78 @@ describe("normalizeEvent", () => {
     const result = normalizeEvent(googleEvent, "cal1", "Cal");
 
     expect(result.meet_link).toBeNull();
+  });
+
+  it("does not call a third-party conference a Meet link", () => {
+    const googleEvent = {
+      id: "evt15",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        conferenceSolution: { key: { type: "addOn" }, name: "Zoom Meeting" },
+        entryPoints: [{ entryPointType: "video", uri: "https://example.zoom.us/j/123" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference).toEqual({ type: "addOn", uri: "https://example.zoom.us/j/123" });
+  });
+
+  it("reports a hangoutsMeet conference as both meet_link and conference", () => {
+    const googleEvent = {
+      id: "evt16",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+      conferenceData: {
+        conferenceSolution: { key: { type: "hangoutsMeet" }, name: "Google Meet" },
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/abc-defg-hij" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+    expect(result.conference).toEqual({
+      type: "hangoutsMeet",
+      uri: "https://meet.google.com/abc-defg-hij",
+    });
+  });
+
+  it("keeps treating a conference of unknown solution as Meet when hangoutLink is set", () => {
+    // hangoutLink is documented as populated only for Meet, so it settles the
+    // question even when conferenceSolution is missing from the response.
+    const googleEvent = {
+      id: "evt17",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+      conferenceData: {
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/abc-defg-hij" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+    expect(result.conference).toEqual({
+      type: null,
+      uri: "https://meet.google.com/abc-defg-hij",
+    });
+  });
+
+  it("returns a null conference when the event has none", () => {
+    const googleEvent = {
+      id: "evt18",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.conference).toBeNull();
   });
 
   it("returns null meet_link when conferenceData has no video entry point", () => {
@@ -1274,6 +1348,66 @@ describe("Google Meet conferencing", () => {
     );
   });
 
+  it("raises API_ERROR when failure only shows up on the last poll", async () => {
+    const failed = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(pendingEvent("evt-meet"), [
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+      failed,
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true }, { sleep }),
+    ).rejects.toThrow(/failure/);
+  });
+
+  it("names the saved event when the conference request fails", async () => {
+    const failed = {
+      id: "evt-orphan",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(failed);
+
+    // The event is already on the calendar, so the error has to say which one
+    // it is or the user cannot clean it up.
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /evt-orphan/,
+    );
+  });
+
+  it("hints at --meet when updateEvent draws a 400", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+    const error = new Error("Invalid conference type value.") as Error & { code: number };
+    error.code = 400;
+    api.events.patch = vi.fn().mockRejectedValue(error);
+
+    await expect(updateEvent(api, "cal1", "My Cal", "evt-meet", { meet: true })).rejects.toThrow(
+      /--meet was requested/,
+    );
+  });
+
+  it("polls on update until the pending conference resolves", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [successEvent("evt-meet")]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await updateEvent(api, "cal1", "My Cal", "evt-meet", { meet: true }, { sleep });
+
+    expect(api.events.get).toHaveBeenCalledTimes(1);
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
   it("hints at calendar support when the API rejects a conference request with 400", async () => {
     const api = createConferenceApi(successEvent("evt-meet"));
     const error = new Error("Invalid conference type value.") as Error & { code: number };
@@ -1281,7 +1415,7 @@ describe("Google Meet conferencing", () => {
     api.events.insert = vi.fn().mockRejectedValue(error);
 
     await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
-      /may not support creating conferences/,
+      /--meet was requested/,
     );
   });
 

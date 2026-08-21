@@ -434,7 +434,7 @@ export function registerCommands(program: Command): void {
           createEvent(api, calendarId, calendarName, input),
         loadConfig: () => loadConfig(fsAdapter),
         write: (msg) => process.stdout.write(msg + "\n"),
-        writeErr: (msg) => process.stderr.write(msg + "\n"),
+        writeStderr: (msg) => process.stderr.write(msg + "\n"),
       };
 
       const handleOpts: AddOptions = {

@@ -28,6 +28,16 @@ Google Calendar API の `conferenceData.createRequest` + クエリパラメー�
 Google Workspace アカウントで利用可能な会議方式が異なるため失敗しうる。
 **`requestId` のみを渡してカレンダー既定の方式に任せる**（公式ガイドの例と同じ形）。
 
+ただしこれは、既定が Meet 以外（クラシック Hangouts やサードパーティ会議アドオン）の
+カレンダーでは **Meet 以外の会議が付く**ことを意味する。レビューでの指摘を受けて、
+`--meet` という名前のフラグと `meet_link` というフィールドが Meet 以外の URL を返さないよう、
+**レスポンスの `conferenceSolution.key.type` を見て判定する**方針を追加した:
+
+- `hangoutsMeet` 以外と分かったら `meet_link` は `null` のままにする
+- 実際に付いた会議は `conference: { type, uri }` として返し、URL を失わせない
+- stderr で「Meet ではなく <type> が付いた」と知らせる
+- 会議もイベントも実際に作られているため、終了コードは 0（成功）のまま
+
 ```ts
 requestBody.conferenceData = { createRequest: { requestId } };
 // params に conferenceDataVersion: 1 を付ける
@@ -99,8 +109,10 @@ Note: Google Meet link is still being generated. Run `gcal show <id>` in a few s
 
 ### 全日イベント
 
-全日イベントに Meet を付けること自体は API が許容するが実用的でないため、
-`--meet` と全日イベント（`--start` が日付のみ）の組み合わせは `INVALID_ARGS` で弾く。
+**当初は `--meet` と全日イベントの組み合わせを `INVALID_ARGS` で弾く方針だったが、実装後の
+レビューで撤回した。** API も Google カレンダーの Web UI も全日イベントへの Meet 追加を許可しており、
+CLI が独自に禁止する根拠がない。加えて `add` にしかガードが無く `update --meet` では素通りしていたため、
+両コマンドの挙動が食い違っていた。制約自体を無くして揃えた（E2E で実 API が受け付けることを確認済み）。
 
 ### Text 出力
 
@@ -118,8 +130,15 @@ Link: https://calendar.google.com/...
 ### 失敗時のエラーメッセージ
 
 カレンダー側で会議が許可されていない場合、API は 400 を返す。`mapApiError()` の
-`API_ERROR` にそのまま流すが、`--meet` 指定時の 400 には
-「このカレンダーは会議の作成に対応していない可能性がある」旨のヒントを添える。
+`API_ERROR` にそのまま流すが、`--meet` 指定時の 400 にはヒントを添える。
+
+**レビューでの指摘により文面を修正した。** 当初は「このカレンダーは会議の作成に対応していない
+可能性がある」と原因を示唆していたが、`--meet` 付きのリクエストが 400 になる原因は会議とは限らない
+（時刻範囲が不正な場合など）。原因を断定せず「`--meet` を外して再実行する」選択肢を示す文面にした。
+
+`createRequest.status` が `failure` のときは `API_ERROR` を投げるが、**その時点でイベントは
+既に作成/更新済み**である。エラーメッセージにイベント ID を含めないとユーザーが後始末できないため、
+ID を含める。
 
 ### Out of Scope
 

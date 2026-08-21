@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { collect } from "./shared.ts";
+import { collect, meetFollowUpNote } from "./shared.ts";
 import type { GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
@@ -353,8 +353,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (replacesAttendees) changes.attendees = attendees.map((a) => a.email);
     if (opts.notify !== undefined) changes.notify = opts.notify;
     // The requestId is minted by the API layer, so a dry run never allocates one.
-    if (input.meet !== undefined) changes.meet = input.meet;
-    if (input.removeMeet !== undefined) changes.remove_meet = input.removeMeet;
+    if (opts.meet) changes.meet = true;
+    if (opts.removeMeet) changes.remove_meet = true;
     const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
     if (withTime.start !== undefined) changes.start = withTime.start;
     if (withTime.end !== undefined) changes.end = withTime.end;
@@ -392,12 +392,9 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   const updated = await updateEvent(api, calendarId, calendarName, eventId, input);
 
-  // Conference allocation is asynchronous, so the link can still be missing
-  // after the API layer has finished polling. The event itself was updated.
-  if (opts.meet && updated.meet_link === null && !opts.quiet) {
-    opts.writeStderr(
-      `Note: Google Meet link is still being generated. Run \`gcal show ${updated.id}\` in a few seconds to get it.`,
-    );
+  if (opts.meet && !opts.quiet) {
+    const note = meetFollowUpNote(updated);
+    if (note) opts.writeStderr(note);
   }
 
   if (format === "json") {

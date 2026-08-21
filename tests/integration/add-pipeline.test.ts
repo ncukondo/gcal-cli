@@ -28,6 +28,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -62,6 +63,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -93,6 +95,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -119,6 +122,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -145,6 +149,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -172,6 +177,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -201,6 +207,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -228,6 +235,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -254,6 +262,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(
@@ -280,6 +289,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -303,6 +313,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: createEventFn,
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -334,6 +345,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: createEventFn,
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -367,6 +379,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -391,6 +404,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -424,6 +438,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd({ title: "Solo focus", start: "2026-03-01T10:00", format: "json" }, deps);
@@ -441,6 +456,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -465,6 +481,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd({ title: "Solo focus", start: "2026-03-01T10:00", format: "json" }, deps);
@@ -475,7 +492,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
     expect(params.requestBody).not.toHaveProperty("conferenceData");
   });
 
-  it("rejects --meet on an all-day event before reaching the API", async () => {
+  it("carries --meet through on an all-day event too", async () => {
     const mockApi = createMockApi();
     const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
     const out = captureWrite();
@@ -484,6 +501,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     const result = await handleAdd(
@@ -491,8 +509,9 @@ describe("add command pipeline: config → timezone → API → output", () => {
       deps,
     );
 
-    expect(result.exitCode).toBe(3);
-    expect(out.output()).toContain("INVALID_ARGS");
-    expect(mockApi.events.insert).not.toHaveBeenCalled();
+    expect(result.exitCode).toBe(0);
+    const params = (mockApi.events.insert as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(params.conferenceDataVersion).toBe(1);
+    expect(params.requestBody.start).toEqual({ date: "2026-03-01" });
   });
 });

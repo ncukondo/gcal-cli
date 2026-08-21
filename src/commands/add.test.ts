@@ -18,6 +18,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     transparency: "opaque",
     attendees: [],
     meet_link: null,
+    conference: null,
     created: "2026-02-24T00:00:00Z",
     updated: "2026-02-24T00:00:00Z",
     ...overrides,
@@ -41,6 +42,7 @@ function makeDeps(overrides: Partial<AddHandlerDeps> = {}): AddHandlerDeps {
     createEvent: vi.fn().mockResolvedValue(makeEvent()),
     loadConfig: vi.fn().mockReturnValue(makeConfig()),
     write: vi.fn(),
+    writeStderr: vi.fn(),
     ...overrides,
   };
 }
@@ -601,15 +603,16 @@ describe("handleAdd with --meet", () => {
     expect(input).not.toHaveProperty("meet");
   });
 
-  it("rejects --meet on an all-day event", async () => {
+  it("allows --meet on an all-day event", async () => {
+    // Both the API and the Google Calendar web UI permit this, so the CLI does
+    // not invent a restriction of its own.
     const deps = makeDeps();
     const result = await handleAdd(baseOptions({ start: "2026-03-01", meet: true }), deps);
 
-    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
-    expect(deps.createEvent).not.toHaveBeenCalled();
-    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    expect(output).toContain("INVALID_ARGS");
-    expect(output).toContain("all-day");
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const input = (deps.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(input.meet).toBe(true);
+    expect(input.allDay).toBe(true);
   });
 
   it("shows meet in the text dry-run preview without calling the API", async () => {
@@ -631,42 +634,64 @@ describe("handleAdd with --meet", () => {
   });
 
   it("notes on stderr when the conference is not ready yet", async () => {
-    const writeErr = vi.fn();
+    const writeStderr = vi.fn();
     const deps = makeDeps({
       createEvent: vi.fn().mockResolvedValue(makeEvent({ id: "evt-pending", meet_link: null })),
-      writeErr,
+      writeStderr,
     });
 
     await handleAdd(baseOptions({ meet: true }), deps);
 
-    expect(writeErr).toHaveBeenCalledTimes(1);
-    expect(writeErr.mock.calls[0]![0]).toContain("gcal show evt-pending");
+    expect(writeStderr).toHaveBeenCalledTimes(1);
+    expect(writeStderr.mock.calls[0]![0]).toContain("gcal show evt-pending");
   });
 
   it("stays quiet when the conference link came back", async () => {
-    const writeErr = vi.fn();
+    const writeStderr = vi.fn();
     const deps = makeDeps({
       createEvent: vi
         .fn()
         .mockResolvedValue(makeEvent({ meet_link: "https://meet.google.com/abc-defg-hij" })),
-      writeErr,
+      writeStderr,
     });
 
     await handleAdd(baseOptions({ meet: true }), deps);
 
-    expect(writeErr).not.toHaveBeenCalled();
+    expect(writeStderr).not.toHaveBeenCalled();
+  });
+
+  it("warns when the calendar attached something other than Meet", async () => {
+    const writeStderr = vi.fn();
+    const deps = makeDeps({
+      createEvent: vi.fn().mockResolvedValue(
+        makeEvent({
+          meet_link: null,
+          conference: { type: "addOn", uri: "https://example.zoom.us/j/123" },
+        }),
+      ),
+      writeStderr,
+    });
+
+    await handleAdd(baseOptions({ meet: true }), deps);
+
+    expect(writeStderr).toHaveBeenCalledTimes(1);
+    const note = writeStderr.mock.calls[0]![0];
+    expect(note).toContain("addOn");
+    expect(note).toContain("https://example.zoom.us/j/123");
+    // The conference exists, so this is not the "still being generated" case.
+    expect(note).not.toContain("still being generated");
   });
 
   it("suppresses the pending note in quiet mode", async () => {
-    const writeErr = vi.fn();
+    const writeStderr = vi.fn();
     const deps = makeDeps({
       createEvent: vi.fn().mockResolvedValue(makeEvent({ meet_link: null })),
-      writeErr,
+      writeStderr,
     });
 
     await handleAdd(baseOptions({ meet: true, quiet: true }), deps);
 
-    expect(writeErr).not.toHaveBeenCalled();
+    expect(writeStderr).not.toHaveBeenCalled();
   });
 });
 

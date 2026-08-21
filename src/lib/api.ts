@@ -5,6 +5,7 @@ import type {
   AttendeeResponseStatus,
   ErrorCode,
   EventAttendee,
+  EventConference,
   Transparency,
 } from "../types/index.ts";
 import { randomUUID } from "node:crypto";
@@ -157,8 +158,12 @@ export interface GoogleConferenceData {
     requestId?: string | null;
     status?: { statusCode?: string | null } | null;
   } | null;
+  conferenceSolution?: { key?: { type?: string | null } | null; name?: string | null } | null;
   entryPoints?: GoogleConferenceEntryPoint[] | null;
 }
+
+/** The one conference solution that is Google Meet. */
+export const MEET_SOLUTION_TYPE = "hangoutsMeet";
 
 export interface GoogleEventAttendee {
   email?: string | null;
@@ -215,15 +220,34 @@ function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined)
   return result;
 }
 
-function normalizeMeetLink(event: GoogleEvent): string | null {
+function normalizeConference(event: GoogleEvent): EventConference | null {
+  const data = event.conferenceData;
+  if (!data && !event.hangoutLink) {
+    return null;
+  }
+  // Phone and SIP entry points are out of scope; only the video URL is surfaced.
+  const video = data?.entryPoints?.find((entry) => entry.entryPointType === "video");
+  return {
+    type: data?.conferenceSolution?.key?.type ?? null,
+    uri: video?.uri ?? event.hangoutLink ?? null,
+  };
+}
+
+function normalizeMeetLink(event: GoogleEvent, conference: EventConference | null): string | null {
+  // hangoutLink is documented as populated only for Meet, so it settles the
+  // question on its own -- including on responses that omit conferenceSolution.
   if (event.hangoutLink) {
     return event.hangoutLink;
   }
-  // Phone and SIP entry points are out of scope; only the video URL is surfaced.
-  const video = event.conferenceData?.entryPoints?.find(
-    (entry) => entry.entryPointType === "video",
-  );
-  return video?.uri ?? null;
+  if (!conference) {
+    return null;
+  }
+  // A known non-Meet solution must not be passed off as a Meet link. An absent
+  // solution stays ambiguous, and the entry point is the best answer available.
+  if (conference.type !== null && conference.type !== MEET_SOLUTION_TYPE) {
+    return null;
+  }
+  return conference.uri;
 }
 
 export function normalizeEvent(
@@ -234,6 +258,8 @@ export function normalizeEvent(
   const allDay = Boolean(event.start?.date);
   const start = allDay ? (event.start?.date ?? "") : (event.start?.dateTime ?? "");
   const end = allDay ? (event.end?.date ?? "") : (event.end?.dateTime ?? "");
+  const conference = normalizeConference(event);
+  const meetLink = normalizeMeetLink(event, conference);
 
   return {
     id: event.id ?? "",
@@ -248,7 +274,8 @@ export function normalizeEvent(
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
     attendees: normalizeAttendees(event.attendees),
-    meet_link: normalizeMeetLink(event),
+    meet_link: meetLink,
+    conference,
     created: event.created ?? "",
     updated: event.updated ?? "",
   };
@@ -418,9 +445,12 @@ function conferenceStatus(event: GoogleEvent): string | undefined {
 
 function assertConferenceNotFailed(event: GoogleEvent): void {
   if (conferenceStatus(event) === "failure") {
+    // The event itself was already written, so name it -- otherwise the user
+    // sees a bare failure and has no way to find or clean up what was created.
+    const saved = event.id ? ` The event was still saved as ${event.id}.` : "";
     throw new ApiError(
       "API_ERROR",
-      "Google Meet conference creation failed (createRequest status: failure)",
+      `Google Meet conference creation failed (createRequest status: failure).${saved}`,
     );
   }
 }
@@ -469,7 +499,11 @@ function buildConferenceRequest(deps: ConferenceDeps): { createRequest: { reques
   return { createRequest: { requestId: generate() } };
 }
 
-const MEET_400_HINT = "This calendar may not support creating conferences.";
+// Deliberately phrased as a possibility: a 400 on a --meet request is often
+// about the conference, but it can equally be a bad time range, and asserting
+// the wrong cause sends the user down the wrong path.
+const MEET_400_HINT =
+  "(--meet was requested; if this calendar cannot host conferences, retry without it.)";
 
 /** Rethrows API errors, appending a hint when a conference request drew a 400. */
 function mapWriteError(error: unknown, meetRequested: boolean): never {

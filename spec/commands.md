@@ -178,15 +178,26 @@ Attendees:
 - `responseStatus` を指定して作成しても、受信側の設定によっては `needsAction` にリセットされる（API の仕様）。
 
 Google Meet (`--meet`):
-- 全日イベントには付けられない。`--start` が日付のみのとき API を呼ばずに `INVALID_ARGS` で拒否する。
+- 全日イベントにも付けられる。API も Google カレンダーの Web UI も許可しているため、CLI 側で
+  独自に禁止はしない。
 - 会議の生成は非同期。CLI は最大 3 回（500ms → 1s → 2s）ポーリングし、それでも確定しなければ
   `meet_link` を `null` のまま**成功として返し**、stderr に以下を出す。イベント自体は作成済みなので失敗扱いにしない。
   ```
   Note: Google Meet link is still being generated. Run `gcal show <id>` in a few seconds to get it.
   ```
-  この注記は `--quiet` では出さない。
-- 会議方式は指定せずカレンダー既定に任せる。会議を作れないカレンダーでは API が 400 を返し、
-  「このカレンダーは会議の作成に対応していない可能性がある」旨のヒントを添えてエラーにする。
+- 会議方式は指定せずカレンダー既定に任せる。既定が Meet 以外（クラシック Hangouts や
+  サードパーティ会議アドオン）のカレンダーでは Meet 以外の会議が付く。その場合 `meet_link` は
+  `null` のままにし（Meet ではないものを Meet のリンクとして返さないため）、実際に付いた会議は
+  JSON の `conference` で返した上で stderr に以下を出す。
+  ```
+  Note: this calendar attached a addOn conference, not Google Meet. Conference URL: https://...
+  ```
+- 上記 2 つの stderr 注記は `--quiet` では出さない。
+- 会議の作成そのものに失敗した場合（`createRequest.status` が `failure`）は `API_ERROR`。
+  **イベントは既に作成済みなので、エラーメッセージにそのイベント ID を含める。**
+- 会議を作れないカレンダーでは API が 400 を返す。`--meet` 指定時の 400 には
+  「`--meet` を外して再実行する」選択肢を添える。400 の原因は会議とは限らない（時刻範囲の不正など）ため、
+  原因を断定する書き方はしない。
 - 会議 ID は呼び出しごとに新規生成する。使い回すと同じ会議 URL が複数イベントで共有されてしまうため。
 
 Quiet mode (`-q`): Event ID only.
@@ -287,7 +298,8 @@ Google Meet:
 - 2 つは同時に指定できない。
 - **どちらも指定しない `update` は既存の会議を保持する。** conferenceData を伴うリクエストは
   この 2 つのフラグを指定したときだけ送るため、タイトル変更などが会議を巻き添えで消すことはない。
-- `--meet` の pending 時の挙動と 400 のヒントは `gcal add` と同じ。
+- `--meet` の pending / 非 Meet / `failure` / 400 の挙動はすべて `gcal add` と同じ。
+- dry-run は `meet: true` または `remove_meet: true` を出す。
 
 Quiet mode (`-q`): Event ID only.
 

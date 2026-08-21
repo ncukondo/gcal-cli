@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { collect } from "./shared.ts";
+import { collect, meetFollowUpNote } from "./shared.ts";
 import type { CalendarEvent, AppConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import type { CreateEventInput } from "../lib/api.ts";
@@ -36,7 +36,7 @@ export interface AddHandlerDeps {
   ) => Promise<CalendarEvent>;
   loadConfig: () => AppConfig;
   write: (msg: string) => void;
-  writeErr?: (msg: string) => void;
+  writeStderr: (msg: string) => void;
 }
 
 interface CommandResult {
@@ -70,11 +70,6 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
   }
 
   const allDay = isDateOnly(options.start);
-
-  if (options.meet && allDay) {
-    deps.write(formatJsonError("INVALID_ARGS", "--meet cannot be used with an all-day event"));
-    return { exitCode: ExitCode.ARGUMENT };
-  }
 
   // Validate start/end type consistency
   if (options.end) {
@@ -207,7 +202,7 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     if (attendees.length > 0) preview.attendees = attendees.map((a) => a.email);
     if (input.sendUpdates !== undefined) preview.notify = options.notify;
     // The requestId is minted by the API layer, so a dry run never allocates one.
-    if (input.meet !== undefined) preview.meet = input.meet;
+    if (options.meet) preview.meet = true;
 
     if (options.format === "json") {
       deps.write(formatJsonSuccess({ dry_run: true, action: "add", event: preview }));
@@ -230,12 +225,9 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
 
   const event = await deps.createEvent(calendarId, calendarName, input);
 
-  // Conference allocation is asynchronous, so the link can still be missing
-  // after the API layer has finished polling. The event itself exists either way.
-  if (options.meet && event.meet_link === null && !options.quiet) {
-    deps.writeErr?.(
-      `Note: Google Meet link is still being generated. Run \`gcal show ${event.id}\` in a few seconds to get it.`,
-    );
+  if (options.meet && !options.quiet) {
+    const note = meetFollowUpNote(event);
+    if (note) deps.writeStderr(note);
   }
 
   if (options.format === "json") {
@@ -280,7 +272,7 @@ export function createAddCommand(): Command {
     "--notify <scope>",
     `Send invitation emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
   );
-  cmd.option("--meet", "Create a Google Meet conference and attach it (timed events only)");
+  cmd.option("--meet", "Create a Google Meet conference and attach it");
   cmd.option("--dry-run", "Preview without executing");
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;

@@ -2,7 +2,14 @@ import * as nodeFs from "node:fs";
 import { google } from "googleapis";
 import type { calendar_v3 } from "googleapis";
 import type { AuthFsAdapter } from "../lib/auth.ts";
-import type { GoogleCalendarApi, GoogleCalendar, GoogleEvent } from "../lib/api.ts";
+import type {
+  GoogleCalendarApi,
+  GoogleCalendar,
+  GoogleEvent,
+  GoogleEventWriteBody,
+} from "../lib/api.ts";
+import { MEET_SOLUTION_TYPE } from "../lib/api.ts";
+import type { CalendarEvent } from "../types/index.ts";
 import type { GoogleTasksClient, GoogleRawTaskList, GoogleRawTask } from "../lib/tasks-api.ts";
 
 export const fsAdapter: AuthFsAdapter = {
@@ -26,6 +33,23 @@ type EventListData = {
   items?: GoogleEvent[];
   nextPageToken?: string;
 };
+
+/**
+ * What to tell the user on stderr after a `--meet` write, or null when the
+ * request produced a Google Meet link and there is nothing to say. Both `add`
+ * and `update` go through here so the two cannot drift apart.
+ */
+export function meetFollowUpNote(event: CalendarEvent): string | null {
+  const conference = event.conference;
+  if (conference && conference.type !== null && conference.type !== MEET_SOLUTION_TYPE) {
+    const url = conference.uri ? ` Conference URL: ${conference.uri}` : "";
+    return `Note: this calendar attached a ${conference.type} conference, not Google Meet.${url}`;
+  }
+  if (event.meet_link === null) {
+    return `Note: Google Meet link is still being generated. Run \`gcal show ${event.id}\` in a few seconds to get it.`;
+  }
+  return null;
+}
 
 /** Commander option callback to collect repeatable values into an array. */
 export function collect(value: string, previous: string[]): string[] {
@@ -72,20 +96,26 @@ export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
 
 /**
  * googleapis types `Schema$Event.conferenceData` as non-nullable, but the REST
- * API takes `conferenceData: null` to detach a conference from an event. The
- * casts are confined to this boundary so the rest of the codebase keeps a type
- * that says what the CLI actually sends.
+ * API takes `conferenceData: null` to detach a conference from an event. Only
+ * the body needs the cast; every other parameter stays type-checked, so a
+ * misspelled `sendUpdates` or `conferenceDataVersion` still fails to compile.
  */
+function toEventBody(
+  requestBody: Partial<GoogleEventWriteBody> | undefined,
+): calendar_v3.Schema$Event {
+  return requestBody as calendar_v3.Schema$Event;
+}
+
 function toEventInsertParams(
   params: Parameters<GoogleCalendarApi["events"]["insert"]>[0],
 ): calendar_v3.Params$Resource$Events$Insert {
-  return params as calendar_v3.Params$Resource$Events$Insert;
+  return { ...params, requestBody: toEventBody(params.requestBody) };
 }
 
 function toEventPatchParams(
   params: Parameters<GoogleCalendarApi["events"]["patch"]>[0],
 ): calendar_v3.Params$Resource$Events$Patch {
-  return params as calendar_v3.Params$Resource$Events$Patch;
+  return { ...params, requestBody: toEventBody(params.requestBody) };
 }
 
 export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalendarApi {

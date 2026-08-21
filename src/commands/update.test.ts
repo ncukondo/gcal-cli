@@ -19,6 +19,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     transparency: "opaque",
     attendees: [],
     meet_link: null,
+    conference: null,
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -30,6 +31,7 @@ function makeMockApi(
     patchReturn?: CalendarEvent;
     patchError?: Error;
     getReturn?: CalendarEvent;
+    patchConference?: unknown;
   } = {},
 ): GoogleCalendarApi {
   const patchFn = opts.patchError
@@ -50,6 +52,7 @@ function makeMockApi(
               status: opts.patchReturn.status,
               transparency: opts.patchReturn.transparency,
               hangoutLink: opts.patchReturn.meet_link ?? undefined,
+              conferenceData: opts.patchConference,
               created: opts.patchReturn.created,
               updated: opts.patchReturn.updated,
             }
@@ -925,6 +928,29 @@ describe("update command", () => {
       const result = await runUpdate(api, { eventId: "evt1", meet: true });
 
       expect(result.stderrOutput.join("\n")).toContain("gcal show evt1");
+    });
+
+    it("warns when the calendar attached something other than Meet", async () => {
+      const api = makeMockApi({
+        patchReturn: makeEvent({ id: "evt1", meet_link: null }),
+        patchConference: {
+          conferenceSolution: { key: { type: "addOn" } },
+          entryPoints: [{ entryPointType: "video", uri: "https://example.zoom.us/j/123" }],
+        },
+      });
+      const result = await runUpdate(api, { eventId: "evt1", meet: true });
+
+      const note = result.stderrOutput.join("\n");
+      expect(note).toContain("addOn");
+      expect(note).toContain("https://example.zoom.us/j/123");
+      expect(note).not.toContain("still being generated");
+    });
+
+    it("suppresses the pending note in quiet mode", async () => {
+      const api = makeMockApi({ patchReturn: makeEvent({ id: "evt1", meet_link: null }) });
+      const result = await runUpdate(api, { eventId: "evt1", meet: true, quiet: true });
+
+      expect(result.stderrOutput.join("\n")).not.toContain("still being generated");
     });
 
     it("stays quiet when the conference link came back", async () => {
