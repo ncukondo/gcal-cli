@@ -179,48 +179,68 @@ DRY RUN: Would create event:
 
 ## Implementation Steps
 
-- [ ] `src/types/index.ts`: `CalendarEvent.meet_link` を追加
-- [ ] `src/lib/api.test.ts`: `normalizeEvent()` の `meet_link` 抽出の失敗テスト（`hangoutLink` 優先 / `entryPoints` フォールバック / どちらも無ければ `null`）
-- [ ] `src/lib/api.ts`: `GoogleEvent` に `hangoutLink` / `conferenceData`、`GoogleEventWriteBody` に `conferenceData` を追加、`normalizeEvent()` を実装
-- [ ] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch` パラメータに `conferenceDataVersion?: number` を追加
-- [ ] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `conferenceDataVersion` を通す
-- [ ] `src/lib/api.test.ts` / `api.ts`: `createEvent()` の `meet` オプション（`conferenceDataVersion: 1` が送られる / `requestId` が呼び出しごとに異なる / `meet` 未指定なら `conferenceData` も `conferenceDataVersion` も送らない）
-- [ ] `src/lib/api.test.ts` / `api.ts`: pending リトライ（1回目 pending → 2回目 success で `meet_link` が埋まる / 3回 pending なら `meet_link: null` / `failure` なら `API_ERROR`）
-- [ ] `src/lib/api.test.ts` / `api.ts`: `updateEvent()` の `meet` / `removeMeet`（`conferenceData: null` を送る / どちらも未指定なら `conferenceData` をリクエストに含めない）
-- [ ] `src/commands/add.test.ts` / `add.ts`: `--meet`、全日イベントとの conflict、dry-run 出力、pending 時の stderr 注記
-- [ ] `src/commands/update.test.ts` / `update.ts`: `--meet` / `--remove-meet`（conflict 設定）
-- [ ] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Meet 行（`null` では出さない）
-- [ ] `spec/commands.md`: add / update のオプションと制約
-- [ ] `spec/output.md`: `Event` に `meet_link`、`gcal show` の text 出力例
-- [ ] `tests/integration/add-pipeline.test.ts`: `--meet` が `conferenceDataVersion: 1` 付きで API に届くこと
-- [ ] `bun run test` pass
-- [ ] `bun run lint` / `format:check` / `typecheck` pass
+- [x] `src/types/index.ts`: `CalendarEvent.meet_link` を追加
+- [x] `src/lib/api.test.ts`: `normalizeEvent()` の `meet_link` 抽出の失敗テスト（`hangoutLink` 優先 / `entryPoints` フォールバック / どちらも無ければ `null`）
+- [x] `src/lib/api.ts`: `GoogleEvent` に `hangoutLink` / `conferenceData`、`GoogleEventWriteBody` に `conferenceData` を追加、`normalizeEvent()` を実装
+- [x] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch` パラメータに `conferenceDataVersion?: number` を追加
+- [x] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `conferenceDataVersion` を通す
+- [x] `src/lib/api.test.ts` / `api.ts`: `createEvent()` の `meet` オプション（`conferenceDataVersion: 1` が送られる / `requestId` が呼び出しごとに異なる / `meet` 未指定なら `conferenceData` も `conferenceDataVersion` も送らない）
+- [x] `src/lib/api.test.ts` / `api.ts`: pending リトライ（1回目 pending → 2回目 success で `meet_link` が埋まる / 3回 pending なら `meet_link: null` / `failure` なら `API_ERROR`）
+- [x] `src/lib/api.test.ts` / `api.ts`: `updateEvent()` の `meet` / `removeMeet`（`conferenceData: null` を送る / どちらも未指定なら `conferenceData` をリクエストに含めない）
+- [x] `src/commands/add.test.ts` / `add.ts`: `--meet`、全日イベントとの conflict、dry-run 出力、pending 時の stderr 注記
+- [x] `src/commands/update.test.ts` / `update.ts`: `--meet` / `--remove-meet`（conflict 設定）
+- [x] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Meet 行（`null` では出さない）
+- [x] `spec/commands.md`: add / update のオプションと制約
+- [x] `spec/output.md`: `Event` に `meet_link`、`gcal show` の text 出力例
+- [x] `tests/integration/add-pipeline.test.ts`: `--meet` が `conferenceDataVersion: 1` 付きで API に届くこと
+- [x] `bun run test` pass
+- [x] `bun run lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
 `tests/e2e/google-meet.test.ts` を新規作成する。会議生成が非同期なため
 **`meet_link` が即座に埋まることを前提にしない**（フレーク対策）。
 
-- [ ] `gcal add --meet -f json` が成功し、`meet_link` が URL または `null` であること
-- [ ] `meet_link` が `null` だった場合、数秒待って `gcal show -f json` で URL が取れること（リトライ付き）
-- [ ] `gcal update <id> --remove-meet` 後に `meet_link` が `null` になること
-- [ ] `--meet` を付けずに作ったイベントの `meet_link` が `null` であること（後方互換の確認）
-- [ ] 全日イベントに `--meet` を付けると exit code 3（`INVALID_ARGS`）であること
-- [ ] 作成したイベントを cleanup で削除する
+- [x] `gcal add --meet -f json` が成功し、`meet_link` が URL または `null` であること
+- [x] `meet_link` が `null` だった場合、数秒待って `gcal show -f json` で URL が取れること（リトライ付き）
+- [x] `gcal update <id> --remove-meet` 後に `meet_link` が `null` になること
+- [x] `--meet` を付けずに作ったイベントの `meet_link` が `null` であること（後方互換の確認）
+- [x] 全日イベントに `--meet` を付けると exit code 3（`INVALID_ARGS`）であること
+- [x] 作成したイベントを cleanup で削除する
 
 テスト環境のカレンダーが会議作成に対応していない場合はスキップできるようにする
 （`tests/e2e/helpers.ts` の既存パターンに合わせる）。
 
 ## Acceptance Criteria
 
-- [ ] `gcal add --meet` で Meet 付きイベントが作成され、`meet_link` が返る
-- [ ] `requestId` が呼び出しごとにユニークである
-- [ ] `conferenceDataVersion: 1` は `--meet` / `--remove-meet` 指定時のみ送られる
-- [ ] `--meet` を指定しない `update` が既存の会議を消さない
-- [ ] `pending` のときリトライし、なお未確定ならイベント作成は成功扱いで stderr に注記が出る
-- [ ] `failure` のとき `API_ERROR` になる
-- [ ] `gcal update --remove-meet` で会議が削除される
-- [ ] 全日イベント + `--meet` が `INVALID_ARGS` で弾かれる
-- [ ] JSON 出力に `meet_link` が含まれる（会議なしなら `null`）
-- [ ] text / json / quiet 全フォーマットが動作する
-- [ ] 既存テストが pass する
+- [x] `gcal add --meet` で Meet 付きイベントが作成され、`meet_link` が返る
+- [x] `requestId` が呼び出しごとにユニークである
+- [x] `conferenceDataVersion: 1` は `--meet` / `--remove-meet` 指定時のみ送られる
+- [x] `--meet` を指定しない `update` が既存の会議を消さない
+- [x] `pending` のときリトライし、なお未確定ならイベント作成は成功扱いで stderr に注記が出る
+- [x] `failure` のとき `API_ERROR` になる
+- [x] `gcal update --remove-meet` で会議が削除される
+- [x] 全日イベント + `--meet` が `INVALID_ARGS` で弾かれる
+- [x] JSON 出力に `meet_link` が含まれる（会議なしなら `null`）
+- [x] text / json / quiet 全フォーマットが動作する
+- [x] 既存テストが pass する
+
+## Notes
+
+- `conferenceDataVersion: 1` は `--meet` / `--remove-meet` を指定したときだけリクエストに付ける。
+  これが「指定しない `update` は既存の会議を保持する」という不変条件の実体で、
+  `api.test.ts` と `update.test.ts` の両方で固定している。
+- pending の注記は `api.ts` ではなくコマンド層（`add.ts` / `update.ts`）から出す。
+  `api.ts` を IO から切り離したままにするため、コマンド側で
+  「`--meet` を指定したのに `meet_link` が `null`」を判定して stderr に書く。
+  仕様では `add` のみ言及していたが、`update --meet` でも同じ状況が起きるため同じ注記を出している。
+- `--quiet` では pending の注記を出さない。`-q` は Event ID だけを返す契約のため。
+- googleapis の型は `Schema$Event.conferenceData` を non-nullable として定義しているが、
+  REST API は会議の削除に `conferenceData: null` を受け付ける。キャストは
+  `src/commands/shared.ts` の変換関数 2 つに閉じ込め、コードベース側の型は実際に送る形を保っている。
+- `resolveConference()` は pending のまま 3 回のポーリングを終えたイベントをそのまま返す。
+  イベント自体は書き込み済みなので、コマンド全体を失敗させるより `meet_link: null` を返す方が正しい。
+- E2E は実カレンダーに対して 6 件すべて pass することを確認済み
+  （会議の作成・リンク取得・`--remove-meet` による削除を含む）。
+- `CalendarEvent` に必須フィールドを 1 つ足したため、041 と同様にテストの `makeEvent`
+  ファクトリ 8 箇所と `types.test.ts` の型リテラルを更新した。JSON 出力はフィールド追加のみで後方互換。
