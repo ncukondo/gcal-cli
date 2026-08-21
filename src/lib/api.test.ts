@@ -858,6 +858,51 @@ describe("API error mapping", () => {
     expect((error as ApiError).message).toContain("Forbidden for non organizer");
   });
 
+  // Rate limits do not mean "authenticate again": exit 2 would send the caller
+  // into a re-auth that costs another request and cannot clear the limit.
+  it("maps a 403 carrying a rate-limit reason to RATE_LIMITED", async () => {
+    const limited = Object.assign(new Error("Rate Limit Exceeded"), {
+      code: 403,
+      errors: [
+        { domain: "usageLimits", reason: "rateLimitExceeded", message: "Rate Limit Exceeded" },
+      ],
+    });
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn().mockRejectedValue(limited),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const error = await listEvents(api, "cal1", "Cal").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "RATE_LIMITED" });
+    expect((error as ApiError).message).toContain("exponential backoff");
+  });
+
+  it("maps a 429 to RATE_LIMITED", async () => {
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error("Too Many Requests"), { code: 429 })),
+      },
+    };
+
+    const error = await deleteEvent(api, "cal1", "evt1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "RATE_LIMITED" });
+  });
+
   it("maps other HTTP errors to API_ERROR", async () => {
     const api: GoogleCalendarApi = {
       calendarList: { list: vi.fn() },
@@ -1869,6 +1914,13 @@ describe("isAuthRequiredError", () => {
 
   it("is false for FORBIDDEN -- re-authenticating does not grant permission", () => {
     expect(isAuthRequiredError(new ApiError("FORBIDDEN", "You need writer access."))).toBe(false);
+  });
+
+  // RATE_LIMITED must stay out: `gcal init` reads this to start its automatic
+  // re-auth flow, and re-authenticating while rate limited spends another
+  // request on a problem it cannot fix.
+  it("is false for RATE_LIMITED -- re-authenticating spends a request and cannot help", () => {
+    expect(isAuthRequiredError(new ApiError("RATE_LIMITED", "Rate Limit Exceeded"))).toBe(false);
   });
 
   it("is false for other codes and for non-ApiError values", () => {

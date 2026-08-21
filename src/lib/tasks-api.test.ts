@@ -645,6 +645,43 @@ describe("API error mapping", () => {
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
+  it("maps a 403 carrying a rate-limit reason to RATE_LIMITED", async () => {
+    const limited = Object.assign(new Error("Rate Limit Exceeded"), {
+      code: 403,
+      errors: [{ domain: "usageLimits", reason: "quotaExceeded", message: "Rate Limit Exceeded" }],
+    });
+    const client: GoogleTasksClient = {
+      tasklists: { list: vi.fn() },
+      tasks: {
+        list: vi.fn().mockRejectedValue(limited),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const error = await listTasks(client, "@default", "My Tasks").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "RATE_LIMITED" });
+    expect((error as ApiError).message).toContain("exponential backoff");
+  });
+
+  it("maps a 429 to RATE_LIMITED", async () => {
+    const client: GoogleTasksClient = {
+      tasklists: {
+        list: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error("Too Many Requests"), { code: 429 })),
+      },
+      tasks: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+    };
+
+    const error = await listTaskLists(client).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "RATE_LIMITED" });
+  });
+
   it("maps other HTTP errors to API_ERROR", async () => {
     const client: GoogleTasksClient = {
       tasklists: { list: vi.fn() },

@@ -45,6 +45,8 @@ Only calendars containing "main" in their name are targeted by default.
 
 Exit code 2 means re-authenticating can fix the problem. A permission error
 (`FORBIDDEN`) exits 1 instead, because `gcal auth` does not grant access.
+A rate limit or quota error (`RATE_LIMITED`) exits 1 as well: it is temporary,
+and re-authenticating spends another request without clearing it.
 
 ## Related Specs
 

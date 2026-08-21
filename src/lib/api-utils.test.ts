@@ -54,6 +54,14 @@ describe("mapApiError", () => {
     expect(error.message).toBe("Invalid Credentials");
   });
 
+  // The same for a limit reason: 401 means the caller is unidentified, and
+  // re-authenticating is the fix regardless of what else the error mentions.
+  it("maps 401 to AUTH_REQUIRED even when it carries a rate-limit reason", () => {
+    const error = mapped(makeApiError(401, "Invalid Credentials", "rateLimitExceeded"));
+    expect(error.code).toBe("AUTH_REQUIRED");
+    expect(error.message).toBe("Invalid Credentials");
+  });
+
   it("maps 403 requiredAccessLevel to FORBIDDEN with an access-level hint", () => {
     const error = mapped(
       makeApiError(403, "You need to have writer access to this calendar.", "requiredAccessLevel"),
@@ -86,10 +94,36 @@ describe("mapApiError", () => {
     expect(error.message).toBe("Insufficient Permission");
   });
 
+  // Google documents these three 403 reasons as rate limit or quota exhaustion.
+  // Re-authenticating cannot clear them and costs another request while limited.
+  it.each(["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"])(
+    "maps 403 %s to RATE_LIMITED with a retry hint",
+    (reason) => {
+      const error = mapped(makeApiError(403, "Rate Limit Exceeded", reason));
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.code).toBe("RATE_LIMITED");
+      expect(error.message).toBe(
+        "Rate Limit Exceeded This is temporary; wait and retry with exponential backoff.",
+      );
+    },
+  );
+
   it("falls back to AUTH_REQUIRED for an unknown 403 reason", () => {
     const error = mapped(makeApiError(403, "Forbidden", "someReasonWeHaveNeverSeen"));
     expect(error.code).toBe("AUTH_REQUIRED");
   });
+
+  // The hint maps are plain objects, so a reason colliding with an
+  // Object.prototype key must not resolve to the inherited value. Google will not
+  // send these, but the lookup is shared by both maps and should not be fooled.
+  it.each(["toString", "constructor", "hasOwnProperty"])(
+    "does not route a 403 whose reason is the inherited key %s",
+    (reason) => {
+      const error = mapped(makeApiError(403, "Forbidden", reason));
+      expect(error.code).toBe("AUTH_REQUIRED");
+      expect(error.message).toBe("Forbidden");
+    },
+  );
 
   it("falls back to AUTH_REQUIRED when the 403 carries no reason", () => {
     const error = mapped(makeApiError(403, "Forbidden"));
@@ -138,6 +172,27 @@ describe("mapApiError", () => {
     expect(error.code).toBe("FORBIDDEN");
   });
 
+  // 429 is classified by status alone. A status code is sturdier than a reason
+  // string and still decides the case when no reason is readable; Google
+  // documents the 429 as functionally similar to the 403 rate-limit reasons.
+  it("maps 429 to RATE_LIMITED without consulting the reason", () => {
+    const error = mapped(makeApiError(429, "Too Many Requests", "rateLimitExceeded"));
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBe("RATE_LIMITED");
+    expect(error.message).toBe(
+      "Too Many Requests This is temporary; wait and retry with exponential backoff.",
+    );
+  });
+
+  it("maps 429 to RATE_LIMITED when it carries no reason at all", () => {
+    expect(mapped(makeApiError(429, "Too Many Requests")).code).toBe("RATE_LIMITED");
+  });
+
+  it("maps 429 to RATE_LIMITED even when it carries an unrelated reason", () => {
+    const error = mapped(makeApiError(429, "Too Many Requests", "requiredAccessLevel"));
+    expect(error.code).toBe("RATE_LIMITED");
+  });
+
   it("maps 404 to NOT_FOUND", () => {
     expect(mapped(makeApiError(404, "Not Found")).code).toBe("NOT_FOUND");
   });
@@ -149,5 +204,33 @@ describe("mapApiError", () => {
   it("rethrows values that are not Google API errors", () => {
     const original = new Error("boom");
     expect(mapped(original)).toBe(original);
+  });
+
+  // The order the three outcomes are tried in is load-bearing, so pin it here:
+  // permission -> FORBIDDEN, rate limit -> RATE_LIMITED, anything else ->
+  // AUTH_REQUIRED, the safe default that at worst wastes a re-auth.
+  describe("403 routing priority", () => {
+    function multi(...reasons: string[]): Error & { code: number } {
+      return Object.assign(new Error("Forbidden"), {
+        code: 403,
+        errors: reasons.map((reason) => ({ domain: "global", reason, message: "Forbidden" })),
+      });
+    }
+
+    it("prefers FORBIDDEN over RATE_LIMITED when a 403 carries both", () => {
+      expect(mapped(multi("requiredAccessLevel", "rateLimitExceeded")).code).toBe("FORBIDDEN");
+    });
+
+    it("prefers FORBIDDEN regardless of which reason comes first", () => {
+      expect(mapped(multi("rateLimitExceeded", "requiredAccessLevel")).code).toBe("FORBIDDEN");
+    });
+
+    it("prefers RATE_LIMITED over the AUTH_REQUIRED fallback", () => {
+      expect(mapped(multi("someReasonWeHaveNeverSeen", "quotaExceeded")).code).toBe("RATE_LIMITED");
+    });
+
+    it("keeps the AUTH_REQUIRED fallback when no reason is routed", () => {
+      expect(mapped(multi("someReasonWeHaveNeverSeen")).code).toBe("AUTH_REQUIRED");
+    });
   });
 });

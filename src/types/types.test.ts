@@ -117,17 +117,22 @@ describe("Calendar", () => {
 });
 
 describe("ErrorCode", () => {
-  it("accepts all 6 error codes", () => {
-    const codes: ErrorCode[] = [
-      "AUTH_REQUIRED",
-      "AUTH_EXPIRED",
-      "NOT_FOUND",
-      "INVALID_ARGS",
-      "API_ERROR",
-      "CONFIG_ERROR",
-    ];
-    expect(codes).toHaveLength(6);
-    for (const code of codes) {
+  // `satisfies` is what keeps this honest: adding a code to ErrorCode without
+  // adding it here fails tsc. A hand-counted list went stale once already --
+  // FORBIDDEN was missed when 044 added it, and nothing noticed.
+  it("accepts every error code", () => {
+    const codes = {
+      AUTH_REQUIRED: true,
+      AUTH_EXPIRED: true,
+      NOT_FOUND: true,
+      INVALID_ARGS: true,
+      API_ERROR: true,
+      FORBIDDEN: true,
+      RATE_LIMITED: true,
+      CONFIG_ERROR: true,
+    } satisfies Record<ErrorCode, true>;
+
+    for (const code of Object.keys(codes) as ErrorCode[]) {
       expect(isType<ErrorCode>(code)).toBe(true);
     }
   });

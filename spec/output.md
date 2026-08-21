@@ -236,6 +236,7 @@ Timezone: Asia/Tokyo
 | `INVALID_ARGS` | Invalid command arguments |
 | `API_ERROR` | Google API error |
 | `FORBIDDEN` | Permission denied (read-only calendar, non-organizer); re-authenticating does not help |
+| `RATE_LIMITED` | Rate limit or quota exceeded; retry later with exponential backoff |
 | `CONFIG_ERROR` | Configuration file error |
 
 ## Data Structures

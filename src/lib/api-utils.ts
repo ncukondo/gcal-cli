@@ -34,12 +34,38 @@ const FORBIDDEN_HINTS: Readonly<Record<string, string>> = {
     "Re-authenticating will not help; only the organizer can change this event.",
 };
 
-/** The hint for the first detail naming a reason we route, or undefined. */
-function forbiddenHint(details: GoogleApiErrorDetail[] | undefined): string | undefined {
+/**
+ * Google's error guide recommends exponential backoff and mentions no Retry-After
+ * header, so do not promise the caller one.
+ */
+const RATE_LIMIT_HINT = "This is temporary; wait and retry with exponential backoff.";
+
+/**
+ * The 403 reasons Google's error guide documents as a limit being exhausted. This
+ * is a temporary state rather than a permission or an authentication problem, and
+ * the only useful action is to wait: re-authenticating spends another request
+ * without clearing it. Shaped like FORBIDDEN_HINTS so the routed reasons are
+ * derived from the same map that holds their wording, and so a reason can be
+ * given its own wording later. Only reasons confirmed in that guide belong here.
+ */
+const RATE_LIMIT_HINTS: Readonly<Record<string, string>> = {
+  rateLimitExceeded: RATE_LIMIT_HINT,
+  userRateLimitExceeded: RATE_LIMIT_HINT,
+  quotaExceeded: RATE_LIMIT_HINT,
+};
+
+/**
+ * The hint for the first detail naming a reason `hints` routes, or undefined.
+ * Own keys only: `reason` is attacker-adjacent free text, and a plain object
+ * would otherwise answer for inherited keys such as `toString`.
+ */
+function hintFor(
+  details: GoogleApiErrorDetail[] | undefined,
+  hints: Readonly<Record<string, string>>,
+): string | undefined {
   for (const detail of details ?? []) {
-    const hint = detail.reason === undefined ? undefined : FORBIDDEN_HINTS[detail.reason];
-    if (hint !== undefined) {
-      return hint;
+    if (detail.reason !== undefined && Object.hasOwn(hints, detail.reason)) {
+      return hints[detail.reason];
     }
   }
   return undefined;
@@ -47,11 +73,24 @@ function forbiddenHint(details: GoogleApiErrorDetail[] | undefined): string | un
 
 export function mapApiError(error: unknown): never {
   if (isGoogleApiError(error)) {
+    // Status alone, deliberately: a status code is sturdier than a reason string
+    // and still decides the case when no reason is readable. Google documents the
+    // 429 as functionally similar to the 403 rate-limit reasons.
+    if (error.code === 429) {
+      throw new ApiError("RATE_LIMITED", `${error.message} ${RATE_LIMIT_HINT}`);
+    }
     if (error.code === 403) {
       // Both carry the same array in the pinned googleapis version; read either.
-      const hint = forbiddenHint(error.errors ?? error.response?.data?.error?.errors);
-      if (hint !== undefined) {
-        throw new ApiError("FORBIDDEN", `${error.message} ${hint}`);
+      const details = error.errors ?? error.response?.data?.error?.errors;
+      // Permission first: a 403 naming a permission reason is about access, even
+      // if some other detail also mentions a limit.
+      const forbidden = hintFor(details, FORBIDDEN_HINTS);
+      if (forbidden !== undefined) {
+        throw new ApiError("FORBIDDEN", `${error.message} ${forbidden}`);
+      }
+      const rateLimited = hintFor(details, RATE_LIMIT_HINTS);
+      if (rateLimited !== undefined) {
+        throw new ApiError("RATE_LIMITED", `${error.message} ${rateLimited}`);
       }
     }
     if (error.code === 401 || error.code === 403) {

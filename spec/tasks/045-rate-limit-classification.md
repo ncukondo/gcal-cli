@@ -6,9 +6,16 @@
 依然 `AUTH_REQUIRED` / 終了コード 2 に落ちる**。つまり:
 
 ```
-$ gcal list          # API のレート制限に掛かった
+$ gcal show <event-id>          # API のレート制限に掛かった
 Error: Rate Limit Exceeded          終了コード 2（認証エラー）
 ```
+
+**当初この例は `gcal list` としていたが、PR #62 のレビューで誤りが判明したので差し替えた。**
+`list` は複数カレンダーを `Promise.allSettled` で引き、失敗したカレンダーを警告に畳んで
+先へ進む（`src/commands/list.ts:164-175`）。したがってレート制限に掛かった `gcal list` は
+`handleError()` に到達せず、`success: true` / `count: 0` / 終了コード 0 を返す。
+本タスクの前後どちらでもそうなる。`show` / `add` / `update` / `delete` と Tasks 側の各コマンドは
+API エラーをそのまま投げるので、そちらが本タスクの示す経路である。
 
 ユーザーとエージェントは「再認証が必要」と受け取る。しかし再認証しても直らないし、
 **再認証は追加の API 呼び出しを伴うので、レート制限下では事態を悪化させる**。
@@ -95,6 +102,9 @@ Google は exponential backoff を推奨しており、`src/lib/api.ts` の
 - 自動リトライ／exponential backoff の実装（→ 046）
 - `Retry-After` ヘッダの解釈（ドキュメントに記載が無く、返ることを確認できていない）
 - レート制限の事前回避（リクエストの間引き、バッチ化）
+- `gcal list` がレート制限を警告に畳んで終了コード 0 / `count: 0` を返す件。
+  エージェントには「予定が無い」と見分けが付かず、本タスクが直す誤誘導より質が悪い可能性があるが、
+  044 以前から存在する別の欠陥で、分類の変更では直らない（別途扱う）
 
 ## Changes
 
@@ -110,19 +120,21 @@ RATE_LIMITED   Rate limit or quota exceeded; retry later
 
 ## Implementation Steps
 
-- [ ] `src/types/index.ts`: `ErrorCode` に `RATE_LIMITED` を追加
-- [ ] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `RATE_LIMITED: ExitCode.GENERAL` を追加
-- [ ] `src/cli.ts`: `getErrorCode()` の `validCodes` に `RATE_LIMITED` を追加
-- [ ] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の 3 つの `reason` を `RATE_LIMITED` に振り分ける
+- [x] `src/types/index.ts`: `ErrorCode` に `RATE_LIMITED` を追加
+- [x] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `RATE_LIMITED: ExitCode.GENERAL` を追加
+- [x] `src/cli.ts`: `getErrorCode()` の `validCodes` に `RATE_LIMITED` を追加
+- [x] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の 3 つの `reason` を `RATE_LIMITED` に振り分ける
       （044 の `FORBIDDEN_HINTS` と同じく、reason 一覧をヒントの写像から導出して乖離を防ぐ）
-- [ ] `src/lib/api-utils.test.ts` / `api-utils.ts`: **429 を `reason` に関係なく** `RATE_LIMITED` にする
-- [ ] `src/lib/api-utils.test.ts`: 403 の振り分け優先順位を固定する
+- [x] `src/lib/api-utils.test.ts` / `api-utils.ts`: **429 を `reason` に関係なく** `RATE_LIMITED` にする
+- [x] `src/lib/api-utils.test.ts`: 403 の振り分け優先順位を固定する
       （権限不足 → `FORBIDDEN` / レート制限 → `RATE_LIMITED` / 未知 → `AUTH_REQUIRED`）
-- [ ] `src/lib/api.test.ts`: `isAuthRequiredError()` が `RATE_LIMITED` を含まないこと
-- [ ] `src/commands/init.test.ts`: `RATE_LIMITED` で自動再認証が起動しないこと
-- [ ] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること
-- [ ] `spec/output.md`: Error Codes 表に `RATE_LIMITED` を追加
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `src/lib/api.test.ts`: `isAuthRequiredError()` が `RATE_LIMITED` を含まないこと
+- [x] `src/commands/init.test.ts`: `RATE_LIMITED` で自動再認証が起動しないこと
+- [x] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること
+- [x] `spec/output.md`: Error Codes 表に `RATE_LIMITED` を追加
+- [x] `spec/overview.md`: Exit Codes の説明に `RATE_LIMITED` が 1 である理由を補足
+- [x] `vitest run src tests/integration` / `lint` / `format:check` / `typecheck` pass
+      （E2E は実 API を叩くため本作業では未実行。本タスクは E2E を追加しない）
 
 ## E2E Test
 
@@ -134,14 +146,14 @@ RATE_LIMITED   Rate limit or quota exceeded; retry later
 
 ## Acceptance Criteria
 
-- [ ] 403 の `rateLimitExceeded` / `userRateLimitExceeded` / `quotaExceeded` が
+- [x] 403 の `rateLimitExceeded` / `userRateLimitExceeded` / `quotaExceeded` が
       `RATE_LIMITED` / 終了コード 1 になる
-- [ ] 429 が `reason` の有無に関わらず `RATE_LIMITED` になる
-- [ ] 権限不足の 403 は 044 どおり `FORBIDDEN` のまま
-- [ ] 認証由来の 403（`insufficientPermissions`）は `AUTH_REQUIRED` のまま
-- [ ] 未知の `reason` の 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
-- [ ] 401 の扱いは一切変わらない
-- [ ] `gcal init` が `RATE_LIMITED` で自動再認証を起動しない
-- [ ] Calendar 側と Tasks 側の両方で同じ振り分けになる
-- [ ] `spec/output.md` の Error Codes 表が実装と一致している
-- [ ] 既存テストが pass する
+- [x] 429 が `reason` の有無に関わらず `RATE_LIMITED` になる
+- [x] 権限不足の 403 は 044 どおり `FORBIDDEN` のまま
+- [x] 認証由来の 403（`insufficientPermissions`）は `AUTH_REQUIRED` のまま
+- [x] 未知の `reason` の 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
+- [x] 401 の扱いは一切変わらない
+- [x] `gcal init` が `RATE_LIMITED` で自動再認証を起動しない
+- [x] Calendar 側と Tasks 側の両方で同じ振り分けになる
+- [x] `spec/output.md` の Error Codes 表が実装と一致している
+- [x] 既存テストが pass する
