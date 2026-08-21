@@ -1,10 +1,12 @@
 import { Command } from "commander";
+import { collect } from "./shared.ts";
 import type { GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
 import { parseDuration } from "../lib/duration.ts";
+import { NOTIFY_CHOICES, parseAttendees, parseNotify } from "../lib/attendees.ts";
 import type { OutputFormat, CommandResult, CalendarEvent } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
@@ -34,6 +36,10 @@ export interface UpdateHandlerOptions {
   busy?: boolean;
   free?: boolean;
   dryRun?: boolean;
+  /** Replaces the whole guest list. See spec/commands.md for the rationale. */
+  attendee?: string[];
+  clearAttendees?: boolean;
+  notify?: string;
 }
 
 interface ResolvedTime {
@@ -269,13 +275,31 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     opts.duration !== undefined ||
     opts.description !== undefined ||
     opts.busy !== undefined ||
-    opts.free !== undefined;
+    opts.free !== undefined ||
+    (opts.attendee !== undefined && opts.attendee.length > 0) ||
+    opts.clearAttendees === true;
 
   if (!hasUpdate) {
     throw new ApiError("INVALID_ARGS", "at least one update option must be provided");
   }
 
+  let attendees;
+  let sendUpdates;
+  try {
+    attendees = opts.clearAttendees ? [] : parseAttendees(opts.attendee ?? []);
+    sendUpdates = parseNotify(opts.notify);
+  } catch (err) {
+    throw new ApiError("INVALID_ARGS", (err as Error).message);
+  }
+
+  const replacesAttendees = opts.clearAttendees === true || attendees.length > 0;
+
   const input: UpdateEventInput = {};
+
+  if (replacesAttendees) {
+    input.attendees = attendees;
+  }
+  input.sendUpdates = sendUpdates;
 
   if (opts.title !== undefined) {
     input.title = opts.title;
@@ -315,6 +339,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (input.title !== undefined) changes.title = input.title;
     if (input.description !== undefined) changes.description = input.description;
     if (input.transparency !== undefined) changes.transparency = input.transparency;
+    if (replacesAttendees) changes.attendees = attendees.map((a) => a.email);
+    if (opts.notify !== undefined) changes.notify = opts.notify;
     const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
     if (withTime.start !== undefined) changes.start = withTime.start;
     if (withTime.end !== undefined) changes.end = withTime.end;
@@ -336,6 +362,11 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
       if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
       if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
+      if (changes.attendees !== undefined) {
+        const list = changes.attendees as string[];
+        lines.push(`  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`);
+      }
+      if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
       write(lines.join("\n"));
     }
     return { exitCode: ExitCode.SUCCESS };
@@ -377,7 +408,23 @@ export function createUpdateCommand(): Command {
   cmd.option("-d, --description <text>", "New description");
   cmd.option("--busy", "Mark as busy");
   cmd.option("--free", "Mark as free");
+  cmd.option(
+    "-a, --attendee <email>",
+    "Replace the guest list with these addresses (repeatable)",
+    collect,
+    [],
+  );
+  cmd.option("--clear-attendees", "Remove all attendees from the event");
+  cmd.option(
+    "--notify <scope>",
+    `Send update emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
+  );
   cmd.option("--dry-run", "Preview without executing");
+
+  const attendeeOpt = cmd.options.find((o) => o.long === "--attendee")!;
+  const clearAttendeesOpt = cmd.options.find((o) => o.long === "--clear-attendees")!;
+  attendeeOpt.conflicts(["clearAttendees"]);
+  clearAttendeesOpt.conflicts(["attendee"]);
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;
   const durationOpt = cmd.options.find((o) => o.long === "--duration")!;
@@ -403,6 +450,8 @@ Examples:
   gcal update abc123 -s "2026-03-01" --duration 2d                          # All-day, 2 days
   gcal update abc123 --free                                                  # Transparency only
   gcal update abc123 --dry-run -t "Preview"                                  # Dry run
+  gcal update abc123 -a alice@example.com                                    # Replace guest list
+  gcal update abc123 --clear-attendees                                       # Remove all guests
 `,
   );
 

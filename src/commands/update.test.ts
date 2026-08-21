@@ -17,6 +17,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     html_link: "https://calendar.google.com/event?eid=evt1",
     status: "confirmed",
     transparency: "opaque",
+    attendees: [],
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -98,6 +99,9 @@ interface RunUpdateOpts {
   timezone?: string;
   dryRun?: boolean;
   getReturn?: CalendarEvent;
+  attendee?: string[];
+  clearAttendees?: boolean;
+  notify?: string;
 }
 
 function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
@@ -130,6 +134,9 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   if (opts.busy !== undefined) handlerOpts.busy = opts.busy;
   if (opts.free !== undefined) handlerOpts.free = opts.free;
   if (opts.dryRun !== undefined) handlerOpts.dryRun = opts.dryRun;
+  if (opts.attendee !== undefined) handlerOpts.attendee = opts.attendee;
+  if (opts.clearAttendees !== undefined) handlerOpts.clearAttendees = opts.clearAttendees;
+  if (opts.notify !== undefined) handlerOpts.notify = opts.notify;
   return handleUpdate(handlerOpts).then((result) => ({ ...result, output, stderrOutput }));
 }
 
@@ -159,6 +166,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           summary: "New Title",
         },
@@ -184,6 +192,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           start: { dateTime: "2026-02-01T14:00:00+09:00", timeZone: "Asia/Tokyo" },
           end: { dateTime: "2026-02-01T15:00:00+09:00", timeZone: "Asia/Tokyo" },
@@ -301,6 +310,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           description: "New description",
         },
@@ -318,6 +328,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           transparency: "opaque",
         },
@@ -333,6 +344,7 @@ describe("update command", () => {
       expect(api.events.patch).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
         requestBody: {
           transparency: "transparent",
         },
@@ -728,6 +740,122 @@ describe("update command", () => {
 
       const text = result.output.join("\n");
       expect(text).toContain("DRY RUN");
+    });
+  });
+
+  describe("attendees and notifications", () => {
+    it("--attendee replaces the whole guest list", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, {
+        eventId: "evt1",
+        attendee: ["alice@example.com", "bob@example.com"],
+      });
+
+      expect(api.events.patch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: {
+            attendees: [{ email: "alice@example.com" }, { email: "bob@example.com" }],
+          },
+        }),
+      );
+    });
+
+    it("--clear-attendees sends an empty guest list", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", clearAttendees: true });
+
+      expect(api.events.patch).toHaveBeenCalledWith(
+        expect.objectContaining({ requestBody: { attendees: [] } }),
+      );
+    });
+
+    it("counts --attendee as an update on its own", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", attendee: ["alice@example.com"] });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("counts --clear-attendees as an update on its own", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", clearAttendees: true });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("rejects --notify on its own as not being an update", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", notify: "all" }).catch(
+        (e: unknown) => e,
+      );
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("at least one");
+    });
+
+    it("forwards --notify to sendUpdates", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", title: "Renamed", notify: "all" });
+
+      expect(api.events.patch).toHaveBeenCalledWith(
+        expect.objectContaining({ sendUpdates: "all" }),
+      );
+    });
+
+    it("defaults sendUpdates to none", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", title: "Renamed" });
+
+      expect(api.events.patch).toHaveBeenCalledWith(
+        expect.objectContaining({ sendUpdates: "none" }),
+      );
+    });
+
+    it("rejects an invalid attendee address", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", attendee: ["nope"] }).catch(
+        (e: unknown) => e,
+      );
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("nope");
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("rejects an invalid --notify value", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Renamed",
+        notify: "everyone",
+      }).catch((e: unknown) => e);
+      expect(result).toBeInstanceOf(Error);
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("shows the resulting guest list in the dry-run preview", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        attendee: ["alice@example.com"],
+        notify: "all",
+        dryRun: true,
+        format: "json",
+      });
+
+      expect(api.events.patch).not.toHaveBeenCalled();
+      const json = JSON.parse(result.output.join(""));
+      expect(json.data.changes.attendees).toEqual(["alice@example.com"]);
+      expect(json.data.changes.notify).toBe("all");
+    });
+
+    it("shows an emptied guest list in the dry-run preview", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        clearAttendees: true,
+        dryRun: true,
+        format: "json",
+      });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.data.changes.attendees).toEqual([]);
     });
   });
 

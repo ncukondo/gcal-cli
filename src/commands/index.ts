@@ -410,6 +410,7 @@ export function registerCommands(program: Command): void {
         format: globalOpts.format,
         quiet: globalOpts.quiet,
         dryRun: deleteOpts.dryRun ?? false,
+        notify: deleteOpts.notify,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
       process.exit(result.exitCode);
@@ -444,10 +445,12 @@ export function registerCommands(program: Command): void {
         busy: addOpts.busy,
         free: addOpts.free,
         dryRun: addOpts.dryRun,
+        attendee: addOpts.attendee,
         quiet: globalOpts.quiet,
         format: globalOpts.format,
       };
       if (addOpts.calendar) handleOpts.calendar = addOpts.calendar;
+      if (addOpts.notify) handleOpts.notify = addOpts.notify;
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
       const result = await handleAdd(handleOpts, deps);

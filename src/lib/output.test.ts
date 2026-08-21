@@ -25,6 +25,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     html_link: "https://calendar.google.com/event?id=test",
     status: "confirmed",
     transparency: "opaque",
+    attendees: [],
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -593,6 +594,62 @@ describe("formatEventDetailText", () => {
     const event = makeEvent({ description: null });
     const result = formatEventDetailText(event);
     expect(result).not.toContain("Description:");
+  });
+
+  it("omits the attendees block when there are no attendees", () => {
+    const event = makeEvent({ attendees: [] });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Attendees:");
+  });
+
+  it("shows attendees with their response status", () => {
+    const event = makeEvent({
+      attendees: [
+        {
+          email: "alice@example.com",
+          display_name: "Alice",
+          response_status: "accepted",
+          optional: false,
+          organizer: true,
+          self: false,
+        },
+        {
+          email: "bob@example.com",
+          display_name: null,
+          response_status: "needsAction",
+          optional: true,
+          organizer: false,
+          self: false,
+        },
+      ],
+    });
+    const result = formatEventDetailText(event);
+
+    expect(result).toContain("Attendees:");
+    expect(result).toContain("2");
+    expect(result).toContain("[accepted]");
+    expect(result).toContain("alice@example.com (Alice) (organizer)");
+    expect(result).toContain("[needsAction]");
+    expect(result).toContain("bob@example.com (optional)");
+  });
+
+  it("places the attendees block before the link", () => {
+    const event = makeEvent({
+      attendees: [
+        {
+          email: "alice@example.com",
+          display_name: null,
+          response_status: "accepted",
+          optional: false,
+          organizer: false,
+          self: false,
+        },
+      ],
+    });
+    const result = formatEventDetailText(event);
+
+    expect(result).toContain("Attendees:");
+    expect(result.indexOf("Attendees:")).toBeLessThan(result.indexOf("Link:"));
   });
 
   it("shows full detail format", () => {

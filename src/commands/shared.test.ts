@@ -83,6 +83,43 @@ describe("createGoogleCalendarApi", () => {
     expect(result.data).toEqual({ id: "evt1", summary: "Meeting" });
   });
 
+  it("forwards sendUpdates to events.insert, patch and delete", async () => {
+    const mockInsert = vi.fn().mockResolvedValue({ data: { id: "evt1" } });
+    const mockPatch = vi.fn().mockResolvedValue({ data: { id: "evt1" } });
+    const mockDelete = vi.fn().mockResolvedValue({});
+    const mockCalendar = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: mockInsert,
+        patch: mockPatch,
+        delete: mockDelete,
+      },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api: GoogleCalendarApi = createGoogleCalendarApi(mockCalendar as any);
+    await api.events.insert({
+      calendarId: "primary",
+      requestBody: { summary: "Meeting" },
+      sendUpdates: "all",
+    });
+    await api.events.patch({
+      calendarId: "primary",
+      eventId: "evt1",
+      requestBody: { summary: "Renamed" },
+      sendUpdates: "externalOnly",
+    });
+    await api.events.delete({ calendarId: "primary", eventId: "evt1", sendUpdates: "none" });
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ sendUpdates: "all" }));
+    expect(mockPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ sendUpdates: "externalOnly" }),
+    );
+    expect(mockDelete).toHaveBeenCalledWith(expect.objectContaining({ sendUpdates: "none" }));
+  });
+
   it("passes pageToken parameter to calendarList.list", async () => {
     const mockList = vi.fn().mockResolvedValue({
       data: { items: [] },

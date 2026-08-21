@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { collect } from "./shared.ts";
 import type { CalendarEvent, AppConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import type { CreateEventInput } from "../lib/api.ts";
@@ -7,6 +8,7 @@ import { selectCalendars } from "../lib/config.ts";
 import { formatJsonSuccess, formatJsonError, formatEventDetailText } from "../lib/output.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
 import { parseDuration } from "../lib/duration.ts";
+import { NOTIFY_CHOICES, parseAttendees, parseNotify } from "../lib/attendees.ts";
 
 export interface AddOptions {
   title: string;
@@ -17,6 +19,8 @@ export interface AddOptions {
   calendar?: string;
   busy?: boolean;
   free?: boolean;
+  attendee?: string[];
+  notify?: string;
   dryRun?: boolean;
   quiet?: boolean;
   format: OutputFormat;
@@ -50,6 +54,16 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
   // Validate --end and --duration are not both specified
   if (options.end && options.duration) {
     deps.write(formatJsonError("INVALID_ARGS", "--end and --duration cannot be used together"));
+    return { exitCode: ExitCode.ARGUMENT };
+  }
+
+  let attendees;
+  let sendUpdates;
+  try {
+    attendees = parseAttendees(options.attendee ?? []);
+    sendUpdates = parseNotify(options.notify);
+  } catch (err) {
+    deps.write(formatJsonError("INVALID_ARGS", (err as Error).message));
     return { exitCode: ExitCode.ARGUMENT };
   }
 
@@ -162,6 +176,15 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     input.description = options.description;
   }
 
+  if (attendees.length > 0) {
+    input.attendees = attendees;
+    input.sendUpdates = sendUpdates;
+  } else if (sendUpdates !== "none") {
+    // --notify without --attendee still matters: the calendar may already have
+    // guests when the event lands on a shared calendar.
+    input.sendUpdates = sendUpdates;
+  }
+
   if (options.dryRun) {
     const preview: Record<string, unknown> = {
       title: input.title,
@@ -170,6 +193,8 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     };
     if (input.description !== undefined) preview.description = input.description;
     if (input.transparency !== "opaque") preview.transparency = input.transparency;
+    if (attendees.length > 0) preview.attendees = attendees.map((a) => a.email);
+    if (input.sendUpdates !== undefined) preview.notify = options.notify;
 
     if (options.format === "json") {
       deps.write(formatJsonSuccess({ dry_run: true, action: "add", event: preview }));
@@ -180,6 +205,10 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
       lines.push(`  end: "${preview.end}"`);
       if (preview.description !== undefined) lines.push(`  description: "${preview.description}"`);
       if (preview.transparency !== undefined) lines.push(`  transparency: ${preview.transparency}`);
+      if (preview.attendees !== undefined) {
+        lines.push(`  attendees: ${(preview.attendees as string[]).join(", ")}`);
+      }
+      if (preview.notify !== undefined) lines.push(`  notify: ${String(preview.notify)}`);
       deps.write(lines.join("\n"));
     }
     return { exitCode: ExitCode.SUCCESS };
@@ -219,6 +248,16 @@ export function createAddCommand(): Command {
   cmd.option("-d, --description <text>", "Event description");
   cmd.option("--busy", "Mark as busy (default)");
   cmd.option("--free", "Mark as free (transparent)");
+  cmd.option(
+    "-a, --attendee <email>",
+    "Invite an attendee by email address (repeatable)",
+    collect,
+    [],
+  );
+  cmd.option(
+    "--notify <scope>",
+    `Send invitation emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
+  );
   cmd.option("--dry-run", "Preview without executing");
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;
@@ -242,6 +281,8 @@ Examples:
   gcal add -t "Meeting" -s "2026-01-24T10:00" -e "2026-01-24T11:30"      # Timed, explicit end
   gcal add -t "Standup" -s "2026-01-24T10:00" --duration 30m             # Timed, 30 min
   gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, free
+  gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite (no email sent)
+  gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
 `,
   );
 

@@ -38,6 +38,7 @@ describe("CalendarEvent", () => {
       html_link: "https://calendar.google.com/event?eid=abc",
       status: "confirmed",
       transparency: "opaque",
+      attendees: [],
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     };
@@ -57,6 +58,7 @@ describe("CalendarEvent", () => {
       html_link: "https://calendar.google.com/event?eid=def",
       status: "tentative",
       transparency: "transparent",
+      attendees: [],
       created: "2026-01-15T00:00:00Z",
       updated: "2026-02-21T08:00:00Z",
     };
@@ -76,6 +78,7 @@ describe("CalendarEvent", () => {
       html_link: "https://calendar.google.com/event?eid=ghi",
       status: "confirmed",
       transparency: "transparent",
+      attendees: [],
       created: "2025-12-01T00:00:00Z",
       updated: "2025-12-01T00:00:00Z",
     };
@@ -292,6 +295,7 @@ describe("negative type tests (@ts-expect-error)", () => {
       html_link: "https://example.com",
       status: "confirmed",
       transparency: "opaque",
+      attendees: [],
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     });
@@ -312,6 +316,7 @@ describe("negative type tests (@ts-expect-error)", () => {
       // @ts-expect-error — "maybe" is not a valid EventStatus
       status: "maybe",
       transparency: "opaque",
+      attendees: [],
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     });

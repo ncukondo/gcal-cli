@@ -28,6 +28,7 @@ function runDelete(
     format?: "text" | "json";
     quiet?: boolean;
     dryRun?: boolean;
+    notify?: string;
   } = {},
 ) {
   const output: string[] = [];
@@ -42,6 +43,7 @@ function runDelete(
       output.push(msg);
     },
   };
+  if (opts.notify !== undefined) handlerOpts.notify = opts.notify;
   return handleDelete(handlerOpts).then((result) => ({ ...result, output }));
 }
 
@@ -70,6 +72,7 @@ describe("delete command", () => {
       expect(api.events.delete).toHaveBeenCalledWith({
         calendarId: "primary",
         eventId: "evt1",
+        sendUpdates: "none",
       });
     });
 
@@ -193,6 +196,34 @@ describe("delete command", () => {
         event_id: "evt123",
         calendar_id: "primary",
       });
+    });
+  });
+
+  describe("--notify", () => {
+    it("forwards --notify all as sendUpdates", async () => {
+      const api = makeMockApi();
+      await runDelete(api, { eventId: "evt1", notify: "all" });
+
+      expect(api.events.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ sendUpdates: "all" }),
+      );
+    });
+
+    it("rejects an invalid --notify value", async () => {
+      const { ApiError } = await import("../lib/api.ts");
+      const api = makeMockApi();
+
+      await expect(runDelete(api, { eventId: "evt1", notify: "everyone" })).rejects.toThrow(
+        ApiError,
+      );
+      expect(api.events.delete).not.toHaveBeenCalled();
+    });
+
+    it("accepts a --notify option on the command", () => {
+      const cmd = createDeleteCommand();
+      cmd.exitOverride();
+      cmd.parse(["node", "delete", "--notify", "all", "abc123"]);
+      expect(cmd.opts().notify).toBe("all");
     });
   });
 

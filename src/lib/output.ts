@@ -239,6 +239,18 @@ export function formatEventDetailText(event: CalendarEvent): string {
     lines.push(detailLine("Description", event.description));
   }
 
+  if (event.attendees.length > 0) {
+    lines.push(detailLine("Attendees", String(event.attendees.length)));
+    for (const attendee of event.attendees) {
+      const notes: string[] = [];
+      if (attendee.display_name) notes.push(attendee.display_name);
+      if (attendee.organizer) notes.push("organizer");
+      if (attendee.optional) notes.push("optional");
+      const suffix = notes.map((note) => ` (${note})`).join("");
+      lines.push(`  [${attendee.response_status}] ${attendee.email}${suffix}`);
+    }
+  }
+
   lines.push("");
   lines.push(`Link: ${event.html_link}`);
 

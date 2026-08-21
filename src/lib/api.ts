@@ -1,5 +1,12 @@
 import * as z from "zod";
-import type { Calendar, CalendarEvent, ErrorCode, Transparency } from "../types/index.ts";
+import type {
+  Calendar,
+  CalendarEvent,
+  AttendeeResponseStatus,
+  ErrorCode,
+  EventAttendee,
+  Transparency,
+} from "../types/index.ts";
 import { AuthError } from "./auth.ts";
 import { MAX_PAGES, mapApiError } from "./api-utils.ts";
 
@@ -17,6 +24,9 @@ export class ApiError extends Error {
 
 const EventStatusSchema = z.enum(["confirmed", "tentative", "cancelled"]).catch("confirmed");
 const TransparencySchema = z.enum(["opaque", "transparent"]).catch("opaque");
+const ResponseStatusSchema = z
+  .enum(["needsAction", "declined", "tentative", "accepted"])
+  .catch("needsAction");
 
 // Abstraction over the Google Calendar API client for testability
 export interface GoogleCalendarApi {
@@ -41,14 +51,41 @@ export interface GoogleCalendarApi {
     insert: (params: {
       calendarId: string;
       requestBody: GoogleEventWriteBody;
+      sendUpdates?: SendUpdates;
     }) => Promise<{ data: GoogleEvent }>;
     patch: (params: {
       calendarId: string;
       eventId: string;
       requestBody: Partial<GoogleEventWriteBody>;
+      sendUpdates?: SendUpdates;
     }) => Promise<{ data: GoogleEvent }>;
-    delete: (params: { calendarId: string; eventId: string }) => Promise<void>;
+    delete: (params: {
+      calendarId: string;
+      eventId: string;
+      sendUpdates?: SendUpdates;
+    }) => Promise<void>;
   };
+}
+
+/**
+ * Notification scope for write operations. The Google Calendar API already
+ * defaults to not notifying, but we always send this explicitly so the
+ * "never notify unless asked" guarantee does not depend on an API default.
+ */
+export type SendUpdates = "all" | "externalOnly" | "none";
+
+export const DEFAULT_SEND_UPDATES: SendUpdates = "none";
+
+/** Attendee fields the CLI can write. */
+export interface AttendeeInput {
+  email: string;
+  displayName?: string;
+  optional?: boolean;
+  /**
+   * Preserved on read-modify-write so replacing the guest list does not reset
+   * everyone's RSVP. The API replaces the whole attendees array on patch.
+   */
+  responseStatus?: AttendeeResponseStatus;
 }
 
 // Request body for creating/updating events
@@ -58,6 +95,14 @@ export interface GoogleEventWriteBody {
   start?: { date?: string; dateTime?: string; timeZone?: string };
   end?: { date?: string; dateTime?: string; timeZone?: string };
   transparency?: Transparency;
+  attendees?: GoogleEventAttendeeWrite[];
+}
+
+interface GoogleEventAttendeeWrite {
+  email: string;
+  displayName?: string;
+  optional?: boolean;
+  responseStatus?: AttendeeResponseStatus;
 }
 
 export interface CreateEventInput {
@@ -68,6 +113,8 @@ export interface CreateEventInput {
   timeZone?: string;
   description?: string | null;
   transparency?: Transparency;
+  attendees?: AttendeeInput[];
+  sendUpdates?: SendUpdates;
 }
 
 interface UpdateEventBase {
@@ -75,6 +122,9 @@ interface UpdateEventBase {
   timeZone?: string;
   description?: string | null;
   transparency?: Transparency;
+  /** Replaces the whole guest list; an empty array clears it. */
+  attendees?: AttendeeInput[];
+  sendUpdates?: SendUpdates;
 }
 
 interface UpdateEventTimeFields {
@@ -86,6 +136,15 @@ interface UpdateEventTimeFields {
 export type UpdateEventInput = UpdateEventBase &
   (UpdateEventTimeFields | { start?: never; end?: never; allDay?: never });
 
+export interface GoogleEventAttendee {
+  email?: string | null;
+  displayName?: string | null;
+  responseStatus?: string | null;
+  optional?: boolean | null;
+  organizer?: boolean | null;
+  self?: boolean | null;
+}
+
 // Google API response types (partial, only fields we use)
 export interface GoogleEvent {
   id?: string | null;
@@ -96,6 +155,7 @@ export interface GoogleEvent {
   htmlLink?: string | null;
   status?: string | null;
   transparency?: string | null;
+  attendees?: GoogleEventAttendee[] | null;
   created?: string | null;
   updated?: string | null;
 }
@@ -105,6 +165,28 @@ export interface GoogleCalendar {
   summary?: string | null;
   description?: string | null;
   primary?: boolean | null;
+}
+
+function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined): EventAttendee[] {
+  if (!attendees) {
+    return [];
+  }
+  const result: EventAttendee[] = [];
+  for (const attendee of attendees) {
+    // Rooms and resources have no email address; they are out of scope for now.
+    if (!attendee.email) {
+      continue;
+    }
+    result.push({
+      email: attendee.email,
+      display_name: attendee.displayName ?? null,
+      response_status: ResponseStatusSchema.parse(attendee.responseStatus ?? undefined),
+      optional: attendee.optional ?? false,
+      organizer: attendee.organizer ?? false,
+      self: attendee.self ?? false,
+    });
+  }
+  return result;
 }
 
 export function normalizeEvent(
@@ -128,6 +210,7 @@ export function normalizeEvent(
     html_link: event.htmlLink ?? "",
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
+    attendees: normalizeAttendees(event.attendees),
     created: event.created ?? "",
     updated: event.updated ?? "",
   };
@@ -265,6 +348,16 @@ function buildTimeFields(
   return { start: startField, end: endField };
 }
 
+function buildAttendees(attendees: AttendeeInput[]): GoogleEventAttendeeWrite[] {
+  return attendees.map((attendee) => {
+    const entry: GoogleEventAttendeeWrite = { email: attendee.email };
+    if (attendee.displayName !== undefined) entry.displayName = attendee.displayName;
+    if (attendee.optional !== undefined) entry.optional = attendee.optional;
+    if (attendee.responseStatus !== undefined) entry.responseStatus = attendee.responseStatus;
+    return entry;
+  });
+}
+
 export async function createEvent(
   api: GoogleCalendarApi,
   calendarId: string,
@@ -280,7 +373,14 @@ export async function createEvent(
     if (input.description !== undefined) {
       requestBody.description = input.description;
     }
-    const response = await api.events.insert({ calendarId, requestBody });
+    if (input.attendees !== undefined) {
+      requestBody.attendees = buildAttendees(input.attendees);
+    }
+    const response = await api.events.insert({
+      calendarId,
+      requestBody,
+      sendUpdates: input.sendUpdates ?? DEFAULT_SEND_UPDATES,
+    });
     return normalizeEvent(response.data, calendarId, calendarName);
   } catch (error: unknown) {
     mapApiError(error);
@@ -311,13 +411,21 @@ export async function updateEvent(
     if (input.transparency !== undefined) {
       requestBody.transparency = input.transparency;
     }
+    if (input.attendees !== undefined) {
+      requestBody.attendees = buildAttendees(input.attendees);
+    }
     if (start !== undefined && end !== undefined && allDay !== undefined) {
       Object.assign(
         requestBody,
         buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone),
       );
     }
-    const response = await api.events.patch({ calendarId, eventId, requestBody });
+    const response = await api.events.patch({
+      calendarId,
+      eventId,
+      requestBody,
+      sendUpdates: input.sendUpdates ?? DEFAULT_SEND_UPDATES,
+    });
     return normalizeEvent(response.data, calendarId, calendarName);
   } catch (error: unknown) {
     mapApiError(error);
@@ -328,9 +436,10 @@ export async function deleteEvent(
   api: GoogleCalendarApi,
   calendarId: string,
   eventId: string,
+  sendUpdates: SendUpdates = DEFAULT_SEND_UPDATES,
 ): Promise<void> {
   try {
-    await api.events.delete({ calendarId, eventId });
+    await api.events.delete({ calendarId, eventId, sendUpdates });
   } catch (error: unknown) {
     mapApiError(error);
   }

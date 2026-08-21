@@ -95,6 +95,29 @@ Found 2 events matching "A":
 2026-12-05 23:00-12/06 01:00      Night Shift (Main Calendar) [busy]
 ```
 
+### `gcal show` Text Output
+
+出席者がいるときだけ Attendees ブロックを表示する。`Link:` の直前に置く。
+
+```
+Team Meeting
+
+Date:         2026-01-24
+Time:         10:00 - 11:00
+Calendar:     Main Calendar
+Status:       confirmed
+Availability: busy
+Attendees:    3
+  [accepted] alice@example.com (Alice) (organizer)
+  [needsAction] bob@example.com
+  [declined] carol@example.com (optional)
+
+Link: https://calendar.google.com/event?eid=...
+```
+
+各行の末尾に付く注記は `(表示名)` `(organizer)` `(optional)` の順で、該当するものだけを出す。
+`gcal list` / `gcal search` の行フォーマットは出席者では変わらない。
+
 ### `gcal calendars` Text Output
 
 ```
@@ -229,8 +252,25 @@ All datetime fields include timezone offset (ISO 8601).
   "calendar_id": "string",
   "calendar_name": "string",
   "html_link": "string",
+  "attendees": "EventAttendee[]",
   "created": "ISO8601 datetime",
   "updated": "ISO8601 datetime"
+}
+```
+
+### EventAttendee
+
+`attendees` は出席者がいない場合も `null` ではなく空配列 `[]` を返す。
+メールアドレスを持たない参加者（会議室・リソース）は現在対象外で、リストに含まれない。
+
+```json
+{
+  "email": "string",
+  "display_name": "string | null",
+  "response_status": "needsAction | declined | tentative | accepted",
+  "optional": "boolean",
+  "organizer": "boolean",
+  "self": "boolean"
 }
 ```
 

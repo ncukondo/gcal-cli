@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { ApiError, deleteEvent } from "../lib/api.ts";
 import { formatJsonSuccess } from "../lib/output.ts";
+import { NOTIFY_CHOICES, parseNotify } from "../lib/attendees.ts";
 import type { CommandResult, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 
@@ -12,6 +13,7 @@ export interface DeleteHandlerOptions {
   format: OutputFormat;
   quiet: boolean;
   dryRun?: boolean;
+  notify?: string;
   write: (msg: string) => void;
 }
 
@@ -20,6 +22,13 @@ export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandR
 
   if (!eventId) {
     throw new ApiError("INVALID_ARGS", "event-id is required");
+  }
+
+  let sendUpdates;
+  try {
+    sendUpdates = parseNotify(opts.notify);
+  } catch (err) {
+    throw new ApiError("INVALID_ARGS", (err as Error).message);
   }
 
   if (dryRun) {
@@ -38,7 +47,7 @@ export async function handleDelete(opts: DeleteHandlerOptions): Promise<CommandR
     return { exitCode: ExitCode.SUCCESS };
   }
 
-  await deleteEvent(api, calendarId, eventId);
+  await deleteEvent(api, calendarId, eventId, sendUpdates);
 
   if (!quiet) {
     if (format === "json") {
@@ -56,5 +65,9 @@ export function createDeleteCommand(): Command {
     .description("Delete a calendar event")
     .argument("<event-id>", "Event ID")
     .option("-c, --calendar <id>", "Calendar ID to query")
+    .option(
+      "--notify <scope>",
+      `Send cancellation emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
+    )
     .option("--dry-run", "Preview without executing");
 }

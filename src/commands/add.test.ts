@@ -16,6 +16,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     html_link: "https://calendar.google.com/event/new-evt-1",
     status: "confirmed",
     transparency: "opaque",
+    attendees: [],
     created: "2026-02-24T00:00:00Z",
     updated: "2026-02-24T00:00:00Z",
     ...overrides,
@@ -462,6 +463,125 @@ describe("handleAdd", () => {
   });
 });
 
+describe("handleAdd attendees and notifications", () => {
+  it("passes attendees to createEvent", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ attendee: ["alice@example.com", "bob@example.com"] }), deps);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      "primary",
+      "Main Calendar",
+      expect.objectContaining({
+        attendees: [{ email: "alice@example.com" }, { email: "bob@example.com" }],
+      }),
+    );
+  });
+
+  it("de-duplicates repeated attendees", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ attendee: ["alice@example.com", "ALICE@example.com"] }), deps);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      "primary",
+      "Main Calendar",
+      expect.objectContaining({ attendees: [{ email: "alice@example.com" }] }),
+    );
+  });
+
+  it("omits attendees when none are given", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions(), deps);
+
+    expect(mockCreate.mock.calls[0]?.[2]).not.toHaveProperty("attendees");
+  });
+
+  it("defaults sendUpdates to none", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ attendee: ["alice@example.com"] }), deps);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      "primary",
+      "Main Calendar",
+      expect.objectContaining({ sendUpdates: "none" }),
+    );
+  });
+
+  it("maps --notify all to sendUpdates all", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ attendee: ["alice@example.com"], notify: "all" }), deps);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      "primary",
+      "Main Calendar",
+      expect.objectContaining({ sendUpdates: "all" }),
+    );
+  });
+
+  it("maps --notify external to sendUpdates externalOnly", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(makeEvent());
+    const deps = makeDeps({ createEvent: mockCreate });
+
+    await handleAdd(baseOptions({ notify: "external" }), deps);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      "primary",
+      "Main Calendar",
+      expect.objectContaining({ sendUpdates: "externalOnly" }),
+    );
+  });
+
+  it("rejects an invalid attendee address", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ attendee: ["not-an-email"] }), deps);
+
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    expect(deps.createEvent).not.toHaveBeenCalled();
+    const written = vi.mocked(deps.write).mock.calls.flat().join("\n");
+    expect(written).toContain("INVALID_ARGS");
+  });
+
+  it("rejects an invalid --notify value", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ notify: "everyone" }), deps);
+
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    expect(deps.createEvent).not.toHaveBeenCalled();
+  });
+
+  it("includes attendees and notify in the dry-run preview", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(
+      baseOptions({ attendee: ["alice@example.com"], notify: "all", dryRun: true, format: "json" }),
+      deps,
+    );
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(deps.createEvent).not.toHaveBeenCalled();
+    const json = JSON.parse(vi.mocked(deps.write).mock.calls.flat().join(""));
+    expect(json.data.event.attendees).toEqual(["alice@example.com"]);
+    expect(json.data.event.notify).toBe("all");
+  });
+
+  it("omits attendees from the dry-run preview when none are given", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions({ dryRun: true, format: "json" }), deps);
+
+    const json = JSON.parse(vi.mocked(deps.write).mock.calls.flat().join(""));
+    expect(json.data.event).not.toHaveProperty("attendees");
+    expect(json.data.event).not.toHaveProperty("notify");
+  });
+});
+
 describe("createAddCommand", () => {
   it("creates a commander command named 'add'", () => {
     const cmd = createAddCommand();
@@ -568,5 +688,32 @@ describe("createAddCommand", () => {
     cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01", "-c", "mycal"]);
     const opts = cmd.opts();
     expect(opts.calendar).toBe("mycal");
+  });
+
+  it("-a, --attendee is repeatable and defaults to an empty array", () => {
+    const cmd = createAddCommand();
+    cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01"]);
+    expect(cmd.opts().attendee).toEqual([]);
+
+    const cmd2 = createAddCommand();
+    cmd2.parse([
+      "node",
+      "add",
+      "-t",
+      "Test",
+      "-s",
+      "2026-03-01",
+      "-a",
+      "alice@example.com",
+      "--attendee",
+      "bob@example.com",
+    ]);
+    expect(cmd2.opts().attendee).toEqual(["alice@example.com", "bob@example.com"]);
+  });
+
+  it("accepts a --notify option", () => {
+    const cmd = createAddCommand();
+    cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01", "--notify", "all"]);
+    expect(cmd.opts().notify).toBe("all");
   });
 });

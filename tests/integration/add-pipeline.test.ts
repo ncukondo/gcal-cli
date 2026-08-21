@@ -382,4 +382,53 @@ describe("add command pipeline: config → timezone → API → output", () => {
     expect(result.exitCode).toBe(3);
     expect(out.output()).toContain("INVALID_ARGS");
   });
+  it("carries attendees and notify scope through to the API call", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    const result = await handleAdd(
+      {
+        title: "Design review",
+        start: "2026-03-01T10:00",
+        attendee: ["alice@example.com", "ALICE@example.com", "bob@example.com"],
+        notify: "external",
+        format: "json",
+      },
+      deps,
+    );
+
+    expect(result.exitCode).toBe(0);
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    const params = insertFn.mock.calls[0]![0];
+    expect(params.sendUpdates).toBe("externalOnly");
+    expect(params.requestBody.attendees).toEqual([
+      { email: "alice@example.com" },
+      { email: "bob@example.com" },
+    ]);
+  });
+
+  it("defaults to sending no notifications", async () => {
+    const mockApi = createMockApi();
+    const mockFs = createMockFs(SINGLE_CALENDAR_CONFIG_TOML);
+    const out = captureWrite();
+
+    const deps: AddHandlerDeps = {
+      createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
+      loadConfig: () => loadConfig(mockFs),
+      write: out.write,
+    };
+
+    await handleAdd({ title: "Solo focus", start: "2026-03-01T10:00", format: "json" }, deps);
+
+    const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
+    expect(insertFn.mock.calls[0]![0].sendUpdates).toBe("none");
+  });
 });
