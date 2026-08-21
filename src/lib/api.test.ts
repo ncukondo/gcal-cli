@@ -8,6 +8,7 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  isAuthRequiredError,
   ApiError,
   MAX_PAGES,
   type GoogleCalendarApi,
@@ -791,6 +792,70 @@ describe("API error mapping", () => {
     const error = await listEvents(api, "cal1", "Cal").catch((e) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "AUTH_REQUIRED" });
+  });
+
+  it("maps a 403 carrying a permission reason to FORBIDDEN", async () => {
+    const forbidden = Object.assign(new Error("You need to have writer access to this calendar."), {
+      code: 403,
+      errors: [
+        {
+          domain: "calendar",
+          reason: "requiredAccessLevel",
+          message: "You need to have writer access to this calendar.",
+        },
+      ],
+    });
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn().mockRejectedValue(forbidden),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
+    };
+
+    const input: CreateEventInput = {
+      title: "Test",
+      start: "2024-03-15T09:00:00Z",
+      end: "2024-03-15T10:00:00Z",
+      allDay: false,
+    };
+
+    const error = await createEvent(api, "cal1", "Cal", input).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("maps a 403 on --remove-meet to FORBIDDEN rather than asking for re-auth", async () => {
+    const forbidden = Object.assign(new Error("Forbidden for non organizer"), {
+      code: 403,
+      errors: [
+        {
+          domain: "calendar",
+          reason: "forbiddenForNonOrganizer",
+          message: "Forbidden for non organizer",
+        },
+      ],
+    });
+    const api: GoogleCalendarApi = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn().mockRejectedValue(forbidden),
+        delete: vi.fn(),
+      },
+    };
+
+    const error = await updateEvent(api, "cal1", "Cal", "evt1", { removeMeet: true }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "FORBIDDEN" });
+    expect((error as ApiError).message).toContain("Forbidden for non organizer");
   });
 
   it("maps other HTTP errors to API_ERROR", async () => {
@@ -1601,5 +1666,21 @@ describe("deleteEvent", () => {
     const error = await deleteEvent(api, "cal1", "evt1").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "API_ERROR" });
+  });
+});
+
+describe("isAuthRequiredError", () => {
+  it("is true for the codes a re-auth can fix", () => {
+    expect(isAuthRequiredError(new ApiError("AUTH_REQUIRED", "Not authenticated"))).toBe(true);
+    expect(isAuthRequiredError(new ApiError("AUTH_EXPIRED", "Token expired"))).toBe(true);
+  });
+
+  it("is false for FORBIDDEN -- re-authenticating does not grant permission", () => {
+    expect(isAuthRequiredError(new ApiError("FORBIDDEN", "You need writer access."))).toBe(false);
+  });
+
+  it("is false for other codes and for non-ApiError values", () => {
+    expect(isAuthRequiredError(new ApiError("API_ERROR", "Backend Error"))).toBe(false);
+    expect(isAuthRequiredError(new Error("boom"))).toBe(false);
   });
 });

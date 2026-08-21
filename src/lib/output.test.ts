@@ -837,6 +837,10 @@ describe("errorCodeToExitCode", () => {
   it("maps CONFIG_ERROR to exit code 1", () => {
     expect(errorCodeToExitCode("CONFIG_ERROR")).toBe(1);
   });
+
+  it("maps FORBIDDEN to exit code 1", () => {
+    expect(errorCodeToExitCode("FORBIDDEN")).toBe(1);
+  });
 });
 
 describe("formatHiddenAllDayWarning", () => {

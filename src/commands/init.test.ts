@@ -300,6 +300,17 @@ describe("handleInit", () => {
     expect(output.join("\n")).toContain("Not authenticated");
   });
 
+  it("does not auto-authenticate when listCalendars throws FORBIDDEN", async () => {
+    const forbidden = new ApiError("FORBIDDEN", "You need to have writer access to this calendar.");
+    const listCalendars = vi.fn().mockRejectedValue(forbidden);
+    const requestAuth = vi.fn().mockResolvedValue(undefined);
+    const opts = makeOpts({ listCalendars, requestAuth });
+
+    await expect(handleInit(opts)).rejects.toThrow("writer access");
+    expect(requestAuth).not.toHaveBeenCalled();
+    expect(listCalendars).toHaveBeenCalledTimes(1);
+  });
+
   it("auto-authenticates when listCalendars throws AUTH_REQUIRED", async () => {
     const authError = new ApiError("AUTH_REQUIRED", "Not authenticated");
     let callCount = 0;
