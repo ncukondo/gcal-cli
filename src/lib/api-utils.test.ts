@@ -39,9 +39,17 @@ describe("mapApiError", () => {
     throw new Error("mapApiError did not throw");
   }
 
-  it("maps 401 to AUTH_REQUIRED regardless of reason", () => {
+  it("maps 401 to AUTH_REQUIRED", () => {
     const error = mapped(makeApiError(401, "Invalid Credentials", "authError"));
     expect(error).toBeInstanceOf(ApiError);
+    expect(error.code).toBe("AUTH_REQUIRED");
+    expect(error.message).toBe("Invalid Credentials");
+  });
+
+  // An expired token must never be reported as a permission problem: that would
+  // tell the caller not to re-authenticate, the inverse of the right answer.
+  it("maps 401 to AUTH_REQUIRED even when it carries a permission reason", () => {
+    const error = mapped(makeApiError(401, "Invalid Credentials", "requiredAccessLevel"));
     expect(error.code).toBe("AUTH_REQUIRED");
     expect(error.message).toBe("Invalid Credentials");
   });
