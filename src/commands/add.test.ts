@@ -583,6 +583,93 @@ describe("handleAdd attendees and notifications", () => {
   });
 });
 
+describe("handleAdd with --meet", () => {
+  it("asks the API for a conference", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ meet: true }), deps);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const input = (deps.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(input.meet).toBe(true);
+  });
+
+  it("does not mention meet when the flag is absent", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions(), deps);
+
+    const input = (deps.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(input).not.toHaveProperty("meet");
+  });
+
+  it("rejects --meet on an all-day event", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ start: "2026-03-01", meet: true }), deps);
+
+    expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+    expect(deps.createEvent).not.toHaveBeenCalled();
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("INVALID_ARGS");
+    expect(output).toContain("all-day");
+  });
+
+  it("shows meet in the text dry-run preview without calling the API", async () => {
+    const deps = makeDeps();
+    const result = await handleAdd(baseOptions({ meet: true, dryRun: true }), deps);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(deps.createEvent).not.toHaveBeenCalled();
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(output).toContain("meet: true");
+  });
+
+  it("shows meet in the json dry-run preview", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions({ meet: true, dryRun: true, format: "json" }), deps);
+
+    const output = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(JSON.parse(output).data.event.meet).toBe(true);
+  });
+
+  it("notes on stderr when the conference is not ready yet", async () => {
+    const writeErr = vi.fn();
+    const deps = makeDeps({
+      createEvent: vi.fn().mockResolvedValue(makeEvent({ id: "evt-pending", meet_link: null })),
+      writeErr,
+    });
+
+    await handleAdd(baseOptions({ meet: true }), deps);
+
+    expect(writeErr).toHaveBeenCalledTimes(1);
+    expect(writeErr.mock.calls[0]![0]).toContain("gcal show evt-pending");
+  });
+
+  it("stays quiet when the conference link came back", async () => {
+    const writeErr = vi.fn();
+    const deps = makeDeps({
+      createEvent: vi
+        .fn()
+        .mockResolvedValue(makeEvent({ meet_link: "https://meet.google.com/abc-defg-hij" })),
+      writeErr,
+    });
+
+    await handleAdd(baseOptions({ meet: true }), deps);
+
+    expect(writeErr).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the pending note in quiet mode", async () => {
+    const writeErr = vi.fn();
+    const deps = makeDeps({
+      createEvent: vi.fn().mockResolvedValue(makeEvent({ meet_link: null })),
+      writeErr,
+    });
+
+    await handleAdd(baseOptions({ meet: true, quiet: true }), deps);
+
+    expect(writeErr).not.toHaveBeenCalled();
+  });
+});
+
 describe("createAddCommand", () => {
   it("creates a commander command named 'add'", () => {
     const cmd = createAddCommand();
@@ -716,5 +803,17 @@ describe("createAddCommand", () => {
     const cmd = createAddCommand();
     cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01", "--notify", "all"]);
     expect(cmd.opts().notify).toBe("all");
+  });
+
+  it("--meet is a boolean flag that defaults to undefined", () => {
+    const cmd = createAddCommand();
+    cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01T10:00"]);
+    expect(cmd.opts().meet).toBeUndefined();
+  });
+
+  it("--meet sets the flag", () => {
+    const cmd = createAddCommand();
+    cmd.parse(["node", "add", "-t", "Test", "-s", "2026-03-01T10:00", "--meet"]);
+    expect(cmd.opts().meet).toBe(true);
   });
 });

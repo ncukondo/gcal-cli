@@ -21,6 +21,7 @@ export interface AddOptions {
   free?: boolean;
   attendee?: string[];
   notify?: string;
+  meet?: boolean;
   dryRun?: boolean;
   quiet?: boolean;
   format: OutputFormat;
@@ -35,6 +36,7 @@ export interface AddHandlerDeps {
   ) => Promise<CalendarEvent>;
   loadConfig: () => AppConfig;
   write: (msg: string) => void;
+  writeErr?: (msg: string) => void;
 }
 
 interface CommandResult {
@@ -68,6 +70,11 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
   }
 
   const allDay = isDateOnly(options.start);
+
+  if (options.meet && allDay) {
+    deps.write(formatJsonError("INVALID_ARGS", "--meet cannot be used with an all-day event"));
+    return { exitCode: ExitCode.ARGUMENT };
+  }
 
   // Validate start/end type consistency
   if (options.end) {
@@ -176,6 +183,10 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     input.description = options.description;
   }
 
+  if (options.meet) {
+    input.meet = true;
+  }
+
   if (attendees.length > 0) {
     input.attendees = attendees;
     input.sendUpdates = sendUpdates;
@@ -195,6 +206,8 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     if (input.transparency !== "opaque") preview.transparency = input.transparency;
     if (attendees.length > 0) preview.attendees = attendees.map((a) => a.email);
     if (input.sendUpdates !== undefined) preview.notify = options.notify;
+    // The requestId is minted by the API layer, so a dry run never allocates one.
+    if (input.meet !== undefined) preview.meet = input.meet;
 
     if (options.format === "json") {
       deps.write(formatJsonSuccess({ dry_run: true, action: "add", event: preview }));
@@ -209,12 +222,21 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
         lines.push(`  attendees: ${(preview.attendees as string[]).join(", ")}`);
       }
       if (preview.notify !== undefined) lines.push(`  notify: ${String(preview.notify)}`);
+      if (preview.meet !== undefined) lines.push(`  meet: ${String(preview.meet)}`);
       deps.write(lines.join("\n"));
     }
     return { exitCode: ExitCode.SUCCESS };
   }
 
   const event = await deps.createEvent(calendarId, calendarName, input);
+
+  // Conference allocation is asynchronous, so the link can still be missing
+  // after the API layer has finished polling. The event itself exists either way.
+  if (options.meet && event.meet_link === null && !options.quiet) {
+    deps.writeErr?.(
+      `Note: Google Meet link is still being generated. Run \`gcal show ${event.id}\` in a few seconds to get it.`,
+    );
+  }
 
   if (options.format === "json") {
     deps.write(formatJsonSuccess({ event, message: "Event created" }));
@@ -258,6 +280,7 @@ export function createAddCommand(): Command {
     "--notify <scope>",
     `Send invitation emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
   );
+  cmd.option("--meet", "Create a Google Meet conference and attach it (timed events only)");
   cmd.option("--dry-run", "Preview without executing");
 
   const endOpt = cmd.options.find((o) => o.long === "--end")!;
@@ -283,6 +306,7 @@ Examples:
   gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, free
   gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite (no email sent)
   gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
+  gcal add -t "Design review" -s "2026-01-24T10:00" --meet                # With a Meet link
 `,
   );
 
