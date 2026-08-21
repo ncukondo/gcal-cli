@@ -662,3 +662,108 @@ describe("search command", () => {
     });
   });
 });
+
+describe("search partial calendar failures", () => {
+  const calendars = [
+    { id: "primary", name: "Main Calendar", enabled: true },
+    { id: "work@group.calendar.google.com", name: "Work", enabled: true },
+  ];
+
+  function makeRateLimitError(): Error {
+    const error = new Error("Rate Limit Exceeded") as Error & { code: number };
+    error.code = 429;
+    return error;
+  }
+
+  /** A mock API that rejects for the calendar ids listed in `failures`. */
+  function makeFailingApi(failures: Record<string, Error>): GoogleCalendarApi {
+    const api = makeMockApi([makeEvent({ id: "e1" })]);
+    const succeed = api.events.list;
+    api.events.list = vi.fn().mockImplementation(async (params: { calendarId: string }) => {
+      const error = failures[params.calendarId];
+      if (error) throw error;
+      return succeed(params);
+    });
+    return api;
+  }
+
+  it("returns the events it could fetch and lists the failed calendar", async () => {
+    const api = makeFailingApi({ "work@group.calendar.google.com": makeRateLimitError() });
+
+    const result = await runSearch(api, { query: "meeting", format: "json", calendars });
+
+    expect(result.exitCode).toBe(0);
+    const json = JSON.parse(result.output.join(""));
+    expect(json.data.count).toBe(1);
+    expect(json.data.failed_calendars).toEqual([
+      {
+        id: "work@group.calendar.google.com",
+        name: "Work",
+        error: { code: "RATE_LIMITED", message: expect.stringContaining("Rate Limit Exceeded") },
+      },
+    ]);
+  });
+
+  it("returns an empty failed_calendars array when every calendar succeeds", async () => {
+    const api = makeFailingApi({});
+
+    const result = await runSearch(api, { query: "meeting", format: "json", calendars });
+
+    const json = JSON.parse(result.output.join(""));
+    expect(json.data.failed_calendars).toEqual([]);
+  });
+
+  it("throws the first error when every calendar fails", async () => {
+    const api = makeFailingApi({
+      primary: makeRateLimitError(),
+      "work@group.calendar.google.com": makeRateLimitError(),
+    });
+
+    await expect(runSearch(api, { query: "meeting", format: "json", calendars })).rejects.toThrow(
+      "Rate Limit Exceeded",
+    );
+  });
+
+  // The most common setup: one enabled calendar, so "all failed" is "it failed".
+  it("throws when the only configured calendar fails", async () => {
+    const api = makeFailingApi({ primary: makeRateLimitError() });
+
+    await expect(
+      runSearch(api, {
+        query: "meeting",
+        format: "json",
+        calendars: [{ id: "primary", name: "Main Calendar", enabled: true }],
+      }),
+    ).rejects.toMatchObject({ code: "RATE_LIMITED" });
+  });
+
+  it("warns on stderr about the failed calendar", async () => {
+    const api = makeFailingApi({ "work@group.calendar.google.com": makeRateLimitError() });
+
+    const result = await runSearch(api, { query: "meeting", format: "json", calendars });
+
+    expect(result.errOutput.join("\n")).toContain('failed to fetch calendar "Work"');
+  });
+
+  // A failure notice is not data, so --quiet does not hide it (as in list).
+  it("keeps the stderr warning under --quiet", async () => {
+    const api = makeFailingApi({ "work@group.calendar.google.com": makeRateLimitError() });
+
+    const result = await runSearch(api, { query: "meeting", quiet: true, calendars });
+
+    expect(result.errOutput.join("\n")).toContain('failed to fetch calendar "Work"');
+    expect(result.errOutput.join("\n")).not.toContain("Searching:");
+  });
+
+  it("notes the failure at the end of the text output but not under --quiet", async () => {
+    const api = makeFailingApi({ "work@group.calendar.google.com": makeRateLimitError() });
+
+    const text = await runSearch(api, { query: "meeting", calendars });
+    expect(text.output.join("\n")).toContain(
+      "Note: 1 calendar could not be fetched (see warnings above).",
+    );
+
+    const quiet = await runSearch(api, { query: "meeting", quiet: true, calendars });
+    expect(quiet.output.join("\n")).not.toContain("could not be fetched");
+  });
+});

@@ -4,11 +4,13 @@ import { listEvents } from "../lib/api.ts";
 import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
 import type { FilterOptions, TransparencyOption } from "../lib/filter.ts";
 import {
+  formatFailedCalendarsNote,
   formatHiddenAllDayWarning,
   formatJsonSuccess,
   formatSearchResultText,
   formatQuietText,
 } from "../lib/output.ts";
+import { fetchFromCalendars } from "../lib/multi-calendar.ts";
 import { collect } from "./shared.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { addDays } from "date-fns";
@@ -42,6 +44,9 @@ interface CommandResult {
 export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandResult> {
   const { api, query, format, calendars, timezone, write, quiet } = opts;
   const writeErr = quiet ? () => {} : (opts.writeErr ?? (() => {}));
+  // A failed calendar is a failure notice rather than data, so it survives
+  // --quiet -- the same as in `list`.
+  const warn = opts.writeErr ?? (() => {});
 
   const now = new Date();
   const days = opts.days ?? DEFAULT_SEARCH_DAYS;
@@ -86,10 +91,11 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
     writeErr("Tip: Use --days <n> or --from/--to to change the search range.");
   }
 
-  const results = await Promise.all(
-    calendars.map((cal) => listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query })),
+  const { events: allEvents, failedCalendars } = await fetchFromCalendars(
+    calendars,
+    (cal) => listEvents(api, cal.id, cal.name, { timeMin, timeMax, q: query }),
+    warn,
   );
-  const allEvents = results.flat();
 
   const transparency: TransparencyOption = opts.busy ? "busy" : opts.free ? "free" : undefined;
   const filterOpts: FilterOptions = { transparency };
@@ -109,12 +115,15 @@ export async function handleSearch(opts: SearchHandlerOptions): Promise<CommandR
         query,
         events: filtered,
         count: filtered.length,
+        failed_calendars: failedCalendars,
       }),
     );
   } else if (quiet) {
     write(formatQuietText(filtered));
   } else {
-    write(formatSearchResultText(query, filtered));
+    const text = formatSearchResultText(query, filtered);
+    const note = formatFailedCalendarsNote(failedCalendars);
+    write(note ? `${text}\n\n${note}` : text);
   }
 
   return { exitCode: ExitCode.SUCCESS };
