@@ -311,6 +311,19 @@ describe("handleInit", () => {
     expect(listCalendars).toHaveBeenCalledTimes(1);
   });
 
+  // Re-authenticating under a rate limit spends another request on a problem it
+  // cannot fix, so the automatic flow must stay shut.
+  it("does not auto-authenticate when listCalendars throws RATE_LIMITED", async () => {
+    const rateLimited = new ApiError("RATE_LIMITED", "Rate Limit Exceeded");
+    const listCalendars = vi.fn().mockRejectedValue(rateLimited);
+    const requestAuth = vi.fn().mockResolvedValue(undefined);
+    const opts = makeOpts({ listCalendars, requestAuth });
+
+    await expect(handleInit(opts)).rejects.toThrow("Rate Limit Exceeded");
+    expect(requestAuth).not.toHaveBeenCalled();
+    expect(listCalendars).toHaveBeenCalledTimes(1);
+  });
+
   it("auto-authenticates when listCalendars throws AUTH_REQUIRED", async () => {
     const authError = new ApiError("AUTH_REQUIRED", "Not authenticated");
     let callCount = 0;

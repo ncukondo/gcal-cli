@@ -1871,6 +1871,13 @@ describe("isAuthRequiredError", () => {
     expect(isAuthRequiredError(new ApiError("FORBIDDEN", "You need writer access."))).toBe(false);
   });
 
+  // RATE_LIMITED must stay out: `gcal init` reads this to start its automatic
+  // re-auth flow, and re-authenticating while rate limited spends another
+  // request on a problem it cannot fix.
+  it("is false for RATE_LIMITED -- re-authenticating spends a request and cannot help", () => {
+    expect(isAuthRequiredError(new ApiError("RATE_LIMITED", "Rate Limit Exceeded"))).toBe(false);
+  });
+
   it("is false for other codes and for non-ApiError values", () => {
     expect(isAuthRequiredError(new ApiError("API_ERROR", "Backend Error"))).toBe(false);
     expect(isAuthRequiredError(new Error("boom"))).toBe(false);
