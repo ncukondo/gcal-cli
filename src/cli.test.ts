@@ -173,6 +173,19 @@ describe("handleError", () => {
     expect(parsed.error.code).toBe("FORBIDDEN");
   });
 
+  it("exits with code 1 and keeps the RATE_LIMITED code for rate-limit errors", () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const error = new Error("Rate Limit Exceeded");
+    (error as Error & { code: ErrorCode }).code = "RATE_LIMITED";
+    handleError(error, "json");
+
+    expect(exitSpy).toHaveBeenCalledWith(ExitCode.GENERAL);
+    const parsed = JSON.parse(stderrSpy.mock.calls.map((c) => c[0]).join(""));
+    expect(parsed.error.code).toBe("RATE_LIMITED");
+  });
+
   it("uses API_ERROR code in JSON output for general errors", () => {
     vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

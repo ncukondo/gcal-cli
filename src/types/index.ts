@@ -102,6 +102,7 @@ export type ErrorCode =
   | "INVALID_ARGS"
   | "API_ERROR"
   | "FORBIDDEN"
+  | "RATE_LIMITED"
   | "CONFIG_ERROR";
 
 export interface SuccessResponse<T> {

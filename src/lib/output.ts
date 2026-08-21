@@ -271,6 +271,7 @@ const ERROR_CODE_EXIT_MAP: Record<ErrorCode, number> = {
   INVALID_ARGS: ExitCode.ARGUMENT,
   API_ERROR: ExitCode.GENERAL,
   FORBIDDEN: ExitCode.GENERAL,
+  RATE_LIMITED: ExitCode.GENERAL,
   CONFIG_ERROR: ExitCode.GENERAL,
 };
 

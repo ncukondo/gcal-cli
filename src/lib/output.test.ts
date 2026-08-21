@@ -841,6 +841,12 @@ describe("errorCodeToExitCode", () => {
   it("maps FORBIDDEN to exit code 1", () => {
     expect(errorCodeToExitCode("FORBIDDEN")).toBe(1);
   });
+
+  // Exit 2 means "re-authenticate"; a rate-limited caller must not be sent there,
+  // because re-authenticating costs another API call and makes things worse.
+  it("maps RATE_LIMITED to exit code 1", () => {
+    expect(errorCodeToExitCode("RATE_LIMITED")).toBe(1);
+  });
 });
 
 describe("formatHiddenAllDayWarning", () => {
