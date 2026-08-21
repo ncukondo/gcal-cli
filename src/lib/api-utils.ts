@@ -54,15 +54,18 @@ const RATE_LIMIT_HINTS: Readonly<Record<string, string>> = {
   quotaExceeded: RATE_LIMIT_HINT,
 };
 
-/** The hint for the first detail naming a reason `hints` routes, or undefined. */
+/**
+ * The hint for the first detail naming a reason `hints` routes, or undefined.
+ * Own keys only: `reason` is attacker-adjacent free text, and a plain object
+ * would otherwise answer for inherited keys such as `toString`.
+ */
 function hintFor(
   details: GoogleApiErrorDetail[] | undefined,
   hints: Readonly<Record<string, string>>,
 ): string | undefined {
   for (const detail of details ?? []) {
-    const hint = detail.reason === undefined ? undefined : hints[detail.reason];
-    if (hint !== undefined) {
-      return hint;
+    if (detail.reason !== undefined && Object.hasOwn(hints, detail.reason)) {
+      return hints[detail.reason];
     }
   }
   return undefined;

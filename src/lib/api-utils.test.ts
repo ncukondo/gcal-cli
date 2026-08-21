@@ -54,6 +54,14 @@ describe("mapApiError", () => {
     expect(error.message).toBe("Invalid Credentials");
   });
 
+  // The same for a limit reason: 401 means the caller is unidentified, and
+  // re-authenticating is the fix regardless of what else the error mentions.
+  it("maps 401 to AUTH_REQUIRED even when it carries a rate-limit reason", () => {
+    const error = mapped(makeApiError(401, "Invalid Credentials", "rateLimitExceeded"));
+    expect(error.code).toBe("AUTH_REQUIRED");
+    expect(error.message).toBe("Invalid Credentials");
+  });
+
   it("maps 403 requiredAccessLevel to FORBIDDEN with an access-level hint", () => {
     const error = mapped(
       makeApiError(403, "You need to have writer access to this calendar.", "requiredAccessLevel"),
@@ -104,6 +112,18 @@ describe("mapApiError", () => {
     const error = mapped(makeApiError(403, "Forbidden", "someReasonWeHaveNeverSeen"));
     expect(error.code).toBe("AUTH_REQUIRED");
   });
+
+  // The hint maps are plain objects, so a reason colliding with an
+  // Object.prototype key must not resolve to the inherited value. Google will not
+  // send these, but the lookup is shared by both maps and should not be fooled.
+  it.each(["toString", "constructor", "hasOwnProperty"])(
+    "does not route a 403 whose reason is the inherited key %s",
+    (reason) => {
+      const error = mapped(makeApiError(403, "Forbidden", reason));
+      expect(error.code).toBe("AUTH_REQUIRED");
+      expect(error.message).toBe("Forbidden");
+    },
+  );
 
   it("falls back to AUTH_REQUIRED when the 403 carries no reason", () => {
     const error = mapped(makeApiError(403, "Forbidden"));
