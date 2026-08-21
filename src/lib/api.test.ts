@@ -1398,6 +1398,23 @@ describe("updateEvent attendee diff", () => {
     expect(patchedAttendees(api)).toEqual([{ email: "bob@example.com" }]);
   });
 
+  it("removes before it adds, so an address in both ends up present", async () => {
+    // The CLI rejects the same address on both options, but updateEvent is
+    // exported and the merge order is observable here: removing first leaves the
+    // freshly built attendee, adding first would leave nothing at all.
+    const api = createMockApi({ patched: patchedEvent });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: {
+        add: [{ email: "bob@example.com" }],
+        removeEmails: ["bob@example.com"],
+        base: [{ email: "bob@example.com", responseStatus: "accepted" }],
+      },
+    });
+
+    expect(patchedAttendees(api)).toEqual([{ email: "bob@example.com" }]);
+  });
+
   it("does not fetch the event when no attendee diff is given", async () => {
     const api = createMockApi({ patched: patchedEvent });
 

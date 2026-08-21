@@ -1143,6 +1143,55 @@ describe("update command", () => {
       expect(patchedEmails(api)).toEqual(["alice@example.com", "carol@example.com"]);
     });
 
+    it("reads once for an event whose response carries no attendees key", async () => {
+      // Google omits the field entirely for an event that never had guests. The
+      // handler still has to hand the API layer a base, or the merge falls back
+      // to reading the event a second time.
+      const api = makeMockApi();
+      const bare = toGoogleEvent(makeEvent());
+      delete bare["attendees"];
+      api.events.get = vi.fn().mockResolvedValue({ data: bare });
+
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["carol@example.com"],
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(api.events.get).toHaveBeenCalledTimes(1);
+      expect(patchedEmails(api)).toEqual(["carol@example.com"]);
+    });
+
+    it("rejects removing an organizer whose stored address is mixed case", async () => {
+      const api = makeMockApi({
+        getReturn: makeEvent({
+          attendees: [makeAttendee({ email: "Boss@Example.com", organizer: true }), alice],
+        }),
+      });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        removeAttendee: ["boss@example.com"],
+      }).catch((e: unknown) => e);
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain("organizer");
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("echoes an added address in a dry run exactly as it was typed", async () => {
+      const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        addAttendee: ["CAROL@Example.com"],
+        dryRun: true,
+        format: "json",
+      });
+
+      const json = JSON.parse(result.output.join(""));
+      expect(json.data.changes.attendees_added).toEqual(["CAROL@Example.com"]);
+      expect(json.data.changes.attendees).toEqual(["alice@example.com", "CAROL@Example.com"]);
+    });
+
     it("rejects --attendee combined with --add-attendee", async () => {
       const api = makeMockApi({ getReturn: makeEvent({ attendees: [alice] }) });
       const result = await runUpdate(api, {
