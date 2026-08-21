@@ -35,15 +35,19 @@ const FORBIDDEN_HINTS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Rate limits and quota exhaustion are a temporary state, not a permission or an
- * authentication problem: the only useful action is to wait and retry. Google's
- * error guide recommends exponential backoff and documents no Retry-After header,
- * so do not promise the caller one. Only reasons confirmed in that guide are
- * listed here; the routed reasons are derived from this map so the two cannot
- * drift apart.
+ * Google's error guide recommends exponential backoff and mentions no Retry-After
+ * header, so do not promise the caller one.
  */
 const RATE_LIMIT_HINT = "This is temporary; wait and retry with exponential backoff.";
 
+/**
+ * The 403 reasons Google's error guide documents as a limit being exhausted. This
+ * is a temporary state rather than a permission or an authentication problem, and
+ * the only useful action is to wait: re-authenticating spends another request
+ * without clearing it. Shaped like FORBIDDEN_HINTS so the routed reasons are
+ * derived from the same map that holds their wording, and so a reason can be
+ * given its own wording later. Only reasons confirmed in that guide belong here.
+ */
 const RATE_LIMIT_HINTS: Readonly<Record<string, string>> = {
   rateLimitExceeded: RATE_LIMIT_HINT,
   userRateLimitExceeded: RATE_LIMIT_HINT,

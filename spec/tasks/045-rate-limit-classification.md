@@ -110,19 +110,21 @@ RATE_LIMITED   Rate limit or quota exceeded; retry later
 
 ## Implementation Steps
 
-- [ ] `src/types/index.ts`: `ErrorCode` に `RATE_LIMITED` を追加
-- [ ] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `RATE_LIMITED: ExitCode.GENERAL` を追加
-- [ ] `src/cli.ts`: `getErrorCode()` の `validCodes` に `RATE_LIMITED` を追加
-- [ ] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の 3 つの `reason` を `RATE_LIMITED` に振り分ける
+- [x] `src/types/index.ts`: `ErrorCode` に `RATE_LIMITED` を追加
+- [x] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `RATE_LIMITED: ExitCode.GENERAL` を追加
+- [x] `src/cli.ts`: `getErrorCode()` の `validCodes` に `RATE_LIMITED` を追加
+- [x] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の 3 つの `reason` を `RATE_LIMITED` に振り分ける
       （044 の `FORBIDDEN_HINTS` と同じく、reason 一覧をヒントの写像から導出して乖離を防ぐ）
-- [ ] `src/lib/api-utils.test.ts` / `api-utils.ts`: **429 を `reason` に関係なく** `RATE_LIMITED` にする
-- [ ] `src/lib/api-utils.test.ts`: 403 の振り分け優先順位を固定する
+- [x] `src/lib/api-utils.test.ts` / `api-utils.ts`: **429 を `reason` に関係なく** `RATE_LIMITED` にする
+- [x] `src/lib/api-utils.test.ts`: 403 の振り分け優先順位を固定する
       （権限不足 → `FORBIDDEN` / レート制限 → `RATE_LIMITED` / 未知 → `AUTH_REQUIRED`）
-- [ ] `src/lib/api.test.ts`: `isAuthRequiredError()` が `RATE_LIMITED` を含まないこと
-- [ ] `src/commands/init.test.ts`: `RATE_LIMITED` で自動再認証が起動しないこと
-- [ ] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること
-- [ ] `spec/output.md`: Error Codes 表に `RATE_LIMITED` を追加
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `src/lib/api.test.ts`: `isAuthRequiredError()` が `RATE_LIMITED` を含まないこと
+- [x] `src/commands/init.test.ts`: `RATE_LIMITED` で自動再認証が起動しないこと
+- [x] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること
+- [x] `spec/output.md`: Error Codes 表に `RATE_LIMITED` を追加
+- [x] `spec/overview.md`: Exit Codes の説明に `RATE_LIMITED` が 1 である理由を補足
+- [x] `vitest run src tests/integration` / `lint` / `format:check` / `typecheck` pass
+      （E2E は実 API を叩くため本作業では未実行。本タスクは E2E を追加しない）
 
 ## E2E Test
 
@@ -134,14 +136,14 @@ RATE_LIMITED   Rate limit or quota exceeded; retry later
 
 ## Acceptance Criteria
 
-- [ ] 403 の `rateLimitExceeded` / `userRateLimitExceeded` / `quotaExceeded` が
+- [x] 403 の `rateLimitExceeded` / `userRateLimitExceeded` / `quotaExceeded` が
       `RATE_LIMITED` / 終了コード 1 になる
-- [ ] 429 が `reason` の有無に関わらず `RATE_LIMITED` になる
-- [ ] 権限不足の 403 は 044 どおり `FORBIDDEN` のまま
-- [ ] 認証由来の 403（`insufficientPermissions`）は `AUTH_REQUIRED` のまま
-- [ ] 未知の `reason` の 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
-- [ ] 401 の扱いは一切変わらない
-- [ ] `gcal init` が `RATE_LIMITED` で自動再認証を起動しない
-- [ ] Calendar 側と Tasks 側の両方で同じ振り分けになる
-- [ ] `spec/output.md` の Error Codes 表が実装と一致している
-- [ ] 既存テストが pass する
+- [x] 429 が `reason` の有無に関わらず `RATE_LIMITED` になる
+- [x] 権限不足の 403 は 044 どおり `FORBIDDEN` のまま
+- [x] 認証由来の 403（`insufficientPermissions`）は `AUTH_REQUIRED` のまま
+- [x] 未知の `reason` の 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
+- [x] 401 の扱いは一切変わらない
+- [x] `gcal init` が `RATE_LIMITED` で自動再認証を起動しない
+- [x] Calendar 側と Tasks 側の両方で同じ振り分けになる
+- [x] `spec/output.md` の Error Codes 表が実装と一致している
+- [x] 既存テストが pass する
