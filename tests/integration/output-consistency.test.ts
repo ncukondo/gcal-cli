@@ -117,8 +117,8 @@ describe("JSON output envelope consistency across all commands", () => {
       write: out.write,
       writeStderr: vi.fn(),
       getEvent: async (calId, calName, evtId, tz) => {
-        const { getEvent } = await import("../../src/lib/api.ts");
-        return getEvent(mockApi, calId, calName, evtId, tz);
+        const { getEventWithRaw } = await import("../../src/lib/api.ts");
+        return getEventWithRaw(mockApi, calId, calName, evtId, tz);
       },
       title: "Updated",
     });

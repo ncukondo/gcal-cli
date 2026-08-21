@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleUpdate } from "../../src/commands/update.ts";
-import { getEvent } from "../../src/lib/api.ts";
+import { getEventWithRaw } from "../../src/lib/api.ts";
 import { createMockApi, makeGoogleEvent, makeAllDayGoogleEvent, captureWrite } from "./helpers.ts";
 
 function makeGetEvent(mockApi: ReturnType<typeof createMockApi>) {
   return (calId: string, calName: string, evtId: string, tz?: string) =>
-    getEvent(mockApi, calId, calName, evtId, tz);
+    getEventWithRaw(mockApi, calId, calName, evtId, tz);
 }
 
 describe("update command pipeline: API → normalize → output", () => {
@@ -290,6 +290,8 @@ describe("update command pipeline: API → normalize → output", () => {
     });
 
     expect(result.exitCode).toBe(0);
+    // One read feeds the policy, the preview and the merge that gets written.
+    expect(mockApi.events.get).toHaveBeenCalledTimes(1);
     expect(stderr.join("\n")).toContain(
       "Note: dave@example.com is not an attendee of this event; nothing to remove.",
     );

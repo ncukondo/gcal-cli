@@ -37,6 +37,30 @@ function makeAttendee(overrides: Partial<EventAttendee> & { email: string }): Ev
   };
 }
 
+/** The raw shape the API returns for a normalized event, as the get mock serves it. */
+function toGoogleEvent(event: CalendarEvent): Record<string, unknown> {
+  return {
+    id: event.id,
+    summary: event.title,
+    description: event.description,
+    start: event.all_day ? { date: event.start } : { dateTime: event.start },
+    end: event.all_day ? { date: event.end } : { dateTime: event.end },
+    htmlLink: event.html_link,
+    status: event.status,
+    transparency: event.transparency,
+    attendees: event.attendees.map((a) => ({
+      email: a.email,
+      displayName: a.display_name,
+      responseStatus: a.response_status,
+      optional: a.optional,
+      organizer: a.organizer,
+      self: a.self,
+    })),
+    created: event.created,
+    updated: event.updated,
+  };
+}
+
 function makeMockApi(
   opts: {
     patchReturn?: CalendarEvent;
@@ -71,28 +95,7 @@ function makeMockApi(
       });
 
   const getReturn = opts.getReturn ?? makeEvent();
-  const getFn = vi.fn().mockResolvedValue({
-    data: {
-      id: getReturn.id,
-      summary: getReturn.title,
-      description: getReturn.description,
-      start: getReturn.all_day ? { date: getReturn.start } : { dateTime: getReturn.start },
-      end: getReturn.all_day ? { date: getReturn.end } : { dateTime: getReturn.end },
-      htmlLink: getReturn.html_link,
-      status: getReturn.status,
-      transparency: getReturn.transparency,
-      attendees: getReturn.attendees.map((a) => ({
-        email: a.email,
-        displayName: a.display_name,
-        responseStatus: a.response_status,
-        optional: a.optional,
-        organizer: a.organizer,
-        self: a.self,
-      })),
-      created: getReturn.created,
-      updated: getReturn.updated,
-    },
-  });
+  const getFn = vi.fn().mockResolvedValue({ data: toGoogleEvent(getReturn) });
 
   return {
     calendarList: {
@@ -151,8 +154,8 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
     },
     getEvent: async (calendarId, calendarName, eventId, timezone) => {
       getEventCalls += 1;
-      const { getEvent } = await import("../lib/api.ts");
-      return getEvent(api, calendarId, calendarName, eventId, timezone);
+      const { getEventWithRaw } = await import("../lib/api.ts");
+      return getEventWithRaw(api, calendarId, calendarName, eventId, timezone);
     },
   };
   if (opts.quiet !== undefined) handlerOpts.quiet = opts.quiet;
@@ -1106,25 +1109,38 @@ describe("update command", () => {
       expect(text).not.toContain("(+");
     });
 
-    it("reads the event once when a time change is combined with a diff", async () => {
-      const api = makeMockApi({
-        getReturn: makeEvent({
-          attendees: [alice],
-          start: "2026-02-01T10:00:00+09:00",
-          end: "2026-02-01T11:00:00+09:00",
-        }),
+    it("resolves the new time and the guest list from a single snapshot", async () => {
+      const snapshot = makeEvent({
+        attendees: [alice],
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T11:00:00+09:00",
       });
+      // A second read would see a different event entirely, so any patch that
+      // mixes the two is visible in the assertions below.
+      const stale = makeEvent({
+        attendees: [makeAttendee({ email: "zoe@example.com" })],
+        start: "2026-02-01T10:00:00+09:00",
+        end: "2026-02-01T13:00:00+09:00",
+      });
+      const api = makeMockApi({ getReturn: snapshot });
+      const responses = [toGoogleEvent(snapshot), toGoogleEvent(stale)];
+      api.events.get = vi
+        .fn()
+        .mockImplementation(async () => ({ data: responses.shift() ?? toGoogleEvent(stale) }));
+
       const result = await runUpdate(api, {
         eventId: "evt1",
         start: "2026-02-01T14:00",
         addAttendee: ["carol@example.com"],
       });
 
-      // The handler resolves the new end time and the attendee policy from one
-      // snapshot. The second read is the API layer merging the guest list on raw
-      // data immediately before the patch.
       expect(result.getEventCalls).toBe(1);
-      expect(api.events.get).toHaveBeenCalledTimes(2);
+      expect(api.events.get).toHaveBeenCalledTimes(1);
+
+      const body = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0].requestBody;
+      // The 1h duration and the guest list both come from the first snapshot.
+      expect(body.end.dateTime).toContain("15:00:00");
+      expect(patchedEmails(api)).toEqual(["alice@example.com", "carol@example.com"]);
     });
 
     it("rejects --attendee combined with --add-attendee", async () => {

@@ -1356,6 +1356,48 @@ describe("updateEvent attendee diff", () => {
     expect(patchedAttendees(api)).toEqual([{ email: "bob@example.com" }]);
   });
 
+  it("merges the caller's snapshot without reading the event again", async () => {
+    const api = createMockApi({
+      // A second read would see this, so a fetch here is visible in the result.
+      evt1: withAttendees([{ email: "zoe@example.com", responseStatus: "accepted" }]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: {
+        add: [{ email: "bob@example.com" }],
+        removeEmails: [],
+        base: [
+          {
+            email: "alice@example.com",
+            responseStatus: "tentative",
+            comment: "joining 10 min late",
+          },
+        ],
+      },
+    });
+
+    expect(api.events.get).not.toHaveBeenCalled();
+    expect(patchedAttendees(api)).toEqual([
+      { email: "alice@example.com", responseStatus: "tentative", comment: "joining 10 min late" },
+      { email: "bob@example.com" },
+    ]);
+  });
+
+  it("takes an empty caller snapshot at face value instead of reading", async () => {
+    const api = createMockApi({
+      evt1: withAttendees([{ email: "zoe@example.com" }]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: { add: [{ email: "bob@example.com" }], removeEmails: [], base: [] },
+    });
+
+    expect(api.events.get).not.toHaveBeenCalled();
+    expect(patchedAttendees(api)).toEqual([{ email: "bob@example.com" }]);
+  });
+
   it("does not fetch the event when no attendee diff is given", async () => {
     const api = createMockApi({ patched: patchedEvent });
 

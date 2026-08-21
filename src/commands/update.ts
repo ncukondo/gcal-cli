@@ -1,6 +1,11 @@
 import { Command } from "commander";
 import { collect, meetFollowUpNote } from "./shared.ts";
-import type { AttendeeInput, GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
+import type {
+  AttendeeInput,
+  FetchedEvent,
+  GoogleCalendarApi,
+  UpdateEventInput,
+} from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
@@ -22,12 +27,17 @@ export interface UpdateHandlerOptions {
   timezone: string;
   write: (msg: string) => void;
   writeStderr: (msg: string) => void;
+  /**
+   * Returns the raw response alongside the normalized event: the guest list
+   * diff merges the raw attendees, and it has to be the same snapshot the new
+   * times are derived from.
+   */
   getEvent: (
     calendarId: string,
     calendarName: string,
     eventId: string,
     timezone?: string,
-  ) => Promise<CalendarEvent>;
+  ) => Promise<FetchedEvent>;
   title?: string;
   start?: string;
   end?: string;
@@ -390,10 +400,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     );
   }
 
-  // One read here, shared by the time resolution and the attendee policy, so a
-  // plain update still makes no extra call and the two agree on what the event
-  // looks like. The API layer takes its own read for the merge it writes.
-  let existing: CalendarEvent | undefined;
+  // The one read. The new times, the attendee policy, the dry-run preview and
+  // the guest list that gets written all come from this single snapshot, and a
+  // plain update never makes the call at all.
+  let existing: FetchedEvent | undefined;
   if (editsAttendees || needsExistingForTime(opts)) {
     existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
   }
@@ -401,7 +411,7 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   let attendeeDiff: AttendeeDiffPreview | undefined;
   if (editsAttendees) {
     attendeeDiff = previewAttendeeDiff(
-      existing!.attendees,
+      existing!.event.attendees,
       addAttendees,
       removeAttendees,
       opts.writeStderr,
@@ -418,6 +428,7 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     input.attendeeDiff = {
       add: addAttendees,
       removeEmails: removeAttendees.map((a) => a.email),
+      base: existing!.raw.attendees ?? [],
     };
   }
   if (opts.meet) {
@@ -441,7 +452,7 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     input.transparency = "transparent";
   }
 
-  const timeResult = resolveTimeUpdate(opts, existing);
+  const timeResult = resolveTimeUpdate(opts, existing?.event);
   if (timeResult) {
     const withTime = input as UpdateEventInput & { start: string; end: string; allDay: boolean };
     withTime.start = timeResult.start;

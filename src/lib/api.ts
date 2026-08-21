@@ -130,10 +130,16 @@ export interface CreateEventInput {
   meet?: boolean;
 }
 
-/** An in-place edit of the guest list, resolved here against the current attendees. */
+/** An in-place edit of the guest list, resolved against the current attendees. */
 export interface AttendeeDiffInput {
   add: AttendeeInput[];
   removeEmails: string[];
+  /**
+   * The attendees to merge against, taken from a read the caller has already
+   * made, so a diff-mode update reads the event exactly once. When omitted the
+   * event is read here instead.
+   */
+  base?: GoogleEventAttendee[];
 }
 
 interface UpdateEventBase {
@@ -392,13 +398,23 @@ export async function listEvents(
   }
 }
 
-export async function getEvent(
+/**
+ * An event in both the shape the CLI works with and the shape it arrived in.
+ * A guest list diff has to merge the raw attendees, so a caller that needs both
+ * keeps the response instead of reading the event a second time.
+ */
+export interface FetchedEvent {
+  event: CalendarEvent;
+  raw: GoogleEvent;
+}
+
+export async function getEventWithRaw(
   api: GoogleCalendarApi,
   calendarId: string,
   calendarName: string,
   eventId: string,
   timeZone?: string,
-): Promise<CalendarEvent> {
+): Promise<FetchedEvent> {
   try {
     const params: { calendarId: string; eventId: string; timeZone?: string } = {
       calendarId,
@@ -408,10 +424,24 @@ export async function getEvent(
       params.timeZone = timeZone;
     }
     const response = await api.events.get(params);
-    return normalizeEvent(response.data, calendarId, calendarName);
+    return {
+      event: normalizeEvent(response.data, calendarId, calendarName),
+      raw: response.data,
+    };
   } catch (error: unknown) {
     mapApiError(error);
   }
+}
+
+export async function getEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  calendarName: string,
+  eventId: string,
+  timeZone?: string,
+): Promise<CalendarEvent> {
+  const fetched = await getEventWithRaw(api, calendarId, calendarName, eventId, timeZone);
+  return fetched.event;
 }
 
 function buildTimeFields(
@@ -637,9 +667,14 @@ export async function updateEvent(
     if (input.attendees !== undefined) {
       requestBody.attendees = buildAttendees(input.attendees);
     } else if (input.attendeeDiff !== undefined) {
-      // Read immediately before the write so the merge sees the freshest guest list.
-      const current = await api.events.get({ calendarId, eventId });
-      const merged = mergeRawAttendees(current.data.attendees ?? [], input.attendeeDiff);
+      // The caller normally passes the attendees it already read, so a diff-mode
+      // update costs one read. Reading here is the fallback for callers that
+      // have no snapshot of their own.
+      const base =
+        input.attendeeDiff.base ??
+        (await api.events.get({ calendarId, eventId })).data.attendees ??
+        [];
+      const merged = mergeRawAttendees(base, input.attendeeDiff);
       // A no-op diff must not touch the guest list at all: rewriting an identical
       // array still counts as a change to Google, which mails every guest when
       // sendUpdates is not "none".
