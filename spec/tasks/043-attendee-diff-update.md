@@ -104,39 +104,43 @@ gcal update abc123 --add-attendee bob@example.com --remove-attendee carol@exampl
 
 ## Implementation Steps
 
-- [ ] `src/commands/update.test.ts`: マージ規則の失敗テストを書く
+- [x] `src/commands/update.test.ts`: マージ規則の失敗テストを書く
       （追加 / 削除 / 追加+削除の同時指定 / 大文字小文字違い / 既に居るアドレスの追加が no-op / 未参加アドレスの削除で stderr 注記）
-- [ ] `src/commands/update.ts`: `UpdateHandlerDeps` に `getEvent` を追加
-- [ ] `src/commands/update.ts`: `--add-attendee` / `--remove-attendee` 指定時のみ `getEvent` を呼ぶマージ処理
-- [ ] `src/commands/update.ts`: `--attendee` / `--clear-attendees` との conflict 設定
-- [ ] `src/commands/update.ts`: 同一アドレスの add/remove 同時指定を `INVALID_ARGS`
-- [ ] `src/commands/update.ts`: `organizer: true` の削除を `INVALID_ARGS`
-- [ ] `src/commands/update.ts`: dry-run のマージ結果表示
-- [ ] `src/commands/index.ts`: `update` サブコマンドに `getEvent` を注入
-- [ ] `spec/commands.md`: オプション追加、全置換モードとの使い分け、後勝ちの注記
-- [ ] `tests/integration/update-pipeline.test.ts`: get → merge → patch の一連が繋がること
-- [ ] `bun run test` pass
-- [ ] `bun run lint` / `format:check` / `typecheck` pass
+- [x] `src/commands/update.ts`: `UpdateHandlerDeps` に `getEvent` を追加
+- [x] `src/commands/update.ts`: `--add-attendee` / `--remove-attendee` 指定時のみ `getEvent` を呼ぶマージ処理
+- [x] `src/commands/update.ts`: `--attendee` / `--clear-attendees` との conflict 設定
+- [x] `src/commands/update.ts`: 同一アドレスの add/remove 同時指定を `INVALID_ARGS`
+- [x] `src/commands/update.ts`: `organizer: true` の削除を `INVALID_ARGS`
+- [x] `src/commands/update.ts`: dry-run のマージ結果表示
+- [x] `src/commands/index.ts`: `update` サブコマンドに `getEvent` を注入
+- [x] `spec/commands.md`: オプション追加、全置換モードとの使い分け、後勝ちの注記
+- [x] `tests/integration/update-pipeline.test.ts`: get → merge → patch の一連が繋がること
+- [x] `bun run test` pass
+- [x] `bun run lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
 `tests/e2e/attendees.test.ts`（041 で作成）に追記する。`--notify` は指定しない。
 
-- [ ] 出席者 2 名のイベントを作り、`--add-attendee` で 3 名になること（既存 2 名が保持されること）
-- [ ] `--remove-attendee` で 1 名減り、他が保持されること
-- [ ] 未参加アドレスの `--remove-attendee` が exit code 0 で stderr に注記を出すこと
-- [ ] `--attendee` と `--add-attendee` の同時指定が exit code 3 であること
-- [ ] 作成したイベントを cleanup で削除する
+> 追記済み。実 API を叩くため本ブランチでは**未実行**（他エージェントと並行作業中のため）。
+
+- [x] 出席者 2 名のイベントを作り、`--add-attendee` で 3 名になること（既存 2 名が保持されること）
+- [x] `--remove-attendee` で 1 名減り、他が保持されること
+- [x] 未参加アドレスの `--remove-attendee` が exit code 0 で stderr に注記を出すこと
+- [x] `--attendee` と `--add-attendee` の同時指定が拒否されること
+      （commander の conflict エラーは exit code **1**。既存の `--meet` / `--remove-meet` の
+      E2E と同じく `exitCode !== 0` と stderr の `cannot be used with` で検証する）
+- [x] 作成したイベントを cleanup で削除する
 
 ## Acceptance Criteria
 
-- [ ] `--add-attendee` が既存の出席者を保持したまま追加する
-- [ ] `--remove-attendee` が既存の出席者を保持したまま削除する
-- [ ] メールアドレスの比較が大文字小文字を区別しない
-- [ ] 既に居るアドレスの追加が no-op（`responseStatus` が保持される）
-- [ ] 未参加アドレスの削除がエラーにならず stderr に注記が出る
-- [ ] 主催者の削除が `INVALID_ARGS` で弾かれる
-- [ ] `--attendee` / `--clear-attendees` との併用が弾かれる
-- [ ] `--add-attendee` / `--remove-attendee` 未指定のとき `getEvent` が呼ばれない
-- [ ] dry-run でマージ結果が表示され、更新は実行されない
-- [ ] 既存テストが pass する
+- [x] `--add-attendee` が既存の出席者を保持したまま追加する
+- [x] `--remove-attendee` が既存の出席者を保持したまま削除する
+- [x] メールアドレスの比較が大文字小文字を区別しない
+- [x] 既に居るアドレスの追加が no-op（`responseStatus` が保持される）
+- [x] 未参加アドレスの削除がエラーにならず stderr に注記が出る
+- [x] 主催者の削除が `INVALID_ARGS` で弾かれる
+- [x] `--attendee` / `--clear-attendees` との併用が弾かれる
+- [x] `--add-attendee` / `--remove-attendee` 未指定のとき `getEvent` が呼ばれない
+- [x] dry-run でマージ結果が表示され、更新は実行されない
+- [x] 既存テストが pass する
