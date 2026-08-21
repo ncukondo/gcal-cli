@@ -426,10 +426,7 @@ describe("add command pipeline: config → timezone → API → output", () => {
       write: out.write,
     };
 
-    await handleAdd(
-      { title: "Solo focus", start: "2026-03-01T10:00", format: "json" },
-      deps,
-    );
+    await handleAdd({ title: "Solo focus", start: "2026-03-01T10:00", format: "json" }, deps);
 
     const insertFn = mockApi.events.insert as ReturnType<typeof vi.fn>;
     expect(insertFn.mock.calls[0]![0].sendUpdates).toBe("none");
