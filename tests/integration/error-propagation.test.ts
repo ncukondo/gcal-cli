@@ -23,7 +23,9 @@ describe("error propagation: API errors → command handler → output", () => {
     vi.unstubAllEnvs();
   });
 
-  describe("401/403 errors map to AUTH_REQUIRED", () => {
+  // 401 only. Since 044 and 045 a 403 is routed by its reason -- to FORBIDDEN,
+  // RATE_LIMITED, or AUTH_REQUIRED -- and every case below builds a 401.
+  describe("401 errors map to AUTH_REQUIRED", () => {
     function makeAuthError(): Error & { code: number } {
       const err = new Error("Request had invalid authentication credentials") as Error & {
         code: number;
