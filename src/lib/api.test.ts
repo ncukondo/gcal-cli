@@ -366,9 +366,10 @@ describe("normalizeEvent", () => {
     expect(result.meet_link).toBeNull();
   });
 
-  it("keeps treating a conference of unknown solution as Meet when hangoutLink is set", () => {
-    // hangoutLink is documented as populated only for Meet, so it settles the
-    // question even when conferenceSolution is missing from the response.
+  it("treats a conference of unknown solution as Meet", () => {
+    // With no conferenceSolution to go on there is nothing to veto the link,
+    // so hangoutLink is the best answer available -- note this is a fallback,
+    // not evidence: hangoutLink alone never establishes that a conference is Meet.
     const googleEvent = {
       id: "evt17",
       start: { dateTime: "2024-03-15T09:00:00+09:00" },

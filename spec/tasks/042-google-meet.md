@@ -87,11 +87,20 @@ Note: Google Meet link is still being generated. Run `gcal show <id>` in a few s
 
 ### `meet_link` の抽出
 
-`event.hangoutLink` を第一候補とし、無ければ
-`conferenceData.entryPoints[]` から `entryPointType === "video"` の `uri` を拾う。
-どちらも無ければ `null`。
+**当初は「`event.hangoutLink` を第一候補とし、無ければ `entryPoints[]` の `video` の `uri`」
+という方針だったが、レビューで撤回した。** `hangoutLink` が Meet のときだけ設定されるという
+前提が誤りで、実際には Meet より前からあるフィールドでクラシック Hangouts
+（`eventHangout` / `eventNamedHangout`）でも設定される。この前提のままだと、Meet 以外の会議が
+付いたイベントで `meet_link` に非 Meet の URL が入り、stderr の「Meet ではない」という
+通知と矛盾していた。
 
-`src/types/index.ts` の `CalendarEvent` に `meet_link: string | null` を追加する（フィールド追加のみで後方互換）。
+判定は `conferenceData.conferenceSolution.key.type` だけで行う:
+
+1. Meet 以外と分かっているなら `meet_link` は `null`
+2. それ以外なら `hangoutLink`、無ければ `entryPoints[]` の `video` の `uri`
+
+`src/types/index.ts` の `CalendarEvent` に `meet_link: string | null` と
+`conference: EventConference | null` を追加する（フィールド追加のみで後方互換）。
 
 ### Meet の削除
 
@@ -178,11 +187,14 @@ gcal update abc123 --remove-meet   # Meet を削除
 
 ```json
 {
-  "meet_link": "https://meet.google.com/abc-defg-hij"
+  "meet_link": "https://meet.google.com/abc-defg-hij",
+  "conference": { "type": "hangoutsMeet", "uri": "https://meet.google.com/abc-defg-hij" }
 }
 ```
 
-会議が無いイベントでは `null`。
+会議が無いイベントではどちらも `null`。Meet 以外の会議が付いたイベントでは
+`meet_link` は `null` のまま、`conference` に実際の方式と URL が入る。
+詳細は `spec/output.md` を参照。
 
 ### Dry-run
 

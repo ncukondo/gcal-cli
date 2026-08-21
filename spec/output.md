@@ -98,8 +98,9 @@ Found 2 events matching "A":
 ### `gcal show` Text Output
 
 出席者がいるときだけ Attendees ブロックを表示する。`Link:` の直前に置く。
-会議が紐付いているときだけ `Link:` の直前に1行足す。Meet なら `Meet:`、Meet 以外なら
+会議の URL が分かっているときだけ `Link:` の直前に1行足す。Meet なら `Meet:`、Meet 以外なら
 `Conference: <URL> (<type>)`。Meet 以外でも URL は落とさない（参加するのに必要なため）。
+URL がまだ無い会議（生成中など）では行を出さない。
 
 ```
 Team Meeting
@@ -292,8 +293,8 @@ All datetime fields include timezone offset (ISO 8601).
 
 `type` は Google が実際に割り当てた会議方式（`hangoutsMeet` / `eventHangout` /
 `eventNamedHangout` / サードパーティ会議アドオンは `addOn`）。レスポンスに
-`conferenceSolution` が無い場合は `null`。`uri` は `entryPoints` の `video` の URI で、
-電話などの video 以外の entry point は対象外。
+`conferenceSolution` が無い場合は `null`。`uri` は `entryPoints` の `video` の URI、
+無ければ `hangoutLink`。電話などの video 以外の entry point は対象外。
 
 `meet_link` は **Google Meet のときだけ**非 null になる。判定は次の順:
 
