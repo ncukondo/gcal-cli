@@ -41,14 +41,18 @@ CLI 側で read-modify-write を吸収し、`--add-attendee` / `--remove-attende
 commands 層は**ポリシー**だけを持つ: アドレスの検証、主催者の保護、add/remove 同時指定の
 検出、未参加アドレスの注記、dry-run の表示。解決した差分を `attendeeDiff` として渡す。
 
-`--add-attendee` / `--remove-attendee` が**指定されたときだけ** `getEvent` /
-`events.get` を呼ぶ（指定なしのときに余計な API 呼び出しを増やさない）という当初の
-条件はそのまま維持する。`api` オブジェクトは注入されたままなので、マージも
-ユニットテストでモックできる。
+取得は 1 回に統一する。`getEventWithRaw()` が正規化済みの `CalendarEvent` と生のレスポンスの
+両方を返し、`handleUpdate()` の `getEvent` 依存もこの形にする。生の `attendees` は
+`attendeeDiff.base` として `updateEvent()` に渡すので、API 層は取得し直さない
+（`base` を渡さない呼び出し元のために、API 層側の取得はフォールバックとして残す）。
+
+`--add-attendee` / `--remove-attendee` が**指定されたときだけ**イベントを取得する
+（指定なしのときに余計な API 呼び出しを増やさない）という当初の条件はそのまま維持する。
+`api` オブジェクトは注入されたままなので、マージもユニットテストでモックできる。
 
 ### マージ規則
 
-1. `updateEvent()` が patch の直前に生イベントを取得する
+1. `handleUpdate()` が生イベントを 1 回だけ取得し、その `attendees` を `attendeeDiff.base` として渡す
 2. `--remove-attendee` のアドレスを除去（**大文字小文字を区別しない**比較。
    アドレスを持たない出席者は対象外なので必ず残る）
 3. `--add-attendee` のアドレスを追加（既に居れば no-op）
@@ -91,10 +95,8 @@ read-modify-write は atomic ではない。取得と更新の間に他クライ
 `spec/commands.md` に「短時間に並行更新した場合は後勝ちになる」旨を注記するに留める。
 （必要になれば `If-Match` ヘッダ対応を別タスクに切る。）
 
-マージ用の取得は patch の直前に行うため、窓は最小になっている。ただし時刻の部分更新
-（`--start` 単独など）と差分を併用した場合、時刻は handler 側の取得、出席者は API 層の
-取得と**別のスナップショット**を見る。フィールドが独立しているので実害は想定しにくいが、
-完全に 1 回の取得にはなっていない。
+取得は 1 回なので、送信する内容はすべて同じスナップショットから決まる。時刻の部分更新
+（`--start` 単独など）と差分を併用しても、時刻と出席者が別のスナップショットを見ることはない。
 
 ### Dry-run
 
@@ -134,7 +136,10 @@ gcal update abc123 --add-attendee bob@example.com --remove-attendee carol@exampl
 - [x] `src/lib/api.ts`: `attendees` と `attendeeDiff` の同時指定を `INVALID_ARGS`
 - [x] `src/commands/update.ts`: `--add-attendee` / `--remove-attendee` 指定時のみ
       イベントを取得し、ポリシー適用と dry-run 表示を行って `attendeeDiff` を渡す
-- [x] `src/commands/update.ts`: 時刻解決と出席者ポリシーで取得を 1 回に共有する
+- [x] `src/lib/api.ts`: `getEventWithRaw()` で正規化済みイベントと生レスポンスの両方を返す
+- [x] `src/lib/api.ts`: `attendeeDiff.base` を受け取り、渡されたら取得し直さない
+- [x] `src/commands/update.ts`: 取得を 1 回にし、時刻解決・出席者ポリシー・dry-run・
+      書き込むマージのすべてを同じスナップショットから決める
 - [x] `src/commands/update.ts`: `--attendee` / `--clear-attendees` との conflict 設定
       （commander の `conflicts()` と `handleUpdate()` のガードの両方）
 - [x] `src/commands/update.ts`: 同一アドレスの add/remove 同時指定を `INVALID_ARGS`
@@ -175,5 +180,6 @@ gcal update abc123 --add-attendee bob@example.com --remove-attendee carol@exampl
 - [x] 主催者の削除が `INVALID_ARGS` で弾かれる
 - [x] `--attendee` / `--clear-attendees` との併用が弾かれる
 - [x] `--add-attendee` / `--remove-attendee` 未指定のとき `getEvent` が呼ばれない
+- [x] 差分指定時のイベント取得が 1 回だけであり、時刻と出席者が同じスナップショットから決まる
 - [x] dry-run でマージ結果が表示され、更新は実行されない
 - [x] 既存テストが pass する
