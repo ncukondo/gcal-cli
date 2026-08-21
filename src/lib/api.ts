@@ -7,6 +7,7 @@ import type {
   EventAttendee,
   Transparency,
 } from "../types/index.ts";
+import { randomUUID } from "node:crypto";
 import { AuthError } from "./auth.ts";
 import { MAX_PAGES, isGoogleApiError, mapApiError } from "./api-utils.ts";
 
@@ -447,8 +448,14 @@ async function resolveConference(
       return current;
     }
     await sleep(delay);
-    const response = await api.events.get({ calendarId, eventId: current.id });
-    current = response.data;
+    try {
+      const response = await api.events.get({ calendarId, eventId: current.id });
+      current = response.data;
+    } catch {
+      // The event is already written; a failed poll must not fail the command.
+      // Report what we last knew, which surfaces as a null meet_link.
+      return current;
+    }
   }
 
   assertConferenceNotFailed(current);
@@ -458,7 +465,7 @@ async function resolveConference(
 function buildConferenceRequest(deps: ConferenceDeps): { createRequest: { requestId: string } } {
   // A reused requestId makes Google hand back the *same* conference, which would
   // leak one meeting URL across unrelated events. Always mint a new one.
-  const generate = deps.generateRequestId ?? (() => crypto.randomUUID());
+  const generate = deps.generateRequestId ?? randomUUID;
   return { createRequest: { requestId: generate() } };
 }
 

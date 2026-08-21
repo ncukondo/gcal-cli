@@ -1296,6 +1296,26 @@ describe("Google Meet conferencing", () => {
     );
   });
 
+  it("keeps the created event when polling for the conference fails", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"));
+    const boom = new Error("Backend Error") as Error & { code: number };
+    boom.code = 500;
+    api.events.get = vi.fn().mockRejectedValue(boom);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    // The event was already written, so a failed poll must not fail the command.
+    expect(result.id).toBe("evt-meet");
+    expect(result.meet_link).toBeNull();
+  });
+
   it("attaches a conference on update with conferenceDataVersion: 1", async () => {
     const api = createConferenceApi(successEvent("evt-meet"));
 
