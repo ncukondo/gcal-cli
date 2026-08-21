@@ -1,5 +1,6 @@
 import * as nodeFs from "node:fs";
 import { google } from "googleapis";
+import type { calendar_v3 } from "googleapis";
 import type { AuthFsAdapter } from "../lib/auth.ts";
 import type { GoogleCalendarApi, GoogleCalendar, GoogleEvent } from "../lib/api.ts";
 import type { GoogleTasksClient, GoogleRawTaskList, GoogleRawTask } from "../lib/tasks-api.ts";
@@ -69,6 +70,24 @@ export function createGoogleTasksClient(tasks: TasksClient): GoogleTasksClient {
   };
 }
 
+/**
+ * googleapis types `Schema$Event.conferenceData` as non-nullable, but the REST
+ * API takes `conferenceData: null` to detach a conference from an event. The
+ * casts are confined to this boundary so the rest of the codebase keeps a type
+ * that says what the CLI actually sends.
+ */
+function toEventInsertParams(
+  params: Parameters<GoogleCalendarApi["events"]["insert"]>[0],
+): calendar_v3.Params$Resource$Events$Insert {
+  return params as calendar_v3.Params$Resource$Events$Insert;
+}
+
+function toEventPatchParams(
+  params: Parameters<GoogleCalendarApi["events"]["patch"]>[0],
+): calendar_v3.Params$Resource$Events$Patch {
+  return params as calendar_v3.Params$Resource$Events$Patch;
+}
+
 export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalendarApi {
   return {
     calendarList: {
@@ -93,11 +112,11 @@ export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalenda
         return { data: res.data };
       },
       insert: async (p) => {
-        const res = await calendar.events.insert(p);
+        const res = await calendar.events.insert(toEventInsertParams(p));
         return { data: res.data };
       },
       patch: async (p) => {
-        const res = await calendar.events.patch(p);
+        const res = await calendar.events.patch(toEventPatchParams(p));
         return { data: res.data };
       },
       delete: async (p) => {

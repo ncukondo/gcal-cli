@@ -1113,6 +1113,243 @@ describe("attendees and notifications", () => {
   });
 });
 
+describe("Google Meet conferencing", () => {
+  const timedInput: CreateEventInput = {
+    title: "Design review",
+    start: "2026-09-01T10:00:00+09:00",
+    end: "2026-09-01T11:00:00+09:00",
+    allDay: false,
+  };
+
+  /**
+   * events.get is scripted as a queue so a test can walk the pending -> success
+   * transition one poll at a time.
+   */
+  function createConferenceApi(inserted: unknown, gets: unknown[] = []): GoogleCalendarApi {
+    const queue = [...gets];
+    const api = createMockApi({ inserted, patched: inserted });
+    api.events.get = vi.fn().mockImplementation(async () => {
+      const next = queue.shift();
+      if (next === undefined) {
+        throw new Error("events.get called more times than the test scripted");
+      }
+      return { data: next };
+    });
+    return api;
+  }
+
+  function pendingEvent(id: string) {
+    return {
+      id,
+      summary: "Design review",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+      },
+    };
+  }
+
+  function successEvent(id: string, link = "https://meet.google.com/abc-defg-hij") {
+    return {
+      id,
+      summary: "Design review",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      hangoutLink: link,
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "success" } },
+        entryPoints: [{ entryPointType: "video", uri: link }],
+      },
+    };
+  }
+
+  it("requests a conference with conferenceDataVersion: 1 when meet is set", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { generateRequestId: () => "fixed-request-id" },
+    );
+
+    expect(api.events.insert).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: {
+        summary: "Design review",
+        start: { dateTime: "2026-09-01T10:00:00+09:00" },
+        end: { dateTime: "2026-09-01T11:00:00+09:00" },
+        transparency: "opaque",
+        conferenceData: { createRequest: { requestId: "fixed-request-id" } },
+      },
+    });
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("generates a fresh requestId for every call", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    await createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true });
+    await createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true });
+
+    const insert = api.events.insert as ReturnType<typeof vi.fn>;
+    const first = insert.mock.calls[0]![0].requestBody.conferenceData.createRequest.requestId;
+    const second = insert.mock.calls[1]![0].requestBody.conferenceData.createRequest.requestId;
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first).not.toBe(second);
+  });
+
+  it("omits conferenceData and conferenceDataVersion when meet is not requested", async () => {
+    const api = createConferenceApi(successEvent("evt-plain"));
+
+    await createEvent(api, "cal1", "My Cal", timedInput);
+
+    const insert = api.events.insert as ReturnType<typeof vi.fn>;
+    const params = insert.mock.calls[0]![0];
+    expect(params.requestBody).not.toHaveProperty("conferenceData");
+    expect(params).not.toHaveProperty("conferenceDataVersion");
+  });
+
+  it("polls until the pending conference resolves", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [successEvent("evt-meet")]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    expect(api.events.get).toHaveBeenCalledTimes(1);
+    expect(api.events.get).toHaveBeenCalledWith({ calendarId: "cal1", eventId: "evt-meet" });
+    expect(sleep).toHaveBeenCalledWith(500);
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("gives up after three polls and returns the event with a null meet_link", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    expect(api.events.get).toHaveBeenCalledTimes(3);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([500, 1000, 2000]);
+    expect(result.id).toBe("evt-meet");
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("throws API_ERROR when the conference request fails", async () => {
+    const failed = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(failed);
+
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      ApiError,
+    );
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /failure/,
+    );
+  });
+
+  it("hints at calendar support when the API rejects a conference request with 400", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+    const error = new Error("Invalid conference type value.") as Error & { code: number };
+    error.code = 400;
+    api.events.insert = vi.fn().mockRejectedValue(error);
+
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /may not support creating conferences/,
+    );
+  });
+
+  it("does not add the conference hint to 400s on plain events", async () => {
+    const api = createConferenceApi(successEvent("evt-plain"));
+    const error = new Error("Invalid start time.") as Error & { code: number };
+    error.code = 400;
+    api.events.insert = vi.fn().mockRejectedValue(error);
+
+    await expect(createEvent(api, "cal1", "My Cal", timedInput)).rejects.toThrow(
+      /^Invalid start time\.$/,
+    );
+  });
+
+  it("attaches a conference on update with conferenceDataVersion: 1", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    const result = await updateEvent(
+      api,
+      "cal1",
+      "My Cal",
+      "evt-meet",
+      { meet: true },
+      { generateRequestId: () => "fixed-request-id" },
+    );
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt-meet",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: { conferenceData: { createRequest: { requestId: "fixed-request-id" } } },
+    });
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("removes a conference by patching conferenceData: null", async () => {
+    const plain = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+    };
+    const api = createConferenceApi(plain);
+
+    const result = await updateEvent(api, "cal1", "My Cal", "evt-meet", { removeMeet: true });
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt-meet",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: { conferenceData: null },
+    });
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("leaves conferenceData untouched when neither meet nor removeMeet is given", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    await updateEvent(api, "cal1", "My Cal", "evt-meet", { title: "Renamed" });
+
+    const patch = api.events.patch as ReturnType<typeof vi.fn>;
+    const params = patch.mock.calls[0]![0];
+    expect(params.requestBody).not.toHaveProperty("conferenceData");
+    expect(params).not.toHaveProperty("conferenceDataVersion");
+  });
+});
+
 describe("deleteEvent", () => {
   it("sends delete request and returns success", async () => {
     const api = createMockApi({ evt1: "exists" });
