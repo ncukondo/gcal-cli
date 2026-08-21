@@ -32,19 +32,24 @@ export async function fetchFromCalendars(
 
   const events: CalendarEvent[] = [];
   const failedCalendars: FailedCalendar[] = [];
+  let firstReason: unknown;
   for (let i = 0; i < settled.length; i++) {
     const result = settled[i]!;
     const calendar = calendars[i]!;
     if (result.status === "fulfilled") {
       events.push(...result.value);
     } else {
+      if (failedCalendars.length === 0) firstReason = result.reason;
+      // Warn per calendar even when the rethrow below repeats one of these:
+      // three calendars failing for three reasons are only all visible here,
+      // since the thrown error names just one of them. Deliberate duplication.
       writeErr(`Warning: failed to fetch calendar "${calendar.name}": ${result.reason}`);
       failedCalendars.push(toFailedCalendar(calendar, result.reason));
     }
   }
 
   if (calendars.length > 0 && failedCalendars.length === calendars.length) {
-    throw (settled[0] as PromiseRejectedResult).reason;
+    throw firstReason;
   }
 
   return { events, failedCalendars };

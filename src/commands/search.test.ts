@@ -507,7 +507,8 @@ describe("search command", () => {
       expect(errOutput.join("\n")).not.toContain("hidden by --busy");
     });
 
-    // handleSearch silences stderr entirely in quiet mode.
+    // handleSearch silences stderr in quiet mode, apart from the warning about
+    // a calendar that failed to fetch; nothing fails in this scenario.
     it("does not warn in --quiet mode", async () => {
       const { errOutput } = await runSearch(makeMockApi([conference]), {
         query: "学会",
@@ -713,15 +714,22 @@ describe("search partial calendar failures", () => {
     expect(json.data.failed_calendars).toEqual([]);
   });
 
+  // Distinguishable errors on purpose: with the same error on both calendars,
+  // rethrowing the last failure instead of the first would still pass.
   it("throws the first error when every calendar fails", async () => {
+    const notFound = new Error("Calendar not found") as Error & { code: number };
+    notFound.code = 404;
     const api = makeFailingApi({
       primary: makeRateLimitError(),
-      "work@group.calendar.google.com": makeRateLimitError(),
+      "work@group.calendar.google.com": notFound,
     });
 
-    await expect(runSearch(api, { query: "meeting", format: "json", calendars })).rejects.toThrow(
-      "Rate Limit Exceeded",
-    );
+    await expect(
+      runSearch(api, { query: "meeting", format: "json", calendars }),
+    ).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      message: expect.stringContaining("Rate Limit Exceeded"),
+    });
   });
 
   // The most common setup: one enabled calendar, so "all failed" is "it failed".
