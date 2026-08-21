@@ -108,9 +108,27 @@ e.response.data.error.errors   同じ配列
 
 API の原文を保った上で、対処を添える。原因を断定しないこと（042 の 400 ヒントと同じ理由）。
 
+**当初は `reason` によらず単一の文言
+（`You may not have permission to change this event; only its organizer can.`）を
+付ける方針だったが、実装後のレビューで撤回した。** 唯一実 API で確認できている
+`requiredAccessLevel`（読み取り専用カレンダーへの `events.insert`）で
+
 ```
-Error: <API の原文> You may not have permission to change this event; only its organizer can.
+You need to have writer access to this calendar. You may not have permission to change this event; only its organizer can.
 ```
+
+となり、イベントも主催者も関係しない場面で原因を断定した上に、API 自身の正しい診断
+（「ここに write 権限を取れ」）から誤った出口（「主催者に頼め」）へ誘導していた。
+`mapApiError()` は Google Tasks とも共用のため、タスク側では意味を成さない。
+本節の「原因を断定しないこと」に自ら反していた。
+
+`reason` ごとに文言を持ち、**振り分け対象の `reason` はその表から導く**（二重管理を避ける）。
+再認証では直らないという情報は、どの文言にも必ず残す。
+
+| reason | 文言（API の原文に続けて付ける） |
+|---|---|
+| `requiredAccessLevel` | `Re-authenticating will not help; you need write access here.` |
+| `forbiddenForNonOrganizer` | `Re-authenticating will not help; only the organizer can change this event.` |
 
 ### `isAuthRequiredError()` の扱い
 

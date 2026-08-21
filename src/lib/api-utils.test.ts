@@ -54,21 +54,30 @@ describe("mapApiError", () => {
     expect(error.message).toBe("Invalid Credentials");
   });
 
-  it("maps 403 requiredAccessLevel to FORBIDDEN, keeping the API message", () => {
+  it("maps 403 requiredAccessLevel to FORBIDDEN with an access-level hint", () => {
     const error = mapped(
       makeApiError(403, "You need to have writer access to this calendar.", "requiredAccessLevel"),
     );
     expect(error).toBeInstanceOf(ApiError);
     expect(error.code).toBe("FORBIDDEN");
-    expect(error.message).toContain("You need to have writer access to this calendar.");
-    expect(error.message).toContain("may not have permission");
+    expect(error.message).toBe(
+      "You need to have writer access to this calendar. " +
+        "Re-authenticating will not help; you need write access here.",
+    );
+    // No event and no organizer is involved here -- an insert was refused.
+    expect(error.message).not.toContain("organizer");
   });
 
-  it("maps 403 forbiddenForNonOrganizer to FORBIDDEN", () => {
+  it("maps 403 forbiddenForNonOrganizer to FORBIDDEN with an organizer hint", () => {
     const error = mapped(
       makeApiError(403, "Forbidden for non organizer", "forbiddenForNonOrganizer"),
     );
     expect(error.code).toBe("FORBIDDEN");
+    // Joined with a plain space: the API's own wording is passed through untouched.
+    expect(error.message).toBe(
+      "Forbidden for non organizer " +
+        "Re-authenticating will not help; only the organizer can change this event.",
+    );
   });
 
   it("keeps 403 insufficientPermissions on AUTH_REQUIRED (re-auth does fix it)", () => {
@@ -85,6 +94,48 @@ describe("mapApiError", () => {
   it("falls back to AUTH_REQUIRED when the 403 carries no reason", () => {
     const error = mapped(makeApiError(403, "Forbidden"));
     expect(error.code).toBe("AUTH_REQUIRED");
+  });
+
+  it("falls back to AUTH_REQUIRED when the 403 carries an empty errors array", () => {
+    const error = mapped(Object.assign(new Error("Forbidden"), { code: 403, errors: [] }));
+    expect(error.code).toBe("AUTH_REQUIRED");
+  });
+
+  it("finds a routed reason that is not the first detail", () => {
+    const error = mapped(
+      Object.assign(new Error("Forbidden"), {
+        code: 403,
+        errors: [
+          { domain: "global", reason: "somethingElse", message: "Forbidden" },
+          { domain: "calendar", reason: "forbiddenForNonOrganizer", message: "Forbidden" },
+        ],
+      }),
+    );
+    expect(error.code).toBe("FORBIDDEN");
+  });
+
+  // The captured error mirrored the same array under response.data.error.errors;
+  // read it when the top-level shortcut is missing.
+  it("reads the reason from response.data.error.errors when errors is absent", () => {
+    const error = mapped(
+      Object.assign(new Error("You need to have writer access to this calendar."), {
+        code: 403,
+        response: {
+          data: {
+            error: {
+              errors: [
+                {
+                  domain: "calendar",
+                  reason: "requiredAccessLevel",
+                  message: "You need to have writer access to this calendar.",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+    expect(error.code).toBe("FORBIDDEN");
   });
 
   it("maps 404 to NOT_FOUND", () => {
