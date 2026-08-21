@@ -390,8 +390,9 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     );
   }
 
-  // One read, shared by the time resolution and the attendee policy, so a plain
-  // update still makes no extra call and the two never see different snapshots.
+  // One read here, shared by the time resolution and the attendee policy, so a
+  // plain update still makes no extra call and the two agree on what the event
+  // looks like. The API layer takes its own read for the merge it writes.
   let existing: CalendarEvent | undefined;
   if (editsAttendees || needsExistingForTime(opts)) {
     existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
