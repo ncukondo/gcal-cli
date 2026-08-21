@@ -105,6 +105,20 @@ export type ErrorCode =
   | "RATE_LIMITED"
   | "CONFIG_ERROR";
 
+/**
+ * A calendar whose fetch failed while at least one other succeeded. `list` and
+ * `search` always report the array -- empty when nothing failed -- so an agent
+ * never has to test for the key.
+ */
+export interface FailedCalendar {
+  id: string;
+  name: string;
+  error: {
+    code: ErrorCode;
+    message: string;
+  };
+}
+
 export interface SuccessResponse<T> {
   success: true;
   data: T;

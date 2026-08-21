@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { CalendarEvent, AppConfig } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
+import { ApiError } from "../lib/api.ts";
 import {
   resolveDateRange,
   toDayRange,
@@ -312,6 +313,7 @@ describe("handleList", () => {
       data: {
         events: expect.any(Array),
         count: 2,
+        failed_calendars: [],
       },
     });
     expect(json.data.events).toHaveLength(2);
@@ -836,5 +838,137 @@ describe("handleList --busy all-day warning", () => {
     const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
     expect(warning).toContain("hidden by --busy");
     expect(() => JSON.parse(write.mock.calls[0]![0] as string)).not.toThrow();
+  });
+});
+
+describe("handleList partial calendar failures", () => {
+  const mainEvent = makeEvent({ id: "e1", calendar_id: "primary", calendar_name: "Main Calendar" });
+  const rateLimited = new ApiError("RATE_LIMITED", "Rate Limit Exceeded");
+
+  /** Deps whose listEvents rejects for the calendar ids listed in `failures`. */
+  function makeFailingDeps(failures: Record<string, Error>, config = makeConfig()) {
+    const write = vi.fn();
+    const writeErr = vi.fn();
+    const deps = makeDeps({
+      listEvents: vi.fn().mockImplementation(async (calendarId: string) => {
+        const error = failures[calendarId];
+        if (error) throw error;
+        return [mainEvent];
+      }),
+      loadConfig: vi.fn().mockReturnValue(config),
+      write,
+      writeErr,
+    });
+    return { deps, write, writeErr };
+  }
+
+  const jsonOf = (write: ReturnType<typeof vi.fn>) =>
+    JSON.parse(write.mock.calls[0]![0] as string) as {
+      data: { count: number; failed_calendars: unknown[] };
+    };
+
+  it("returns the events it could fetch and lists the failed calendar", async () => {
+    const { deps, write } = makeFailingDeps({
+      "work@group.calendar.google.com": rateLimited,
+    });
+
+    const result = await handleList({ today: true, format: "json", quiet: false }, deps);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const json = jsonOf(write);
+    expect(json.data.count).toBe(1);
+    expect(json.data.failed_calendars).toEqual([
+      {
+        id: "work@group.calendar.google.com",
+        name: "Work",
+        error: { code: "RATE_LIMITED", message: "Rate Limit Exceeded" },
+      },
+    ]);
+  });
+
+  it("falls back to API_ERROR when the failure is not an ApiError", async () => {
+    const { deps, write } = makeFailingDeps({
+      "work@group.calendar.google.com": new Error("socket hang up"),
+    });
+
+    await handleList({ today: true, format: "json", quiet: false }, deps);
+
+    expect(jsonOf(write).data.failed_calendars).toEqual([
+      {
+        id: "work@group.calendar.google.com",
+        name: "Work",
+        error: { code: "API_ERROR", message: "socket hang up" },
+      },
+    ]);
+  });
+
+  it("returns an empty failed_calendars array when every calendar succeeds", async () => {
+    const { deps, write } = makeFailingDeps({});
+
+    await handleList({ today: true, format: "json", quiet: false }, deps);
+
+    expect(jsonOf(write).data.failed_calendars).toEqual([]);
+  });
+
+  it("throws the first error when every calendar fails", async () => {
+    const { deps, write } = makeFailingDeps({
+      primary: rateLimited,
+      "work@group.calendar.google.com": new ApiError("FORBIDDEN", "Insufficient permission"),
+    });
+
+    await expect(handleList({ today: true, format: "json", quiet: false }, deps)).rejects.toBe(
+      rateLimited,
+    );
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  // The most common setup: one enabled calendar, so "all failed" is "it failed".
+  it("throws when the only configured calendar fails", async () => {
+    const { deps, write } = makeFailingDeps(
+      { primary: rateLimited },
+      makeConfig({ calendars: [{ id: "primary", name: "Main Calendar", enabled: true }] }),
+    );
+
+    await expect(handleList({ today: true, format: "json", quiet: false }, deps)).rejects.toBe(
+      rateLimited,
+    );
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("still warns on stderr about the failed calendar", async () => {
+    const { deps, writeErr } = makeFailingDeps({
+      "work@group.calendar.google.com": rateLimited,
+    });
+
+    await handleList({ today: true, format: "json", quiet: false }, deps);
+
+    const warning = writeErr.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(warning).toContain('failed to fetch calendar "Work"');
+    expect(warning).toContain("Rate Limit Exceeded");
+  });
+
+  it("notes the failure at the end of the text output", async () => {
+    const { deps, write } = makeFailingDeps({
+      "work@group.calendar.google.com": rateLimited,
+    });
+
+    await handleList({ today: true, format: "text", quiet: false }, deps);
+
+    const output = write.mock.calls[0]![0] as string;
+    expect(output).toContain("Test Event");
+    expect(
+      output.trimEnd().endsWith("Note: 1 calendar could not be fetched (see warnings above)."),
+    ).toBe(true);
+  });
+
+  it("omits the text note under --quiet but keeps the stderr warning", async () => {
+    const { deps, write, writeErr } = makeFailingDeps({
+      "work@group.calendar.google.com": rateLimited,
+    });
+
+    await handleList({ today: true, format: "text", quiet: true }, deps);
+
+    expect(write.mock.calls[0]![0] as string).not.toContain("could not be fetched");
+    expect(writeErr).toHaveBeenCalled();
   });
 });

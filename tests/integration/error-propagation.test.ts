@@ -34,7 +34,7 @@ describe("error propagation: API errors → command handler → output", () => {
       return err;
     }
 
-    it("list: auth error is caught per-calendar and reported via writeErr", async () => {
+    it("list: auth error on the only calendar propagates instead of an empty success", async () => {
       const mockApi = createMockApi({
         errors: { listEvents: makeAuthError() },
       });
@@ -50,13 +50,12 @@ describe("error propagation: API errors → command handler → output", () => {
         now: () => new Date("2026-02-23T10:00:00+09:00"),
       };
 
-      const result = await handleList({ today: true, format: "json", quiet: false }, deps);
-
-      // List uses Promise.allSettled, so auth errors are reported per-calendar
-      expect(result.exitCode).toBe(0);
+      // Every calendar failed, so there is nothing to report as a success.
+      await expect(handleList({ today: true, format: "json", quiet: false }, deps)).rejects.toThrow(
+        "Request had invalid authentication credentials",
+      );
       expect(writeErr).toHaveBeenCalled();
-      const json = JSON.parse(out.output());
-      expect(json.data.events).toEqual([]);
+      expect(out.output()).toBe("");
     });
 
     it("search: auth error propagates from API", async () => {

@@ -1,12 +1,21 @@
 import { Command } from "commander";
-import type { CalendarEvent, AppConfig, OutputFormat } from "../types/index.ts";
+import type {
+  CalendarEvent,
+  AppConfig,
+  CalendarConfig,
+  ErrorCode,
+  FailedCalendar,
+  OutputFormat,
+} from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import type { ListEventsOptions } from "../lib/api.ts";
+import { ApiError } from "../lib/api.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
 import {
   formatEventListText,
+  formatFailedCalendarsNote,
   formatHiddenAllDayWarning,
   formatJsonSuccess,
   formatQuietText,
@@ -131,6 +140,17 @@ interface CommandResult {
   exitCode: number;
 }
 
+function toFailedCalendar(calendar: CalendarConfig, reason: unknown): FailedCalendar {
+  const code: ErrorCode = reason instanceof ApiError ? reason.code : "API_ERROR";
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return { id: calendar.id, name: calendar.name, error: { code, message } };
+}
+
+function firstRejection(settled: PromiseSettledResult<unknown>[]): unknown {
+  const rejected = settled.find((result) => result.status === "rejected");
+  return rejected?.reason;
+}
+
 export async function handleList(
   options: ListOptions,
   deps: ListHandlerDeps,
@@ -165,13 +185,20 @@ export async function handleList(
     calendars.map((cal) => deps.listEvents(cal.id, cal.name, apiOptions)),
   );
   const allEvents: CalendarEvent[] = [];
+  const failedCalendars: FailedCalendar[] = [];
   for (let i = 0; i < settled.length; i++) {
     const result = settled[i]!;
     if (result.status === "fulfilled") {
       allEvents.push(...result.value);
     } else {
       writeErr(`Warning: failed to fetch calendar "${calendars[i]!.name}": ${result.reason}`);
+      failedCalendars.push(toFailedCalendar(calendars[i]!, result.reason));
     }
+  }
+
+  // Nothing came back at all: `count: 0` would claim the calendars are empty.
+  if (calendars.length > 0 && failedCalendars.length === calendars.length) {
+    throw firstRejection(settled);
   }
 
   // Sort by start time
@@ -193,14 +220,21 @@ export async function handleList(
 
   // Output
   if (options.format === "json") {
-    deps.write(formatJsonSuccess({ events: filtered, count: filtered.length }));
+    deps.write(
+      formatJsonSuccess({
+        events: filtered,
+        count: filtered.length,
+        failed_calendars: failedCalendars,
+      }),
+    );
   } else {
     const dayRange = toDayRange(dateRange);
     if (options.quiet) {
       deps.write(formatQuietText(filtered, dayRange));
     } else {
-      const text = formatEventListText(filtered, dayRange);
-      deps.write(text || "No events found.");
+      const text = formatEventListText(filtered, dayRange) || "No events found.";
+      const note = formatFailedCalendarsNote(failedCalendars);
+      deps.write(note ? `${text}\n\n${note}` : text);
     }
   }
 

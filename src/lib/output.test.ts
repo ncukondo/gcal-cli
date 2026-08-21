@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Calendar, CalendarEvent } from "../types/index.ts";
+import type { Calendar, CalendarEvent, FailedCalendar } from "../types/index.ts";
 import {
   formatJsonSuccess,
   formatJsonError,
@@ -9,6 +9,7 @@ import {
   formatEventDetailText,
   formatQuietText,
   formatHiddenAllDayWarning,
+  formatFailedCalendarsNote,
   errorCodeToExitCode,
 } from "./output.ts";
 
@@ -888,5 +889,31 @@ describe("formatHiddenAllDayWarning", () => {
 
   it("returns an empty string when nothing is hidden", () => {
     expect(formatHiddenAllDayWarning([])).toBe("");
+  });
+});
+
+describe("formatFailedCalendarsNote", () => {
+  function failed(name: string): FailedCalendar {
+    return {
+      id: `${name}@group.calendar.google.com`,
+      name,
+      error: { code: "RATE_LIMITED", message: "Rate Limit Exceeded" },
+    };
+  }
+
+  it("names the count of calendars that could not be fetched", () => {
+    expect(formatFailedCalendarsNote([failed("Work")])).toBe(
+      "Note: 1 calendar could not be fetched (see warnings above).",
+    );
+  });
+
+  it("pluralises for several calendars", () => {
+    expect(formatFailedCalendarsNote([failed("Work"), failed("Family")])).toBe(
+      "Note: 2 calendars could not be fetched (see warnings above).",
+    );
+  });
+
+  it("returns an empty string when nothing failed", () => {
+    expect(formatFailedCalendarsNote([])).toBe("");
   });
 });
