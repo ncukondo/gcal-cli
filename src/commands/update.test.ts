@@ -49,6 +49,7 @@ function makeMockApi(
               htmlLink: opts.patchReturn.html_link,
               status: opts.patchReturn.status,
               transparency: opts.patchReturn.transparency,
+              hangoutLink: opts.patchReturn.meet_link ?? undefined,
               created: opts.patchReturn.created,
               updated: opts.patchReturn.updated,
             }
@@ -103,6 +104,8 @@ interface RunUpdateOpts {
   attendee?: string[];
   clearAttendees?: boolean;
   notify?: string;
+  meet?: boolean;
+  removeMeet?: boolean;
 }
 
 function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
@@ -138,6 +141,8 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   if (opts.attendee !== undefined) handlerOpts.attendee = opts.attendee;
   if (opts.clearAttendees !== undefined) handlerOpts.clearAttendees = opts.clearAttendees;
   if (opts.notify !== undefined) handlerOpts.notify = opts.notify;
+  if (opts.meet !== undefined) handlerOpts.meet = opts.meet;
+  if (opts.removeMeet !== undefined) handlerOpts.removeMeet = opts.removeMeet;
   return handleUpdate(handlerOpts).then((result) => ({ ...result, output, stderrOutput }));
 }
 
@@ -860,6 +865,78 @@ describe("update command", () => {
     });
   });
 
+  describe("Google Meet", () => {
+    it("--meet asks for a conference with conferenceDataVersion: 1", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", meet: true });
+
+      const params = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(params.conferenceDataVersion).toBe(1);
+      expect(params.requestBody.conferenceData.createRequest.requestId).toBeTruthy();
+    });
+
+    it("--remove-meet detaches the conference", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", removeMeet: true });
+
+      const params = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(params.conferenceDataVersion).toBe(1);
+      expect(params.requestBody.conferenceData).toBeNull();
+    });
+
+    it("leaves an existing conference alone when neither flag is given", async () => {
+      const api = makeMockApi();
+      await runUpdate(api, { eventId: "evt1", title: "Renamed" });
+
+      const params = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(params).not.toHaveProperty("conferenceDataVersion");
+      expect(params.requestBody).not.toHaveProperty("conferenceData");
+    });
+
+    it("counts --meet as an update on its own", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", meet: true });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("counts --remove-meet as an update on its own", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", removeMeet: true });
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("shows meet in the dry-run preview", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", meet: true, dryRun: true });
+
+      expect(api.events.patch).not.toHaveBeenCalled();
+      expect(result.output.join("\n")).toContain("meet: true");
+    });
+
+    it("shows remove_meet in the dry-run preview", async () => {
+      const api = makeMockApi();
+      const result = await runUpdate(api, { eventId: "evt1", removeMeet: true, dryRun: true });
+
+      expect(result.output.join("\n")).toContain("remove_meet: true");
+    });
+
+    it("notes on stderr when the conference is not ready yet", async () => {
+      const api = makeMockApi({ patchReturn: makeEvent({ id: "evt1", meet_link: null }) });
+      const result = await runUpdate(api, { eventId: "evt1", meet: true });
+
+      expect(result.stderrOutput.join("\n")).toContain("gcal show evt1");
+    });
+
+    it("stays quiet when the conference link came back", async () => {
+      const api = makeMockApi({
+        patchReturn: makeEvent({ id: "evt1", meet_link: "https://meet.google.com/abc-defg-hij" }),
+      });
+      const result = await runUpdate(api, { eventId: "evt1", meet: true });
+
+      expect(result.stderrOutput.join("\n")).not.toContain("gcal show");
+    });
+  });
+
   describe("option conflicts", () => {
     function parseUpdate(args: string[]): { error: string | null } {
       const cmd = createUpdateCommand();
@@ -880,6 +957,12 @@ describe("update command", () => {
 
     it("rejects --end and --duration together", () => {
       const result = parseUpdate(["evt1", "-e", "2026-03-01T12:00", "--duration", "1h"]);
+      expect(result.error).toBeTruthy();
+      expect(result.error).toContain("cannot be used with");
+    });
+
+    it("rejects --meet and --remove-meet together", () => {
+      const result = parseUpdate(["evt1", "--meet", "--remove-meet"]);
       expect(result.error).toBeTruthy();
       expect(result.error).toContain("cannot be used with");
     });
