@@ -9,13 +9,9 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ### Phase 17: Error Reporting
 
 46. [046-rate-limit-backoff](./046-rate-limit-backoff.md) — レート制限時の自動 exponential backoff
-47. [047-partial-failure-reporting](./047-partial-failure-reporting.md) — 複数カレンダー取得の部分的失敗を機械可読にする
 
-46 と 47 は独立しており順序の制約はない。
 46 は全コマンドの所要時間の性質を変えるため、リトライ上限・オプトアウト・可視性を
 先に決める必要がある（未決事項をタスクファイルに列挙してある）。
-47 は 045 のレビューで見つかったもので、`list` が失敗を握り潰して成功を返す一方
-`search` は 1 件の失敗で全体を落とす、という 2 コマンドの矛盾を揃える。
 
 ## In Progress
 
@@ -25,6 +21,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 44. [044-forbidden-vs-auth](./completed/044-forbidden-vs-auth.md) — 403（権限不足）を認証エラーと区別する (#60)
 45. [045-rate-limit-classification](./completed/045-rate-limit-classification.md) — レート制限・クォータ超過を認証エラーと区別する (#62)
+47. [047-partial-failure-reporting](./completed/047-partial-failure-reporting.md) — 複数カレンダー取得の部分的失敗を機械可読にする (#63)
 
 ### Phase 16: Meet & Attendees
 
