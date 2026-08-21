@@ -98,6 +98,7 @@ Found 2 events matching "A":
 ### `gcal show` Text Output
 
 出席者がいるときだけ Attendees ブロックを表示する。`Link:` の直前に置く。
+Meet リンクがあるときだけ `Meet:` 行を出し、`Link:` の直前に置く。
 
 ```
 Team Meeting
@@ -112,11 +113,12 @@ Attendees:    3
   [needsAction] bob@example.com
   [declined] carol@example.com (optional)
 
+Meet: https://meet.google.com/abc-defg-hij
 Link: https://calendar.google.com/event?eid=...
 ```
 
 各行の末尾に付く注記は `(表示名)` `(organizer)` `(optional)` の順で、該当するものだけを出す。
-`gcal list` / `gcal search` の行フォーマットは出席者では変わらない。
+`gcal list` / `gcal search` の行フォーマットは出席者でも Meet リンクでも変わらない。
 
 ### `gcal calendars` Text Output
 
@@ -253,6 +255,7 @@ All datetime fields include timezone offset (ISO 8601).
   "calendar_name": "string",
   "html_link": "string",
   "attendees": "EventAttendee[]",
+  "meet_link": "string | null",
   "created": "ISO8601 datetime",
   "updated": "ISO8601 datetime"
 }
@@ -273,6 +276,15 @@ All datetime fields include timezone offset (ISO 8601).
   "self": "boolean"
 }
 ```
+
+### meet_link
+
+会議が紐付いていないイベントでは `null`。`hangoutLink` を第一候補とし、無ければ
+`conferenceData.entryPoints` の `video` の URI を使う。電話などの video 以外の
+entry point は対象外。
+
+`--meet` で作成した直後は会議の生成が終わっておらず `null` になることがある。
+その場合は数秒後に `gcal show` で取得できる（`spec/commands.md` の `gcal add` を参照）。
 
 ### Calendar
 
