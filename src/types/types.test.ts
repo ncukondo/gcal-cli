@@ -117,16 +117,18 @@ describe("Calendar", () => {
 });
 
 describe("ErrorCode", () => {
-  it("accepts all 6 error codes", () => {
+  it("accepts all 8 error codes", () => {
     const codes: ErrorCode[] = [
       "AUTH_REQUIRED",
       "AUTH_EXPIRED",
       "NOT_FOUND",
       "INVALID_ARGS",
       "API_ERROR",
+      "FORBIDDEN",
+      "RATE_LIMITED",
       "CONFIG_ERROR",
     ];
-    expect(codes).toHaveLength(6);
+    expect(codes).toHaveLength(8);
     for (const code of codes) {
       expect(isType<ErrorCode>(code)).toBe(true);
     }
