@@ -66,6 +66,14 @@ event it hides is reported on stderr with its date and title. See
 Quiet mode (`-q`): Compact one-line format: `MM/DD HH:MM-HH:MM Title`. Warnings
 still go to stderr, so stdout stays clean for piping.
 
+Partial failures: every enabled calendar is queried at once. A calendar that
+fails is warned about on stderr and listed in `data.failed_calendars` (always
+present, `[]` when nothing failed), and the events fetched from the other
+calendars are still returned. If **every** calendar fails the first error is
+raised instead, so a fetch that returned nothing never reports success -- this
+is what the usual single-calendar setup hits. See
+[output.md](./output.md#partial-fetch-failures).
+
 ### `gcal search`
 
 Search events by keyword.
@@ -111,8 +119,13 @@ Tip: Use --days <n> or --from/--to to change the search range.
 stderr in the same format.
 
 Quiet mode (`-q`): Same compact format as `list` (`MM/DD HH:MM-HH:MM Title`).
-Unlike `list`, `search` suppresses **all** stderr messages under `--quiet`,
-including the `--busy` notice.
+Unlike `list`, `search` suppresses its stderr messages under `--quiet`,
+including the `--busy` notice. The one exception is the failed-calendar warning
+below, which is a failure notice rather than data.
+
+Partial failures: identical to `list` -- failed calendars are reported on stderr
+and in `data.failed_calendars`, and a fetch where every calendar failed raises
+the first error.
 
 ### `gcal add`
 
