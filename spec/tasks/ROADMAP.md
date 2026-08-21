@@ -8,10 +8,8 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 17: Error Reporting
 
-45. [045-rate-limit-classification](./045-rate-limit-classification.md) — レート制限・クォータ超過を認証エラーと区別する
 46. [046-rate-limit-backoff](./046-rate-limit-backoff.md) — レート制限時の自動 exponential backoff
 
-順序: 45 → 46。45 は 044 が入れた `reason` 判定の仕組みをそのまま使う分類のみで、小さく安全。
 46 は全コマンドの所要時間の性質を変えるため、リトライ上限・オプトアウト・可視性を
 先に決める必要がある（未決事項をタスクファイルに列挙してある）。
 
@@ -22,6 +20,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ### Phase 17: Error Reporting
 
 44. [044-forbidden-vs-auth](./completed/044-forbidden-vs-auth.md) — 403（権限不足）を認証エラーと区別する (#60)
+45. [045-rate-limit-classification](./completed/045-rate-limit-classification.md) — レート制限・クォータ超過を認証エラーと区別する (#62)
 
 ### Phase 16: Meet & Attendees
 
