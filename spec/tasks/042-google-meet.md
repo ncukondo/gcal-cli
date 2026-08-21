@@ -28,6 +28,16 @@ Google Calendar API の `conferenceData.createRequest` + クエリパラメー�
 Google Workspace アカウントで利用可能な会議方式が異なるため失敗しうる。
 **`requestId` のみを渡してカレンダー既定の方式に任せる**（公式ガイドの例と同じ形）。
 
+ただしこれは、既定が Meet 以外（クラシック Hangouts やサードパーティ会議アドオン）の
+カレンダーでは **Meet 以外の会議が付く**ことを意味する。レビューでの指摘を受けて、
+`--meet` という名前のフラグと `meet_link` というフィールドが Meet 以外の URL を返さないよう、
+**レスポンスの `conferenceSolution.key.type` を見て判定する**方針を追加した:
+
+- `hangoutsMeet` 以外と分かったら `meet_link` は `null` のままにする
+- 実際に付いた会議は `conference: { type, uri }` として返し、URL を失わせない
+- stderr で「Meet ではなく <type> が付いた」と知らせる
+- 会議もイベントも実際に作られているため、終了コードは 0（成功）のまま
+
 ```ts
 requestBody.conferenceData = { createRequest: { requestId } };
 // params に conferenceDataVersion: 1 を付ける
@@ -77,11 +87,20 @@ Note: Google Meet link is still being generated. Run `gcal show <id>` in a few s
 
 ### `meet_link` の抽出
 
-`event.hangoutLink` を第一候補とし、無ければ
-`conferenceData.entryPoints[]` から `entryPointType === "video"` の `uri` を拾う。
-どちらも無ければ `null`。
+**当初は「`event.hangoutLink` を第一候補とし、無ければ `entryPoints[]` の `video` の `uri`」
+という方針だったが、レビューで撤回した。** `hangoutLink` が Meet のときだけ設定されるという
+前提が誤りで、実際には Meet より前からあるフィールドでクラシック Hangouts
+（`eventHangout` / `eventNamedHangout`）でも設定される。この前提のままだと、Meet 以外の会議が
+付いたイベントで `meet_link` に非 Meet の URL が入り、stderr の「Meet ではない」という
+通知と矛盾していた。
 
-`src/types/index.ts` の `CalendarEvent` に `meet_link: string | null` を追加する（フィールド追加のみで後方互換）。
+判定は `conferenceData.conferenceSolution.key.type` だけで行う:
+
+1. Meet 以外と分かっているなら `meet_link` は `null`
+2. それ以外なら `hangoutLink`、無ければ `entryPoints[]` の `video` の `uri`
+
+`src/types/index.ts` の `CalendarEvent` に `meet_link: string | null` と
+`conference: EventConference | null` を追加する（フィールド追加のみで後方互換）。
 
 ### Meet の削除
 
@@ -99,8 +118,10 @@ Note: Google Meet link is still being generated. Run `gcal show <id>` in a few s
 
 ### 全日イベント
 
-全日イベントに Meet を付けること自体は API が許容するが実用的でないため、
-`--meet` と全日イベント（`--start` が日付のみ）の組み合わせは `INVALID_ARGS` で弾く。
+**当初は `--meet` と全日イベントの組み合わせを `INVALID_ARGS` で弾く方針だったが、実装後の
+レビューで撤回した。** API も Google カレンダーの Web UI も全日イベントへの Meet 追加を許可しており、
+CLI が独自に禁止する根拠がない。加えて `add` にしかガードが無く `update --meet` では素通りしていたため、
+両コマンドの挙動が食い違っていた。制約自体を無くして揃えた（E2E で実 API が受け付けることを確認済み）。
 
 ### Text 出力
 
@@ -118,8 +139,15 @@ Link: https://calendar.google.com/...
 ### 失敗時のエラーメッセージ
 
 カレンダー側で会議が許可されていない場合、API は 400 を返す。`mapApiError()` の
-`API_ERROR` にそのまま流すが、`--meet` 指定時の 400 には
-「このカレンダーは会議の作成に対応していない可能性がある」旨のヒントを添える。
+`API_ERROR` にそのまま流すが、`--meet` 指定時の 400 にはヒントを添える。
+
+**レビューでの指摘により文面を修正した。** 当初は「このカレンダーは会議の作成に対応していない
+可能性がある」と原因を示唆していたが、`--meet` 付きのリクエストが 400 になる原因は会議とは限らない
+（時刻範囲が不正な場合など）。原因を断定せず「`--meet` を外して再実行する」選択肢を示す文面にした。
+
+`createRequest.status` が `failure` のときは `API_ERROR` を投げるが、**その時点でイベントは
+既に作成/更新済み**である。エラーメッセージにイベント ID を含めないとユーザーが後始末できないため、
+ID を含める。
 
 ### Out of Scope
 
@@ -159,11 +187,14 @@ gcal update abc123 --remove-meet   # Meet を削除
 
 ```json
 {
-  "meet_link": "https://meet.google.com/abc-defg-hij"
+  "meet_link": "https://meet.google.com/abc-defg-hij",
+  "conference": { "type": "hangoutsMeet", "uri": "https://meet.google.com/abc-defg-hij" }
 }
 ```
 
-会議が無いイベントでは `null`。
+会議が無いイベントではどちらも `null`。Meet 以外の会議が付いたイベントでは
+`meet_link` は `null` のまま、`conference` に実際の方式と URL が入る。
+詳細は `spec/output.md` を参照。
 
 ### Dry-run
 
@@ -179,48 +210,68 @@ DRY RUN: Would create event:
 
 ## Implementation Steps
 
-- [ ] `src/types/index.ts`: `CalendarEvent.meet_link` を追加
-- [ ] `src/lib/api.test.ts`: `normalizeEvent()` の `meet_link` 抽出の失敗テスト（`hangoutLink` 優先 / `entryPoints` フォールバック / どちらも無ければ `null`）
-- [ ] `src/lib/api.ts`: `GoogleEvent` に `hangoutLink` / `conferenceData`、`GoogleEventWriteBody` に `conferenceData` を追加、`normalizeEvent()` を実装
-- [ ] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch` パラメータに `conferenceDataVersion?: number` を追加
-- [ ] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `conferenceDataVersion` を通す
-- [ ] `src/lib/api.test.ts` / `api.ts`: `createEvent()` の `meet` オプション（`conferenceDataVersion: 1` が送られる / `requestId` が呼び出しごとに異なる / `meet` 未指定なら `conferenceData` も `conferenceDataVersion` も送らない）
-- [ ] `src/lib/api.test.ts` / `api.ts`: pending リトライ（1回目 pending → 2回目 success で `meet_link` が埋まる / 3回 pending なら `meet_link: null` / `failure` なら `API_ERROR`）
-- [ ] `src/lib/api.test.ts` / `api.ts`: `updateEvent()` の `meet` / `removeMeet`（`conferenceData: null` を送る / どちらも未指定なら `conferenceData` をリクエストに含めない）
-- [ ] `src/commands/add.test.ts` / `add.ts`: `--meet`、全日イベントとの conflict、dry-run 出力、pending 時の stderr 注記
-- [ ] `src/commands/update.test.ts` / `update.ts`: `--meet` / `--remove-meet`（conflict 設定）
-- [ ] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Meet 行（`null` では出さない）
-- [ ] `spec/commands.md`: add / update のオプションと制約
-- [ ] `spec/output.md`: `Event` に `meet_link`、`gcal show` の text 出力例
-- [ ] `tests/integration/add-pipeline.test.ts`: `--meet` が `conferenceDataVersion: 1` 付きで API に届くこと
-- [ ] `bun run test` pass
-- [ ] `bun run lint` / `format:check` / `typecheck` pass
+- [x] `src/types/index.ts`: `CalendarEvent.meet_link` を追加
+- [x] `src/lib/api.test.ts`: `normalizeEvent()` の `meet_link` 抽出の失敗テスト（`hangoutLink` 優先 / `entryPoints` フォールバック / どちらも無ければ `null`）
+- [x] `src/lib/api.ts`: `GoogleEvent` に `hangoutLink` / `conferenceData`、`GoogleEventWriteBody` に `conferenceData` を追加、`normalizeEvent()` を実装
+- [x] `src/lib/api.ts`: `GoogleCalendarApi` の `events.insert/patch` パラメータに `conferenceDataVersion?: number` を追加
+- [x] `src/commands/shared.ts`: `createGoogleCalendarApi()` のパススルーに `conferenceDataVersion` を通す
+- [x] `src/lib/api.test.ts` / `api.ts`: `createEvent()` の `meet` オプション（`conferenceDataVersion: 1` が送られる / `requestId` が呼び出しごとに異なる / `meet` 未指定なら `conferenceData` も `conferenceDataVersion` も送らない）
+- [x] `src/lib/api.test.ts` / `api.ts`: pending リトライ（1回目 pending → 2回目 success で `meet_link` が埋まる / 3回 pending なら `meet_link: null` / `failure` なら `API_ERROR`）
+- [x] `src/lib/api.test.ts` / `api.ts`: `updateEvent()` の `meet` / `removeMeet`（`conferenceData: null` を送る / どちらも未指定なら `conferenceData` をリクエストに含めない）
+- [x] `src/commands/add.test.ts` / `add.ts`: `--meet`、dry-run 出力、pending 時の stderr 注記
+- [x] `src/commands/update.test.ts` / `update.ts`: `--meet` / `--remove-meet`（conflict 設定）
+- [x] `src/lib/output.test.ts` / `output.ts`: `formatEventDetailText()` の Meet 行（`null` では出さない）
+- [x] `spec/commands.md`: add / update のオプションと制約
+- [x] `spec/output.md`: `Event` に `meet_link`、`gcal show` の text 出力例
+- [x] `tests/integration/add-pipeline.test.ts`: `--meet` が `conferenceDataVersion: 1` 付きで API に届くこと
+- [x] `bun run test` pass
+- [x] `bun run lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
 `tests/e2e/google-meet.test.ts` を新規作成する。会議生成が非同期なため
 **`meet_link` が即座に埋まることを前提にしない**（フレーク対策）。
 
-- [ ] `gcal add --meet -f json` が成功し、`meet_link` が URL または `null` であること
-- [ ] `meet_link` が `null` だった場合、数秒待って `gcal show -f json` で URL が取れること（リトライ付き）
-- [ ] `gcal update <id> --remove-meet` 後に `meet_link` が `null` になること
-- [ ] `--meet` を付けずに作ったイベントの `meet_link` が `null` であること（後方互換の確認）
-- [ ] 全日イベントに `--meet` を付けると exit code 3（`INVALID_ARGS`）であること
-- [ ] 作成したイベントを cleanup で削除する
+- [x] `gcal add --meet -f json` が成功し、`meet_link` が URL または `null` であること
+- [x] `meet_link` が `null` だった場合、数秒待って `gcal show -f json` で URL が取れること（リトライ付き）
+- [x] `gcal update <id> --remove-meet` 後に `meet_link` が `null` になること
+- [x] `--meet` を付けずに作ったイベントの `meet_link` が `null` であること（後方互換の確認）
+- [x] 全日イベントに `--meet` を付けても成功すること（当初の禁止方針は撤回済み）
+- [x] 作成したイベントを cleanup で削除する
 
 テスト環境のカレンダーが会議作成に対応していない場合はスキップできるようにする
 （`tests/e2e/helpers.ts` の既存パターンに合わせる）。
 
 ## Acceptance Criteria
 
-- [ ] `gcal add --meet` で Meet 付きイベントが作成され、`meet_link` が返る
-- [ ] `requestId` が呼び出しごとにユニークである
-- [ ] `conferenceDataVersion: 1` は `--meet` / `--remove-meet` 指定時のみ送られる
-- [ ] `--meet` を指定しない `update` が既存の会議を消さない
-- [ ] `pending` のときリトライし、なお未確定ならイベント作成は成功扱いで stderr に注記が出る
-- [ ] `failure` のとき `API_ERROR` になる
-- [ ] `gcal update --remove-meet` で会議が削除される
-- [ ] 全日イベント + `--meet` が `INVALID_ARGS` で弾かれる
-- [ ] JSON 出力に `meet_link` が含まれる（会議なしなら `null`）
-- [ ] text / json / quiet 全フォーマットが動作する
-- [ ] 既存テストが pass する
+- [x] `gcal add --meet` で Meet 付きイベントが作成され、`meet_link` が返る
+- [x] `requestId` が呼び出しごとにユニークである
+- [x] `conferenceDataVersion: 1` は `--meet` / `--remove-meet` 指定時のみ送られる
+- [x] `--meet` を指定しない `update` が既存の会議を消さない
+- [x] `pending` のときリトライし、なお未確定ならイベント作成は成功扱いで stderr に注記が出る
+- [x] `failure` のとき `API_ERROR` になる
+- [x] `gcal update --remove-meet` で会議が削除される
+- [x] 全日イベント + `--meet` が `add` / `update` のどちらでも同じように通る
+- [x] JSON 出力に `meet_link` が含まれる（会議なしなら `null`）
+- [x] text / json / quiet 全フォーマットが動作する
+- [x] 既存テストが pass する
+
+## Notes
+
+- `conferenceDataVersion: 1` は `--meet` / `--remove-meet` を指定したときだけリクエストに付ける。
+  これが「指定しない `update` は既存の会議を保持する」という不変条件の実体で、
+  `api.test.ts` と `update.test.ts` の両方で固定している。
+- pending の注記は `api.ts` ではなくコマンド層（`add.ts` / `update.ts`）から出す。
+  `api.ts` を IO から切り離したままにするため、コマンド側で
+  「`--meet` を指定したのに `meet_link` が `null`」を判定して stderr に書く。
+  仕様では `add` のみ言及していたが、`update --meet` でも同じ状況が起きるため同じ注記を出している。
+- `--quiet` では pending の注記を出さない。`-q` は Event ID だけを返す契約のため。
+- googleapis の型は `Schema$Event.conferenceData` を non-nullable として定義しているが、
+  REST API は会議の削除に `conferenceData: null` を受け付ける。キャストは
+  `src/commands/shared.ts` の変換関数 2 つに閉じ込め、コードベース側の型は実際に送る形を保っている。
+- `resolveConference()` は pending のまま 3 回のポーリングを終えたイベントをそのまま返す。
+  イベント自体は書き込み済みなので、コマンド全体を失敗させるより `meet_link: null` を返す方が正しい。
+- E2E は実カレンダーに対して 6 件すべて pass することを確認済み
+  （会議の作成・リンク取得・`--remove-meet` による削除を含む）。
+- `CalendarEvent` に必須フィールドを 1 つ足したため、041 と同様にテストの `makeEvent`
+  ファクトリ 8 箇所と `types.test.ts` の型リテラルを更新した。JSON 出力はフィールド追加のみで後方互換。

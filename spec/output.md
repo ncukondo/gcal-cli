@@ -98,6 +98,9 @@ Found 2 events matching "A":
 ### `gcal show` Text Output
 
 出席者がいるときだけ Attendees ブロックを表示する。`Link:` の直前に置く。
+会議の URL が分かっているときだけ `Link:` の直前に1行足す。Meet なら `Meet:`、Meet 以外なら
+`Conference: <URL> (<type>)`。Meet 以外でも URL は落とさない（参加するのに必要なため）。
+URL がまだ無い会議（生成中など）では行を出さない。
 
 ```
 Team Meeting
@@ -112,11 +115,12 @@ Attendees:    3
   [needsAction] bob@example.com
   [declined] carol@example.com (optional)
 
+Meet: https://meet.google.com/abc-defg-hij
 Link: https://calendar.google.com/event?eid=...
 ```
 
 各行の末尾に付く注記は `(表示名)` `(organizer)` `(optional)` の順で、該当するものだけを出す。
-`gcal list` / `gcal search` の行フォーマットは出席者では変わらない。
+`gcal list` / `gcal search` の行フォーマットは出席者でも Meet リンクでも変わらない。
 
 ### `gcal calendars` Text Output
 
@@ -253,6 +257,8 @@ All datetime fields include timezone offset (ISO 8601).
   "calendar_name": "string",
   "html_link": "string",
   "attendees": "EventAttendee[]",
+  "meet_link": "string | null",
+  "conference": "EventConference | null",
   "created": "ISO8601 datetime",
   "updated": "ISO8601 datetime"
 }
@@ -273,6 +279,38 @@ All datetime fields include timezone offset (ISO 8601).
   "self": "boolean"
 }
 ```
+
+### meet_link と EventConference
+
+`conference` はイベントに紐付いている会議そのものを表す。会議が無ければ `null`。
+
+```json
+{
+  "type": "string | null",
+  "uri": "string | null"
+}
+```
+
+`type` は Google が実際に割り当てた会議方式（`hangoutsMeet` / `eventHangout` /
+`eventNamedHangout` / サードパーティ会議アドオンは `addOn`）。レスポンスに
+`conferenceSolution` が無い場合は `null`。`uri` は `entryPoints` の `video` の URI、
+無ければ `hangoutLink`。電話などの video 以外の entry point は対象外。
+
+`meet_link` は **Google Meet のときだけ**非 null になる。判定は次の順:
+
+1. `conference.type` が Meet 以外と分かっているなら `null`（Meet でないものを Meet として返さない）
+2. それ以外なら `hangoutLink`、無ければ `conference.uri`
+
+**`hangoutLink` の有無では判定しない。** このフィールドは Meet より前からあるもので、
+クラシック Hangouts（`eventHangout` / `eventNamedHangout`）でも設定されるため、
+Meet かどうかを決められない。判定に使えるのは `conferenceSolution.key.type` だけ。
+
+したがって Zoom などが付いたイベントは `meet_link: null` / `conference: {"type": "addOn", ...}` になる。
+
+`--meet` で作成した直後は会議の生成が終わっておらず `meet_link` も `conference` も
+`null` になる。`conference` は `type` と `uri` がどちらも分からないうちは
+`{"type": null, "uri": null}` ではなく `null` を返す（説明できることが何も無いため）。
+その場合は数秒後に `gcal show` で取得できる（`spec/commands.md` の `gcal add` を参照）。
 
 ### Calendar
 

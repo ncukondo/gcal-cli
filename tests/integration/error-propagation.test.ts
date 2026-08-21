@@ -84,6 +84,7 @@ describe("error propagation: API errors → command handler → output", () => {
         createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
         loadConfig: () => loadConfig(mockFs),
         write: vi.fn(),
+        writeStderr: () => {},
       };
 
       await expect(
@@ -210,6 +211,7 @@ describe("error propagation: API errors → command handler → output", () => {
         createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
         loadConfig: () => loadConfig(mockFs),
         write: out.write,
+        writeStderr: () => {},
       };
 
       const result = await handleAdd(

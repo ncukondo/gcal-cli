@@ -434,6 +434,7 @@ export function registerCommands(program: Command): void {
           createEvent(api, calendarId, calendarName, input),
         loadConfig: () => loadConfig(fsAdapter),
         write: (msg) => process.stdout.write(msg + "\n"),
+        writeStderr: (msg) => process.stderr.write(msg + "\n"),
       };
 
       const handleOpts: AddOptions = {
@@ -446,6 +447,7 @@ export function registerCommands(program: Command): void {
         free: addOpts.free,
         dryRun: addOpts.dryRun,
         attendee: addOpts.attendee,
+        meet: addOpts.meet,
         quiet: globalOpts.quiet,
         format: globalOpts.format,
       };

@@ -45,6 +45,8 @@ describe("normalizeEvent", () => {
       status: "confirmed",
       transparency: "opaque",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-01T12:00:00.000Z",
     });
@@ -79,6 +81,8 @@ describe("normalizeEvent", () => {
       status: "tentative",
       transparency: "transparent",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-02T08:00:00.000Z",
     });
@@ -206,6 +210,211 @@ describe("normalizeEvent", () => {
 
     expect(result.attendees).toHaveLength(1);
     expect(result.attendees[0]?.email).toBe("dave@example.com");
+  });
+
+  it("reads meet_link from hangoutLink", () => {
+    const googleEvent = {
+      id: "evt10",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("falls back to the video entry point when hangoutLink is absent", () => {
+    const googleEvent = {
+      id: "evt11",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        entryPoints: [
+          { entryPointType: "phone", uri: "tel:+81-3-0000-0000" },
+          { entryPointType: "video", uri: "https://meet.google.com/xyz-uvwx-rst" },
+        ],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/xyz-uvwx-rst");
+  });
+
+  it("prefers hangoutLink over the video entry point", () => {
+    const googleEvent = {
+      id: "evt12",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/from-hangout-link",
+      conferenceData: {
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/from-entry-point" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/from-hangout-link");
+  });
+
+  it("returns null meet_link when the event has no conference", () => {
+    const googleEvent = {
+      id: "evt13",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("does not call a third-party conference a Meet link", () => {
+    const googleEvent = {
+      id: "evt15",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        conferenceSolution: { key: { type: "addOn" }, name: "Zoom Meeting" },
+        entryPoints: [{ entryPointType: "video", uri: "https://example.zoom.us/j/123" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference).toEqual({ type: "addOn", uri: "https://example.zoom.us/j/123" });
+  });
+
+  it("reports a hangoutsMeet conference as both meet_link and conference", () => {
+    const googleEvent = {
+      id: "evt16",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+      conferenceData: {
+        conferenceSolution: { key: { type: "hangoutsMeet" }, name: "Google Meet" },
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/abc-defg-hij" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+    expect(result.conference).toEqual({
+      type: "hangoutsMeet",
+      uri: "https://meet.google.com/abc-defg-hij",
+    });
+  });
+
+  it("does not trust hangoutLink when the solution is classic Hangouts", () => {
+    // hangoutLink predates Meet and is still set for eventHangout /
+    // eventNamedHangout, so it cannot settle whether a conference is Meet.
+    const googleEvent = {
+      id: "evt19",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://hangouts.google.com/hangouts/_/abc",
+      conferenceData: {
+        conferenceSolution: { key: { type: "eventHangout" } },
+        entryPoints: [
+          { entryPointType: "video", uri: "https://hangouts.google.com/hangouts/_/abc" },
+        ],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference?.type).toBe("eventHangout");
+  });
+
+  it("does not trust hangoutLink when a third-party add-on is attached", () => {
+    const googleEvent = {
+      id: "evt20",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/stale-link",
+      conferenceData: {
+        conferenceSolution: { key: { type: "addOn" } },
+        entryPoints: [{ entryPointType: "video", uri: "https://example.zoom.us/j/123" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+    expect(result.conference).toEqual({ type: "addOn", uri: "https://example.zoom.us/j/123" });
+  });
+
+  it("returns a null conference while the conference is still pending", () => {
+    const googleEvent = {
+      id: "evt21",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    // Nothing is known about it yet, so there is nothing to describe.
+    expect(result.conference).toBeNull();
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("treats a conference of unknown solution as Meet", () => {
+    // With no conferenceSolution to go on there is nothing to veto the link,
+    // so hangoutLink is the best answer available -- note this is a fallback,
+    // not evidence: hangoutLink alone never establishes that a conference is Meet.
+    const googleEvent = {
+      id: "evt17",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+      conferenceData: {
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/abc-defg-hij" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+    expect(result.conference).toEqual({
+      type: null,
+      uri: "https://meet.google.com/abc-defg-hij",
+    });
+  });
+
+  it("returns a null conference when the event has none", () => {
+    const googleEvent = {
+      id: "evt18",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.conference).toBeNull();
+  });
+
+  it("returns null meet_link when conferenceData has no video entry point", () => {
+    const googleEvent = {
+      id: "evt14",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+        entryPoints: [{ entryPointType: "phone", uri: "tel:+81-3-0000-0000" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
   });
 });
 
@@ -1033,6 +1242,323 @@ describe("attendees and notifications", () => {
       eventId: "evt1",
       sendUpdates: "none",
     });
+  });
+});
+
+describe("Google Meet conferencing", () => {
+  const timedInput: CreateEventInput = {
+    title: "Design review",
+    start: "2026-09-01T10:00:00+09:00",
+    end: "2026-09-01T11:00:00+09:00",
+    allDay: false,
+  };
+
+  /**
+   * events.get is scripted as a queue so a test can walk the pending -> success
+   * transition one poll at a time.
+   */
+  function createConferenceApi(inserted: unknown, gets: unknown[] = []): GoogleCalendarApi {
+    const queue = [...gets];
+    const api = createMockApi({ inserted, patched: inserted });
+    api.events.get = vi.fn().mockImplementation(async () => {
+      const next = queue.shift();
+      if (next === undefined) {
+        throw new Error("events.get called more times than the test scripted");
+      }
+      return { data: next };
+    });
+    return api;
+  }
+
+  function pendingEvent(id: string) {
+    return {
+      id,
+      summary: "Design review",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+      },
+    };
+  }
+
+  function successEvent(id: string, link = "https://meet.google.com/abc-defg-hij") {
+    return {
+      id,
+      summary: "Design review",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      hangoutLink: link,
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "success" } },
+        entryPoints: [{ entryPointType: "video", uri: link }],
+      },
+    };
+  }
+
+  it("requests a conference with conferenceDataVersion: 1 when meet is set", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { generateRequestId: () => "fixed-request-id" },
+    );
+
+    expect(api.events.insert).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: {
+        summary: "Design review",
+        start: { dateTime: "2026-09-01T10:00:00+09:00" },
+        end: { dateTime: "2026-09-01T11:00:00+09:00" },
+        transparency: "opaque",
+        conferenceData: { createRequest: { requestId: "fixed-request-id" } },
+      },
+    });
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("generates a fresh requestId for every call", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    await createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true });
+    await createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true });
+
+    const insert = api.events.insert as ReturnType<typeof vi.fn>;
+    const first = insert.mock.calls[0]![0].requestBody.conferenceData.createRequest.requestId;
+    const second = insert.mock.calls[1]![0].requestBody.conferenceData.createRequest.requestId;
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first).not.toBe(second);
+  });
+
+  it("omits conferenceData and conferenceDataVersion when meet is not requested", async () => {
+    const api = createConferenceApi(successEvent("evt-plain"));
+
+    await createEvent(api, "cal1", "My Cal", timedInput);
+
+    const insert = api.events.insert as ReturnType<typeof vi.fn>;
+    const params = insert.mock.calls[0]![0];
+    expect(params.requestBody).not.toHaveProperty("conferenceData");
+    expect(params).not.toHaveProperty("conferenceDataVersion");
+  });
+
+  it("polls until the pending conference resolves", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [successEvent("evt-meet")]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    expect(api.events.get).toHaveBeenCalledTimes(1);
+    expect(api.events.get).toHaveBeenCalledWith({ calendarId: "cal1", eventId: "evt-meet" });
+    expect(sleep).toHaveBeenCalledWith(500);
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("gives up after three polls and returns the event with a null meet_link", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    expect(api.events.get).toHaveBeenCalledTimes(3);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([500, 1000, 2000]);
+    expect(result.id).toBe("evt-meet");
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("throws API_ERROR when the conference request fails", async () => {
+    const failed = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(failed);
+
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      ApiError,
+    );
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /failure/,
+    );
+  });
+
+  it("raises API_ERROR when failure only shows up on the last poll", async () => {
+    const failed = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(pendingEvent("evt-meet"), [
+      pendingEvent("evt-meet"),
+      pendingEvent("evt-meet"),
+      failed,
+    ]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true }, { sleep }),
+    ).rejects.toThrow(/failure/);
+  });
+
+  it("names the saved event when the conference request fails", async () => {
+    const failed = {
+      id: "evt-orphan",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "failure" } },
+      },
+    };
+    const api = createConferenceApi(failed);
+
+    // The event is already on the calendar, so the error has to say which one
+    // it is or the user cannot clean it up.
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /evt-orphan/,
+    );
+  });
+
+  it("hints at --meet when updateEvent draws a 400", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+    const error = new Error("Invalid conference type value.") as Error & { code: number };
+    error.code = 400;
+    api.events.patch = vi.fn().mockRejectedValue(error);
+
+    await expect(updateEvent(api, "cal1", "My Cal", "evt-meet", { meet: true })).rejects.toThrow(
+      /--meet was requested/,
+    );
+  });
+
+  it("polls on update until the pending conference resolves", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"), [successEvent("evt-meet")]);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await updateEvent(api, "cal1", "My Cal", "evt-meet", { meet: true }, { sleep });
+
+    expect(api.events.get).toHaveBeenCalledTimes(1);
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("hints at calendar support when the API rejects a conference request with 400", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+    const error = new Error("Invalid conference type value.") as Error & { code: number };
+    error.code = 400;
+    api.events.insert = vi.fn().mockRejectedValue(error);
+
+    await expect(createEvent(api, "cal1", "My Cal", { ...timedInput, meet: true })).rejects.toThrow(
+      /--meet was requested/,
+    );
+  });
+
+  it("does not add the conference hint to 400s on plain events", async () => {
+    const api = createConferenceApi(successEvent("evt-plain"));
+    const error = new Error("Invalid start time.") as Error & { code: number };
+    error.code = 400;
+    api.events.insert = vi.fn().mockRejectedValue(error);
+
+    await expect(createEvent(api, "cal1", "My Cal", timedInput)).rejects.toThrow(
+      /^Invalid start time\.$/,
+    );
+  });
+
+  it("keeps the created event when polling for the conference fails", async () => {
+    const api = createConferenceApi(pendingEvent("evt-meet"));
+    const boom = new Error("Backend Error") as Error & { code: number };
+    boom.code = 500;
+    api.events.get = vi.fn().mockRejectedValue(boom);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createEvent(
+      api,
+      "cal1",
+      "My Cal",
+      { ...timedInput, meet: true },
+      { sleep },
+    );
+
+    // The event was already written, so a failed poll must not fail the command.
+    expect(result.id).toBe("evt-meet");
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("attaches a conference on update with conferenceDataVersion: 1", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    const result = await updateEvent(
+      api,
+      "cal1",
+      "My Cal",
+      "evt-meet",
+      { meet: true },
+      { generateRequestId: () => "fixed-request-id" },
+    );
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt-meet",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: { conferenceData: { createRequest: { requestId: "fixed-request-id" } } },
+    });
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("removes a conference by patching conferenceData: null", async () => {
+    const plain = {
+      id: "evt-meet",
+      start: { dateTime: "2026-09-01T10:00:00+09:00" },
+      end: { dateTime: "2026-09-01T11:00:00+09:00" },
+    };
+    const api = createConferenceApi(plain);
+
+    const result = await updateEvent(api, "cal1", "My Cal", "evt-meet", { removeMeet: true });
+
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "cal1",
+      eventId: "evt-meet",
+      sendUpdates: "none",
+      conferenceDataVersion: 1,
+      requestBody: { conferenceData: null },
+    });
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("leaves conferenceData untouched when neither meet nor removeMeet is given", async () => {
+    const api = createConferenceApi(successEvent("evt-meet"));
+
+    await updateEvent(api, "cal1", "My Cal", "evt-meet", { title: "Renamed" });
+
+    const patch = api.events.patch as ReturnType<typeof vi.fn>;
+    const params = patch.mock.calls[0]![0];
+    expect(params.requestBody).not.toHaveProperty("conferenceData");
+    expect(params).not.toHaveProperty("conferenceDataVersion");
   });
 });
 

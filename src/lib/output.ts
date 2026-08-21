@@ -252,6 +252,13 @@ export function formatEventDetailText(event: CalendarEvent): string {
   }
 
   lines.push("");
+  if (event.meet_link !== null) {
+    lines.push(`Meet: ${event.meet_link}`);
+  } else if (event.conference?.uri) {
+    // Not a Meet link, but the URL is how the user joins -- do not drop it.
+    const type = event.conference.type;
+    lines.push(`Conference: ${event.conference.uri}${type ? ` (${type})` : ""}`);
+  }
   lines.push(`Link: ${event.html_link}`);
 
   return lines.join("\n");

@@ -137,6 +137,7 @@ Options:
   --free                        Mark as free (transparent)
   --attendee, -a <email>        Invite an attendee (repeatable)
   --notify <all|external|none>  Invitation email scope (default: none)
+  --meet                        Create a Google Meet conference and attach it
   --dry-run                     Preview without executing
 ```
 
@@ -166,6 +167,7 @@ gcal add -t "Focus" -s "2026-01-24T09:00" --duration 2h --free         # Timed, 
 gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, with timezone
 gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite, no mail sent
 gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
+gcal add -t "Design review" -s "2026-01-24T10:00" --meet                # With a Meet link
 ```
 
 Attendees:
@@ -174,6 +176,29 @@ Attendees:
 - 招待できるのは自分が主催者のイベントのみ。他人のイベントに出席者を足すと API が 403 を返す。
 - 出席者を設定すると Google が主催者を自動的に追加するため、レスポンスの件数が指定数より 1 多くなることがある。
 - `responseStatus` を指定して作成しても、受信側の設定によっては `needsAction` にリセットされる（API の仕様）。
+
+Google Meet (`--meet`):
+- 全日イベントにも付けられる。API も Google カレンダーの Web UI も許可しているため、CLI 側で
+  独自に禁止はしない。
+- 会議の生成は非同期。CLI は最大 3 回（500ms → 1s → 2s）ポーリングし、それでも確定しなければ
+  `meet_link` を `null` のまま**成功として返し**、stderr に以下を出す。イベント自体は作成済みなので失敗扱いにしない。
+  ```
+  Note: Google Meet link is still being generated. Run `gcal show <id>` in a few seconds to get it.
+  ```
+- 会議方式は指定せずカレンダー既定に任せる。既定が Meet 以外（クラシック Hangouts や
+  サードパーティ会議アドオン）のカレンダーでは Meet 以外の会議が付く。その場合 `meet_link` は
+  `null` のままにし（Meet ではないものを Meet のリンクとして返さないため）、実際に付いた会議は
+  JSON の `conference` で返した上で stderr に以下を出す。
+  ```
+  Note: this calendar attached a conference of type "addOn", not Google Meet. Conference URL: https://...
+  ```
+- 上記 2 つの stderr 注記は `--quiet` では出さない。
+- 会議の作成そのものに失敗した場合（`createRequest.status` が `failure`）は `API_ERROR`。
+  **イベントは既に作成済みなので、エラーメッセージにそのイベント ID を含める。**
+- 会議を作れないカレンダーでは API が 400 を返す。`--meet` 指定時の 400 には
+  「`--meet` を外して再実行する」選択肢を添える。400 の原因は会議とは限らない（時刻範囲の不正など）ため、
+  原因を断定する書き方はしない。
+- 会議 ID は呼び出しごとに新規生成する。使い回すと同じ会議 URL が複数イベントで共有されてしまうため。
 
 Quiet mode (`-q`): Event ID only.
 
@@ -215,6 +240,8 @@ Options:
   --attendee, -a <email>        Replace the guest list (repeatable)
   --clear-attendees             Remove all attendees
   --notify <all|external|none>  Update email scope (default: none)
+  --meet                        Create a Google Meet conference and attach it
+  --remove-meet                 Remove the conference from the event
   --dry-run                     Preview without executing
 ```
 
@@ -254,6 +281,8 @@ gcal update abc123 --free                                                  # Tra
 gcal update abc123 --dry-run -t "Preview"                                  # Dry run
 gcal update abc123 -a alice@example.com                                    # Replace guest list
 gcal update abc123 --clear-attendees                                       # Remove all guests
+gcal update abc123 --meet                                                  # Attach a Meet link
+gcal update abc123 --remove-meet                                           # Drop the Meet link
 ```
 
 Attendees (**全置換**):
@@ -263,6 +292,14 @@ Attendees (**全置換**):
 - `--attendee` と `--clear-attendees` は同時に指定できない（意図の異なる 2 モードのため）。
 - `--notify` 単独では「更新」とみなさない。`--notify` だけを指定すると
   `at least one update option must be provided` エラーになる。
+
+Google Meet:
+- `--meet` / `--remove-meet` はそれぞれ単独で「更新」として成立する。
+- 2 つは同時に指定できない。
+- **どちらも指定しない `update` は既存の会議を保持する。** conferenceData を伴うリクエストは
+  この 2 つのフラグを指定したときだけ送るため、タイトル変更などが会議を巻き添えで消すことはない。
+- `--meet` の pending / 非 Meet / `failure` / 400 の挙動はすべて `gcal add` と同じ。
+- dry-run は `meet: true` または `remove_meet: true` を出す。
 
 Quiet mode (`-q`): Event ID only.
 

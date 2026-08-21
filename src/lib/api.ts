@@ -5,10 +5,12 @@ import type {
   AttendeeResponseStatus,
   ErrorCode,
   EventAttendee,
+  EventConference,
   Transparency,
 } from "../types/index.ts";
+import { randomUUID } from "node:crypto";
 import { AuthError } from "./auth.ts";
-import { MAX_PAGES, mapApiError } from "./api-utils.ts";
+import { MAX_PAGES, isGoogleApiError, mapApiError } from "./api-utils.ts";
 
 export { MAX_PAGES };
 
@@ -52,12 +54,14 @@ export interface GoogleCalendarApi {
       calendarId: string;
       requestBody: GoogleEventWriteBody;
       sendUpdates?: SendUpdates;
+      conferenceDataVersion?: number;
     }) => Promise<{ data: GoogleEvent }>;
     patch: (params: {
       calendarId: string;
       eventId: string;
       requestBody: Partial<GoogleEventWriteBody>;
       sendUpdates?: SendUpdates;
+      conferenceDataVersion?: number;
     }) => Promise<{ data: GoogleEvent }>;
     delete: (params: {
       calendarId: string;
@@ -96,6 +100,8 @@ export interface GoogleEventWriteBody {
   end?: { date?: string; dateTime?: string; timeZone?: string };
   transparency?: Transparency;
   attendees?: GoogleEventAttendeeWrite[];
+  /** A createRequest asks Google to allocate a conference; null detaches the existing one. */
+  conferenceData?: { createRequest: { requestId: string } } | null;
 }
 
 interface GoogleEventAttendeeWrite {
@@ -115,6 +121,8 @@ export interface CreateEventInput {
   transparency?: Transparency;
   attendees?: AttendeeInput[];
   sendUpdates?: SendUpdates;
+  /** Attach a freshly created Google Meet conference. */
+  meet?: boolean;
 }
 
 interface UpdateEventBase {
@@ -125,6 +133,10 @@ interface UpdateEventBase {
   /** Replaces the whole guest list; an empty array clears it. */
   attendees?: AttendeeInput[];
   sendUpdates?: SendUpdates;
+  /** Attach a freshly created Google Meet conference. Mutually exclusive with removeMeet. */
+  meet?: boolean;
+  /** Detach the conference currently attached to the event. */
+  removeMeet?: boolean;
 }
 
 interface UpdateEventTimeFields {
@@ -135,6 +147,23 @@ interface UpdateEventTimeFields {
 
 export type UpdateEventInput = UpdateEventBase &
   (UpdateEventTimeFields | { start?: never; end?: never; allDay?: never });
+
+export interface GoogleConferenceEntryPoint {
+  entryPointType?: string | null;
+  uri?: string | null;
+}
+
+export interface GoogleConferenceData {
+  createRequest?: {
+    requestId?: string | null;
+    status?: { statusCode?: string | null } | null;
+  } | null;
+  conferenceSolution?: { key?: { type?: string | null } | null; name?: string | null } | null;
+  entryPoints?: GoogleConferenceEntryPoint[] | null;
+}
+
+/** The one conference solution that is Google Meet. */
+export const MEET_SOLUTION_TYPE = "hangoutsMeet";
 
 export interface GoogleEventAttendee {
   email?: string | null;
@@ -156,6 +185,8 @@ export interface GoogleEvent {
   status?: string | null;
   transparency?: string | null;
   attendees?: GoogleEventAttendee[] | null;
+  hangoutLink?: string | null;
+  conferenceData?: GoogleConferenceData | null;
   created?: string | null;
   updated?: string | null;
 }
@@ -189,6 +220,34 @@ function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined)
   return result;
 }
 
+function normalizeConference(event: GoogleEvent): EventConference | null {
+  const data = event.conferenceData;
+  // Phone and SIP entry points are out of scope; only the video URL is surfaced.
+  const video = data?.entryPoints?.find((entry) => entry.entryPointType === "video");
+  const type = data?.conferenceSolution?.key?.type ?? null;
+  const uri = video?.uri ?? event.hangoutLink ?? null;
+  // A conference still being allocated has neither yet, and there is nothing to
+  // describe until it does.
+  if (type === null && uri === null) {
+    return null;
+  }
+  return { type, uri };
+}
+
+function normalizeMeetLink(event: GoogleEvent, conference: EventConference | null): string | null {
+  if (!conference) {
+    return null;
+  }
+  // A known non-Meet solution must not be passed off as a Meet link. hangoutLink
+  // cannot settle this: it predates Meet and is still set for the classic
+  // eventHangout and eventNamedHangout solutions.
+  if (conference.type !== null && conference.type !== MEET_SOLUTION_TYPE) {
+    return null;
+  }
+  // An absent solution stays ambiguous, and these are the best answers available.
+  return event.hangoutLink ?? conference.uri;
+}
+
 export function normalizeEvent(
   event: GoogleEvent,
   calendarId: string,
@@ -197,6 +256,8 @@ export function normalizeEvent(
   const allDay = Boolean(event.start?.date);
   const start = allDay ? (event.start?.date ?? "") : (event.start?.dateTime ?? "");
   const end = allDay ? (event.end?.date ?? "") : (event.end?.dateTime ?? "");
+  const conference = normalizeConference(event);
+  const meetLink = normalizeMeetLink(event, conference);
 
   return {
     id: event.id ?? "",
@@ -211,6 +272,8 @@ export function normalizeEvent(
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
     attendees: normalizeAttendees(event.attendees),
+    meet_link: meetLink,
+    conference,
     created: event.created ?? "",
     updated: event.updated ?? "",
   };
@@ -358,11 +421,102 @@ function buildAttendees(attendees: AttendeeInput[]): GoogleEventAttendeeWrite[] 
   });
 }
 
+/**
+ * Conference creation is asynchronous: the insert/patch response can come back
+ * with a `pending` status and no link yet. These are the waits between polls.
+ */
+const CONFERENCE_POLL_DELAYS_MS = [500, 1000, 2000];
+
+/** Injection points that let tests drive conference creation deterministically. */
+export interface ConferenceDeps {
+  generateRequestId?: () => string;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function conferenceStatus(event: GoogleEvent): string | undefined {
+  return event.conferenceData?.createRequest?.status?.statusCode ?? undefined;
+}
+
+function assertConferenceNotFailed(event: GoogleEvent): void {
+  if (conferenceStatus(event) === "failure") {
+    // The event itself was already written, so name it -- otherwise the user
+    // sees a bare failure and has no way to find or clean up what was created.
+    const saved = event.id ? ` The event was still written to the calendar as ${event.id}.` : "";
+    throw new ApiError(
+      "API_ERROR",
+      `Google Meet conference creation failed (createRequest status: failure).${saved}`,
+    );
+  }
+}
+
+/**
+ * Polls the event until its conference leaves the `pending` state. Returning a
+ * still-pending event is deliberate: the event itself was written successfully,
+ * so callers surface a null meet_link rather than failing the whole command.
+ */
+async function resolveConference(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  event: GoogleEvent,
+  deps: ConferenceDeps,
+): Promise<GoogleEvent> {
+  const sleep = deps.sleep ?? defaultSleep;
+  let current = event;
+
+  for (const delay of CONFERENCE_POLL_DELAYS_MS) {
+    assertConferenceNotFailed(current);
+    if (conferenceStatus(current) !== "pending") {
+      return current;
+    }
+    if (!current.id) {
+      return current;
+    }
+    await sleep(delay);
+    try {
+      const response = await api.events.get({ calendarId, eventId: current.id });
+      current = response.data;
+    } catch {
+      // The event is already written; a failed poll must not fail the command.
+      // Report what we last knew, which surfaces as a null meet_link.
+      return current;
+    }
+  }
+
+  assertConferenceNotFailed(current);
+  return current;
+}
+
+function buildConferenceRequest(deps: ConferenceDeps): { createRequest: { requestId: string } } {
+  // A reused requestId makes Google hand back the *same* conference, which would
+  // leak one meeting URL across unrelated events. Always mint a new one.
+  const generate = deps.generateRequestId ?? randomUUID;
+  return { createRequest: { requestId: generate() } };
+}
+
+// Deliberately phrased as a possibility: a 400 on a --meet request is often
+// about the conference, but it can equally be a bad time range, and asserting
+// the wrong cause sends the user down the wrong path.
+const MEET_400_HINT =
+  "(--meet was requested; if this calendar cannot host conferences, retry without it.)";
+
+/** Rethrows API errors, appending a hint when a conference request drew a 400. */
+function mapWriteError(error: unknown, meetRequested: boolean): never {
+  if (meetRequested && isGoogleApiError(error) && error.code === 400) {
+    throw new ApiError("API_ERROR", `${error.message} ${MEET_400_HINT}`);
+  }
+  mapApiError(error);
+}
+
 export async function createEvent(
   api: GoogleCalendarApi,
   calendarId: string,
   calendarName: string,
   input: CreateEventInput,
+  deps: ConferenceDeps = {},
 ): Promise<CalendarEvent> {
   try {
     const requestBody: GoogleEventWriteBody = {
@@ -376,14 +530,22 @@ export async function createEvent(
     if (input.attendees !== undefined) {
       requestBody.attendees = buildAttendees(input.attendees);
     }
-    const response = await api.events.insert({
+    const params: Parameters<GoogleCalendarApi["events"]["insert"]>[0] = {
       calendarId,
       requestBody,
       sendUpdates: input.sendUpdates ?? DEFAULT_SEND_UPDATES,
-    });
-    return normalizeEvent(response.data, calendarId, calendarName);
+    };
+    if (input.meet) {
+      requestBody.conferenceData = buildConferenceRequest(deps);
+      params.conferenceDataVersion = 1;
+    }
+    const response = await api.events.insert(params);
+    const data = input.meet
+      ? await resolveConference(api, calendarId, response.data, deps)
+      : response.data;
+    return normalizeEvent(data, calendarId, calendarName);
   } catch (error: unknown) {
-    mapApiError(error);
+    mapWriteError(error, input.meet === true);
   }
 }
 
@@ -393,6 +555,7 @@ export async function updateEvent(
   calendarName: string,
   eventId: string,
   input: UpdateEventInput,
+  deps: ConferenceDeps = {},
 ): Promise<CalendarEvent> {
   try {
     const { start, end, allDay } = input as Record<string, unknown>;
@@ -420,15 +583,28 @@ export async function updateEvent(
         buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone),
       );
     }
-    const response = await api.events.patch({
+    const params: Parameters<GoogleCalendarApi["events"]["patch"]>[0] = {
       calendarId,
       eventId,
       requestBody,
       sendUpdates: input.sendUpdates ?? DEFAULT_SEND_UPDATES,
-    });
-    return normalizeEvent(response.data, calendarId, calendarName);
+    };
+    // conferenceDataVersion is opt-in: without it the patch leaves any existing
+    // conference alone, which is what an update that never mentions Meet wants.
+    if (input.meet) {
+      requestBody.conferenceData = buildConferenceRequest(deps);
+      params.conferenceDataVersion = 1;
+    } else if (input.removeMeet) {
+      requestBody.conferenceData = null;
+      params.conferenceDataVersion = 1;
+    }
+    const response = await api.events.patch(params);
+    const data = input.meet
+      ? await resolveConference(api, calendarId, response.data, deps)
+      : response.data;
+    return normalizeEvent(data, calendarId, calendarName);
   } catch (error: unknown) {
-    mapApiError(error);
+    mapWriteError(error, input.meet === true);
   }
 }
 

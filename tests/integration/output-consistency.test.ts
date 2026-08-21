@@ -87,6 +87,7 @@ describe("JSON output envelope consistency across all commands", () => {
       createEvent: (calId, calName, input) => createEvent(mockApi, calId, calName, input),
       loadConfig: () => loadConfig(mockFs),
       write: out.write,
+      writeStderr: () => {},
     };
 
     await handleAdd(

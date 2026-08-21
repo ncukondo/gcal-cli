@@ -55,6 +55,17 @@ export interface EventAttendee {
   self: boolean;
 }
 
+/**
+ * A calendar can be configured to host conferences other than Google Meet --
+ * classic Hangouts, or a third-party add-on such as Zoom. `type` carries the
+ * solution Google actually allocated (`hangoutsMeet` is the Meet one, and only
+ * that one fills `meet_link`); it is null when the response omits the solution.
+ */
+export interface EventConference {
+  type: string | null;
+  uri: string | null;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -68,6 +79,10 @@ export interface CalendarEvent {
   status: EventStatus;
   transparency: Transparency;
   attendees: EventAttendee[];
+  /** Google Meet video URL, or null when the event has no Meet conference. */
+  meet_link: string | null;
+  /** Whatever conference is attached, Meet or not. See EventConference. */
+  conference: EventConference | null;
   created: string;
   updated: string;
 }

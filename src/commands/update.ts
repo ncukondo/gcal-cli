@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { collect } from "./shared.ts";
+import { collect, meetFollowUpNote } from "./shared.ts";
 import type { GoogleCalendarApi, UpdateEventInput } from "../lib/api.ts";
 import { updateEvent, ApiError } from "../lib/api.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
@@ -40,6 +40,10 @@ export interface UpdateHandlerOptions {
   attendee?: string[];
   clearAttendees?: boolean;
   notify?: string;
+  /** Attach a freshly created Google Meet conference. */
+  meet?: boolean;
+  /** Detach the conference currently attached to the event. */
+  removeMeet?: boolean;
 }
 
 interface ResolvedTime {
@@ -277,7 +281,9 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     opts.busy !== undefined ||
     opts.free !== undefined ||
     (opts.attendee !== undefined && opts.attendee.length > 0) ||
-    opts.clearAttendees === true;
+    opts.clearAttendees === true ||
+    opts.meet === true ||
+    opts.removeMeet === true;
 
   if (!hasUpdate) {
     throw new ApiError("INVALID_ARGS", "at least one update option must be provided");
@@ -298,6 +304,11 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   if (replacesAttendees) {
     input.attendees = attendees;
+  }
+  if (opts.meet) {
+    input.meet = true;
+  } else if (opts.removeMeet) {
+    input.removeMeet = true;
   }
   input.sendUpdates = sendUpdates;
 
@@ -341,6 +352,9 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (input.transparency !== undefined) changes.transparency = input.transparency;
     if (replacesAttendees) changes.attendees = attendees.map((a) => a.email);
     if (opts.notify !== undefined) changes.notify = opts.notify;
+    // The requestId is minted by the API layer, so a dry run never allocates one.
+    if (opts.meet) changes.meet = true;
+    if (opts.removeMeet) changes.remove_meet = true;
     const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
     if (withTime.start !== undefined) changes.start = withTime.start;
     if (withTime.end !== undefined) changes.end = withTime.end;
@@ -367,12 +381,21 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
         lines.push(`  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`);
       }
       if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
+      if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
+      if (changes.remove_meet !== undefined) {
+        lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
+      }
       write(lines.join("\n"));
     }
     return { exitCode: ExitCode.SUCCESS };
   }
 
   const updated = await updateEvent(api, calendarId, calendarName, eventId, input);
+
+  if (opts.meet && !opts.quiet) {
+    const note = meetFollowUpNote(updated);
+    if (note) opts.writeStderr(note);
+  }
 
   if (format === "json") {
     write(formatJsonSuccess({ event: updated, message: "Event updated" }));
@@ -419,7 +442,14 @@ export function createUpdateCommand(): Command {
     "--notify <scope>",
     `Send update emails to ${NOTIFY_CHOICES.join(" | ")} (default: none)`,
   );
+  cmd.option("--meet", "Create a Google Meet conference and attach it");
+  cmd.option("--remove-meet", "Remove the Google Meet conference from the event");
   cmd.option("--dry-run", "Preview without executing");
+
+  const meetOpt = cmd.options.find((o) => o.long === "--meet")!;
+  const removeMeetOpt = cmd.options.find((o) => o.long === "--remove-meet")!;
+  meetOpt.conflicts(["removeMeet"]);
+  removeMeetOpt.conflicts(["meet"]);
 
   const attendeeOpt = cmd.options.find((o) => o.long === "--attendee")!;
   const clearAttendeesOpt = cmd.options.find((o) => o.long === "--clear-attendees")!;
@@ -452,6 +482,8 @@ Examples:
   gcal update abc123 --dry-run -t "Preview"                                  # Dry run
   gcal update abc123 -a alice@example.com                                    # Replace guest list
   gcal update abc123 --clear-attendees                                       # Remove all guests
+  gcal update abc123 --meet                                                  # Attach a Meet link
+  gcal update abc123 --remove-meet                                           # Drop the Meet link
 `,
   );
 

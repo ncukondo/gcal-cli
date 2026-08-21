@@ -26,6 +26,8 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    meet_link: null,
+    conference: null,
     created: "2026-01-01T00:00:00Z",
     updated: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -678,6 +680,40 @@ describe("formatEventDetailText", () => {
       "Link: https://calendar.google.com/event?id=test",
     ].join("\n");
     expect(result).toBe(expected);
+  });
+  it("shows the Meet link just above the calendar link", () => {
+    const event = makeEvent({
+      meet_link: "https://meet.google.com/abc-defg-hij",
+      html_link: "https://calendar.google.com/event?id=test",
+    });
+    const result = formatEventDetailText(event);
+    expect(result).toContain("Meet: https://meet.google.com/abc-defg-hij");
+    expect(result.indexOf("Meet:")).toBeLessThan(result.indexOf("Link:"));
+  });
+
+  it("omits the Meet line when the event has no conference", () => {
+    const event = makeEvent({ meet_link: null });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Meet:");
+  });
+
+  it("shows a non-Meet conference under its own label", () => {
+    const event = makeEvent({
+      meet_link: null,
+      conference: { type: "addOn", uri: "https://example.zoom.us/j/123" },
+    });
+    const result = formatEventDetailText(event);
+    // The URL must not disappear just because it is not a Meet link.
+    expect(result).toContain("Conference: https://example.zoom.us/j/123 (addOn)");
+    expect(result).not.toContain("Meet:");
+    expect(result.indexOf("Conference:")).toBeLessThan(result.indexOf("Link:"));
+  });
+
+  it("omits the conference line when there is no conference", () => {
+    const event = makeEvent({ meet_link: null, conference: null });
+    const result = formatEventDetailText(event);
+    expect(result).not.toContain("Meet:");
+    expect(result).not.toContain("Conference:");
   });
 });
 

@@ -120,6 +120,55 @@ describe("createGoogleCalendarApi", () => {
     expect(mockDelete).toHaveBeenCalledWith(expect.objectContaining({ sendUpdates: "none" }));
   });
 
+  it("forwards conferenceDataVersion and a null conferenceData to insert and patch", async () => {
+    const mockInsert = vi.fn().mockResolvedValue({ data: { id: "evt1" } });
+    const mockPatch = vi.fn().mockResolvedValue({ data: { id: "evt1" } });
+    const mockCalendar = {
+      calendarList: { list: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        insert: mockInsert,
+        patch: mockPatch,
+        delete: vi.fn(),
+      },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const api: GoogleCalendarApi = createGoogleCalendarApi(mockCalendar as any);
+    await api.events.insert({
+      calendarId: "primary",
+      requestBody: {
+        summary: "Meeting",
+        conferenceData: { createRequest: { requestId: "req-1" } },
+      },
+      conferenceDataVersion: 1,
+    });
+    await api.events.patch({
+      calendarId: "primary",
+      eventId: "evt1",
+      requestBody: { conferenceData: null },
+      conferenceDataVersion: 1,
+    });
+
+    // Dropping either of these at this boundary would make every --meet a
+    // silent no-op, so the conversion is pinned here rather than assumed.
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conferenceDataVersion: 1,
+        requestBody: expect.objectContaining({
+          conferenceData: { createRequest: { requestId: "req-1" } },
+        }),
+      }),
+    );
+    expect(mockPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conferenceDataVersion: 1,
+        requestBody: { conferenceData: null },
+      }),
+    );
+  });
+
   it("passes pageToken parameter to calendarList.list", async () => {
     const mockList = vi.fn().mockResolvedValue({
       data: { items: [] },

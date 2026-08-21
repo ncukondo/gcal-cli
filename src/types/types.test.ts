@@ -39,6 +39,8 @@ describe("CalendarEvent", () => {
       status: "confirmed",
       transparency: "opaque",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     };
@@ -59,6 +61,8 @@ describe("CalendarEvent", () => {
       status: "tentative",
       transparency: "transparent",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2026-01-15T00:00:00Z",
       updated: "2026-02-21T08:00:00Z",
     };
@@ -79,6 +83,8 @@ describe("CalendarEvent", () => {
       status: "confirmed",
       transparency: "transparent",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2025-12-01T00:00:00Z",
       updated: "2025-12-01T00:00:00Z",
     };
@@ -296,6 +302,8 @@ describe("negative type tests (@ts-expect-error)", () => {
       status: "confirmed",
       transparency: "opaque",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     });
@@ -317,6 +325,8 @@ describe("negative type tests (@ts-expect-error)", () => {
       status: "maybe",
       transparency: "opaque",
       attendees: [],
+      meet_link: null,
+      conference: null,
       created: "2026-01-01T00:00:00Z",
       updated: "2026-02-20T12:00:00Z",
     });
