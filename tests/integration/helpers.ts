@@ -12,6 +12,8 @@ export interface MockApiData {
   deletedEvents?: { calendarId: string; eventId: string }[];
   errors?: {
     listEvents?: Error;
+    /** Fails only the listed calendar ids, leaving the others to succeed. */
+    listEventsByCalendar?: Record<string, Error>;
     getEvent?: Error;
     insertEvent?: Error;
     patchEvent?: Error;
@@ -33,6 +35,8 @@ export function createMockApi(data: MockApiData = {}): GoogleCalendarApi {
     events: {
       list: vi.fn().mockImplementation(async (params: { calendarId: string }) => {
         if (data.errors?.listEvents) throw data.errors.listEvents;
+        const perCalendar = data.errors?.listEventsByCalendar?.[params.calendarId];
+        if (perCalendar) throw perCalendar;
         const events = data.events?.[params.calendarId] ?? [];
         return { data: { items: events } };
       }),
