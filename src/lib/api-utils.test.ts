@@ -185,4 +185,32 @@ describe("mapApiError", () => {
     const original = new Error("boom");
     expect(mapped(original)).toBe(original);
   });
+
+  // The order the three outcomes are tried in is load-bearing, so pin it here:
+  // permission -> FORBIDDEN, rate limit -> RATE_LIMITED, anything else ->
+  // AUTH_REQUIRED, the safe default that at worst wastes a re-auth.
+  describe("403 routing priority", () => {
+    function multi(...reasons: string[]): Error & { code: number } {
+      return Object.assign(new Error("Forbidden"), {
+        code: 403,
+        errors: reasons.map((reason) => ({ domain: "global", reason, message: "Forbidden" })),
+      });
+    }
+
+    it("prefers FORBIDDEN over RATE_LIMITED when a 403 carries both", () => {
+      expect(mapped(multi("requiredAccessLevel", "rateLimitExceeded")).code).toBe("FORBIDDEN");
+    });
+
+    it("prefers FORBIDDEN regardless of which reason comes first", () => {
+      expect(mapped(multi("rateLimitExceeded", "requiredAccessLevel")).code).toBe("FORBIDDEN");
+    });
+
+    it("prefers RATE_LIMITED over the AUTH_REQUIRED fallback", () => {
+      expect(mapped(multi("someReasonWeHaveNeverSeen", "quotaExceeded")).code).toBe("RATE_LIMITED");
+    });
+
+    it("keeps the AUTH_REQUIRED fallback when no reason is routed", () => {
+      expect(mapped(multi("someReasonWeHaveNeverSeen")).code).toBe("AUTH_REQUIRED");
+    });
+  });
 });
