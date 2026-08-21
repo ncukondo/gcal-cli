@@ -235,6 +235,7 @@ Timezone: Asia/Tokyo
 | `NOT_FOUND` | Event or calendar not found |
 | `INVALID_ARGS` | Invalid command arguments |
 | `API_ERROR` | Google API error |
+| `FORBIDDEN` | Permission denied (read-only calendar, non-organizer); re-authenticating does not help |
 | `CONFIG_ERROR` | Configuration file error |
 
 ## Data Structures

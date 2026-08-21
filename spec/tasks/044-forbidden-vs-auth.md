@@ -129,18 +129,19 @@ Error: <API の原文> You may not have permission to change this event; only it
 - [x] **先に事実確認**: 実 API が 403 で返す本文と `reason` を確認する
       → Design Decisions の「確認済み」節を参照。`e.errors[0].reason` から読め、
       読み取り専用カレンダーは `requiredAccessLevel` を返す
-- [ ] `src/lib/api-utils.ts`: `isGoogleApiError()` を `reason` を読めるよう拡張（型と実装）
-- [ ] `src/types/index.ts`: `ErrorCode` に `FORBIDDEN` を追加
-- [ ] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `FORBIDDEN: ExitCode.GENERAL` を追加
-- [ ] `src/cli.ts`: `getErrorCode()` の `validCodes` に `FORBIDDEN` を追加
-- [ ] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の振り分け
+- [x] `src/lib/api-utils.ts`: `isGoogleApiError()` を `reason` を読めるよう拡張（型と実装）
+- [x] `src/types/index.ts`: `ErrorCode` に `FORBIDDEN` を追加
+- [x] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `FORBIDDEN: ExitCode.GENERAL` を追加
+- [x] `src/cli.ts`: `getErrorCode()` の `validCodes` に `FORBIDDEN` を追加
+- [x] `src/lib/api-utils.test.ts` / `api-utils.ts`: 403 の振り分け
       （権限不足 → `FORBIDDEN` / スコープ不足 → `AUTH_REQUIRED` / `reason` 不明 → `AUTH_REQUIRED`）
-- [ ] `src/lib/api.ts`: `isAuthRequiredError()` が `FORBIDDEN` を含まないことをテストで固定
-- [ ] `src/commands/init.test.ts`: `FORBIDDEN` では自動再認証が起動しないこと
-- [ ] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること（`mapApiError()` 共用の確認）
-- [ ] `spec/output.md`: Error Codes 表に `FORBIDDEN` を追加
-- [ ] `spec/overview.md`: 必要なら Exit Codes の説明を補足
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `src/lib/api.ts`: `isAuthRequiredError()` が `FORBIDDEN` を含まないことをテストで固定
+- [x] `src/commands/init.test.ts`: `FORBIDDEN` では自動再認証が起動しないこと
+- [x] `src/lib/tasks-api.test.ts`: Tasks 側も同じ振り分けになること（`mapApiError()` 共用の確認）
+- [x] `spec/output.md`: Error Codes 表に `FORBIDDEN` を追加
+- [x] `spec/overview.md`: 必要なら Exit Codes の説明を補足
+- [x] `vitest run src tests/integration` / `lint` / `format:check` / `typecheck` pass
+      （E2E は実 API を叩くため本作業では未実行）
 
 ## E2E Test
 
@@ -152,18 +153,19 @@ Error: <API の原文> You may not have permission to change this event; only it
 - [ ] 書き込み可能なカレンダーでは同じ操作が成功すること（対照）
 
 環境変数 `GCAL_E2E_READONLY_CALENDAR_ID` で読み取り専用カレンダーを指定し、未設定ならスキップする。
+`tests/e2e/forbidden.test.ts` に実装済み。**未実行**（実 API を叩くため）。
 非主催者イベント（`forbiddenForNonOrganizer`）は第2アカウントが要るため E2E では扱わず、
 ユニットテストでモックする。
 
 ## Acceptance Criteria
 
 - [x] 実 API が返す 403 の `reason` を確認し、その根拠がタスクファイルに記録されている
-- [ ] 権限不足の 403 が `FORBIDDEN` / 終了コード 1 になる
-- [ ] 認証由来の 403（スコープ不足）は従来どおり `AUTH_REQUIRED` / 終了コード 2 のまま
-- [ ] `reason` が読めない 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
-- [ ] 401 の扱いは一切変わらない
-- [ ] `gcal init` が `FORBIDDEN` で自動再認証を起動しない
-- [ ] Calendar 側と Tasks 側の両方で同じ振り分けになる
-- [ ] エラーメッセージが API の原文を保ち、原因を断定していない
-- [ ] `spec/output.md` の Error Codes 表が実装と一致している
-- [ ] 既存テストが pass する
+- [x] 権限不足の 403 が `FORBIDDEN` / 終了コード 1 になる
+- [x] 認証由来の 403（スコープ不足）は従来どおり `AUTH_REQUIRED` / 終了コード 2 のまま
+- [x] `reason` が読めない 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
+- [x] 401 の扱いは一切変わらない
+- [x] `gcal init` が `FORBIDDEN` で自動再認証を起動しない
+- [x] Calendar 側と Tasks 側の両方で同じ振り分けになる
+- [x] エラーメッセージが API の原文を保ち、原因を断定していない
+- [x] `spec/output.md` の Error Codes 表が実装と一致している
+- [x] 既存テストが pass する

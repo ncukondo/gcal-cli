@@ -43,6 +43,9 @@ Only calendars containing "main" in their name are targeted by default.
 | 2 | Authentication error |
 | 3 | Argument error |
 
+Exit code 2 means re-authenticating can fix the problem. A permission error
+(`FORBIDDEN`) exits 1 instead, because `gcal auth` does not grant access.
+
 ## Related Specs
 
 - [commands.md](./commands.md) - Command specifications
