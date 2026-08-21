@@ -101,6 +101,7 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "INVALID_ARGS"
   | "API_ERROR"
+  | "FORBIDDEN"
   | "CONFIG_ERROR";
 
 export interface SuccessResponse<T> {

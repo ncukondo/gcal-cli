@@ -59,6 +59,7 @@ function getErrorCode(error: unknown): ErrorCode {
       "NOT_FOUND",
       "INVALID_ARGS",
       "API_ERROR",
+      "FORBIDDEN",
       "CONFIG_ERROR",
     ];
     if (validCodes.includes(code as ErrorCode)) {

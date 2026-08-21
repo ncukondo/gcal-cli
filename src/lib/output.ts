@@ -270,6 +270,7 @@ const ERROR_CODE_EXIT_MAP: Record<ErrorCode, number> = {
   NOT_FOUND: ExitCode.GENERAL,
   INVALID_ARGS: ExitCode.ARGUMENT,
   API_ERROR: ExitCode.GENERAL,
+  FORBIDDEN: ExitCode.GENERAL,
   CONFIG_ERROR: ExitCode.GENERAL,
 };
 
