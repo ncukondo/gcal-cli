@@ -45,6 +45,7 @@ describe("normalizeEvent", () => {
       status: "confirmed",
       transparency: "opaque",
       attendees: [],
+      meet_link: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-01T12:00:00.000Z",
     });
@@ -79,6 +80,7 @@ describe("normalizeEvent", () => {
       status: "tentative",
       transparency: "transparent",
       attendees: [],
+      meet_link: null,
       created: "2024-03-01T10:00:00.000Z",
       updated: "2024-03-02T08:00:00.000Z",
     });
@@ -206,6 +208,81 @@ describe("normalizeEvent", () => {
 
     expect(result.attendees).toHaveLength(1);
     expect(result.attendees[0]?.email).toBe("dave@example.com");
+  });
+
+  it("reads meet_link from hangoutLink", () => {
+    const googleEvent = {
+      id: "evt10",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("falls back to the video entry point when hangoutLink is absent", () => {
+    const googleEvent = {
+      id: "evt11",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        entryPoints: [
+          { entryPointType: "phone", uri: "tel:+81-3-0000-0000" },
+          { entryPointType: "video", uri: "https://meet.google.com/xyz-uvwx-rst" },
+        ],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/xyz-uvwx-rst");
+  });
+
+  it("prefers hangoutLink over the video entry point", () => {
+    const googleEvent = {
+      id: "evt12",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      hangoutLink: "https://meet.google.com/from-hangout-link",
+      conferenceData: {
+        entryPoints: [{ entryPointType: "video", uri: "https://meet.google.com/from-entry-point" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBe("https://meet.google.com/from-hangout-link");
+  });
+
+  it("returns null meet_link when the event has no conference", () => {
+    const googleEvent = {
+      id: "evt13",
+      start: { date: "2024-03-15" },
+      end: { date: "2024-03-16" },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
+  });
+
+  it("returns null meet_link when conferenceData has no video entry point", () => {
+    const googleEvent = {
+      id: "evt14",
+      start: { dateTime: "2024-03-15T09:00:00+09:00" },
+      end: { dateTime: "2024-03-15T10:00:00+09:00" },
+      conferenceData: {
+        createRequest: { requestId: "req-1", status: { statusCode: "pending" } },
+        entryPoints: [{ entryPointType: "phone", uri: "tel:+81-3-0000-0000" }],
+      },
+    };
+
+    const result = normalizeEvent(googleEvent, "cal1", "Cal");
+
+    expect(result.meet_link).toBeNull();
   });
 });
 

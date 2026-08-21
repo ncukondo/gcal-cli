@@ -21,6 +21,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    meet_link: null,
     created: "2026-02-20T00:00:00Z",
     updated: "2026-02-20T00:00:00Z",
     ...overrides,

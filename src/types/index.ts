@@ -68,6 +68,8 @@ export interface CalendarEvent {
   status: EventStatus;
   transparency: Transparency;
   attendees: EventAttendee[];
+  /** Google Meet video URL, or null when the event has no conference attached. */
+  meet_link: string | null;
   created: string;
   updated: string;
 }

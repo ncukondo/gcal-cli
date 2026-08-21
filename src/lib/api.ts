@@ -136,6 +136,19 @@ interface UpdateEventTimeFields {
 export type UpdateEventInput = UpdateEventBase &
   (UpdateEventTimeFields | { start?: never; end?: never; allDay?: never });
 
+export interface GoogleConferenceEntryPoint {
+  entryPointType?: string | null;
+  uri?: string | null;
+}
+
+export interface GoogleConferenceData {
+  createRequest?: {
+    requestId?: string | null;
+    status?: { statusCode?: string | null } | null;
+  } | null;
+  entryPoints?: GoogleConferenceEntryPoint[] | null;
+}
+
 export interface GoogleEventAttendee {
   email?: string | null;
   displayName?: string | null;
@@ -156,6 +169,8 @@ export interface GoogleEvent {
   status?: string | null;
   transparency?: string | null;
   attendees?: GoogleEventAttendee[] | null;
+  hangoutLink?: string | null;
+  conferenceData?: GoogleConferenceData | null;
   created?: string | null;
   updated?: string | null;
 }
@@ -189,6 +204,17 @@ function normalizeAttendees(attendees: GoogleEventAttendee[] | null | undefined)
   return result;
 }
 
+function normalizeMeetLink(event: GoogleEvent): string | null {
+  if (event.hangoutLink) {
+    return event.hangoutLink;
+  }
+  // Phone and SIP entry points are out of scope; only the video URL is surfaced.
+  const video = event.conferenceData?.entryPoints?.find(
+    (entry) => entry.entryPointType === "video",
+  );
+  return video?.uri ?? null;
+}
+
 export function normalizeEvent(
   event: GoogleEvent,
   calendarId: string,
@@ -211,6 +237,7 @@ export function normalizeEvent(
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
     attendees: normalizeAttendees(event.attendees),
+    meet_link: normalizeMeetLink(event),
     created: event.created ?? "",
     updated: event.updated ?? "",
   };
