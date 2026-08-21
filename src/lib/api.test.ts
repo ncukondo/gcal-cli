@@ -1245,6 +1245,139 @@ describe("attendees and notifications", () => {
   });
 });
 
+describe("updateEvent attendee diff", () => {
+  const patchedEvent = {
+    id: "evt1",
+    summary: "Meeting",
+    start: { dateTime: "2024-03-15T09:00:00+09:00" },
+    end: { dateTime: "2024-03-15T10:00:00+09:00" },
+  };
+
+  /** Raw attendee objects as the API returns them, fields the CLI models or not. */
+  function withAttendees(attendees: unknown[]) {
+    return { ...patchedEvent, attendees };
+  }
+
+  function patchedAttendees(api: GoogleCalendarApi): unknown {
+    return vi.mocked(api.events.patch).mock.calls[0]?.[0]?.requestBody?.attendees;
+  }
+
+  it("appends a guest and writes the existing attendees back untouched", async () => {
+    const api = createMockApi({
+      evt1: withAttendees([
+        {
+          email: "alice@example.com",
+          responseStatus: "accepted",
+          comment: "joining 10 min late",
+          additionalGuests: 2,
+        },
+      ]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: { add: [{ email: "bob@example.com" }], removeEmails: [] },
+    });
+
+    expect(api.events.get).toHaveBeenCalledTimes(1);
+    expect(patchedAttendees(api)).toEqual([
+      {
+        email: "alice@example.com",
+        responseStatus: "accepted",
+        comment: "joining 10 min late",
+        additionalGuests: 2,
+      },
+      { email: "bob@example.com" },
+    ]);
+  });
+
+  it("removes by address case-insensitively and keeps attendees that have none", async () => {
+    const api = createMockApi({
+      evt1: withAttendees([
+        { email: "alice@example.com", responseStatus: "accepted" },
+        { displayName: "Meeting Room A", resource: true, responseStatus: "accepted" },
+        { email: "bob@example.com", responseStatus: "needsAction" },
+      ]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: { add: [], removeEmails: ["BOB@Example.COM"] },
+    });
+
+    expect(patchedAttendees(api)).toEqual([
+      { email: "alice@example.com", responseStatus: "accepted" },
+      { displayName: "Meeting Room A", resource: true, responseStatus: "accepted" },
+    ]);
+  });
+
+  it("omits attendees from the patch when nothing was added or removed", async () => {
+    const api = createMockApi({
+      evt1: withAttendees([{ email: "alice@example.com", responseStatus: "accepted" }]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: {
+        add: [{ email: "ALICE@example.com" }],
+        removeEmails: ["dave@example.com"],
+      },
+      sendUpdates: "all",
+    });
+
+    const params = vi.mocked(api.events.patch).mock.calls[0]?.[0];
+    expect(params?.requestBody).not.toHaveProperty("attendees");
+    expect(params?.sendUpdates).toBe("all");
+  });
+
+  it("still applies the other fields when the diff turns out to be empty", async () => {
+    const api = createMockApi({
+      evt1: withAttendees([{ email: "alice@example.com" }]),
+      patched: patchedEvent,
+    });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      title: "Renamed",
+      attendeeDiff: { add: [], removeEmails: ["dave@example.com"] },
+    });
+
+    const params = vi.mocked(api.events.patch).mock.calls[0]?.[0];
+    expect(params?.requestBody.summary).toBe("Renamed");
+    expect(params?.requestBody).not.toHaveProperty("attendees");
+  });
+
+  it("treats a missing attendees array as an empty guest list", async () => {
+    const api = createMockApi({ evt1: patchedEvent, patched: patchedEvent });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendeeDiff: { add: [{ email: "bob@example.com" }], removeEmails: [] },
+    });
+
+    expect(patchedAttendees(api)).toEqual([{ email: "bob@example.com" }]);
+  });
+
+  it("does not fetch the event when no attendee diff is given", async () => {
+    const api = createMockApi({ patched: patchedEvent });
+
+    await updateEvent(api, "cal1", "Cal", "evt1", { title: "Renamed" });
+
+    expect(api.events.get).not.toHaveBeenCalled();
+  });
+
+  it("rejects a whole-list replacement combined with a diff", async () => {
+    const api = createMockApi({ evt1: withAttendees([]), patched: patchedEvent });
+
+    const error = await updateEvent(api, "cal1", "Cal", "evt1", {
+      attendees: [{ email: "alice@example.com" }],
+      attendeeDiff: { add: [{ email: "bob@example.com" }], removeEmails: [] },
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "INVALID_ARGS" });
+    expect(api.events.patch).not.toHaveBeenCalled();
+  });
+});
+
 describe("Google Meet conferencing", () => {
   const timedInput: CreateEventInput = {
     title: "Design review",

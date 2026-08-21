@@ -99,7 +99,12 @@ export interface GoogleEventWriteBody {
   start?: { date?: string; dateTime?: string; timeZone?: string };
   end?: { date?: string; dateTime?: string; timeZone?: string };
   transparency?: Transparency;
-  attendees?: GoogleEventAttendeeWrite[];
+  /**
+   * Raw attendee objects, so a diff can write back what it read without
+   * dropping the fields this module does not model. GoogleEventAttendeeWrite
+   * is assignable to GoogleEventAttendee, so the replace path still fits.
+   */
+  attendees?: GoogleEventAttendee[];
   /** A createRequest asks Google to allocate a conference; null detaches the existing one. */
   conferenceData?: { createRequest: { requestId: string } } | null;
 }
@@ -125,6 +130,12 @@ export interface CreateEventInput {
   meet?: boolean;
 }
 
+/** An in-place edit of the guest list, resolved here against the current attendees. */
+export interface AttendeeDiffInput {
+  add: AttendeeInput[];
+  removeEmails: string[];
+}
+
 interface UpdateEventBase {
   title?: string;
   timeZone?: string;
@@ -132,6 +143,12 @@ interface UpdateEventBase {
   transparency?: Transparency;
   /** Replaces the whole guest list; an empty array clears it. */
   attendees?: AttendeeInput[];
+  /**
+   * Edits the guest list in place instead of replacing it. Resolved against the
+   * raw attendee objects read back from the API, so anything this module does
+   * not model survives the write. Mutually exclusive with `attendees`.
+   */
+  attendeeDiff?: AttendeeDiffInput;
   sendUpdates?: SendUpdates;
   /** Attach a freshly created Google Meet conference. Mutually exclusive with removeMeet. */
   meet?: boolean;
@@ -172,6 +189,13 @@ export interface GoogleEventAttendee {
   optional?: boolean | null;
   organizer?: boolean | null;
   self?: boolean | null;
+  /**
+   * Not surfaced by the CLI, but an attendee diff writes the whole array back,
+   * so these have to survive the round trip. Attendee objects are passed
+   * through by reference on that path; any other field Google adds survives too.
+   */
+  comment?: string | null;
+  additionalGuests?: number | null;
 }
 
 // Google API response types (partial, only fields we use)
@@ -411,14 +435,44 @@ function buildTimeFields(
   return { start: startField, end: endField };
 }
 
+function buildAttendee(attendee: AttendeeInput): GoogleEventAttendeeWrite {
+  const entry: GoogleEventAttendeeWrite = { email: attendee.email };
+  if (attendee.displayName !== undefined) entry.displayName = attendee.displayName;
+  if (attendee.optional !== undefined) entry.optional = attendee.optional;
+  if (attendee.responseStatus !== undefined) entry.responseStatus = attendee.responseStatus;
+  return entry;
+}
+
 function buildAttendees(attendees: AttendeeInput[]): GoogleEventAttendeeWrite[] {
-  return attendees.map((attendee) => {
-    const entry: GoogleEventAttendeeWrite = { email: attendee.email };
-    if (attendee.displayName !== undefined) entry.displayName = attendee.displayName;
-    if (attendee.optional !== undefined) entry.optional = attendee.optional;
-    if (attendee.responseStatus !== undefined) entry.responseStatus = attendee.responseStatus;
-    return entry;
-  });
+  return attendees.map(buildAttendee);
+}
+
+/**
+ * Applies a guest list diff to the attendee objects exactly as the API returned
+ * them. Kept attendees are passed through by reference rather than rebuilt, so
+ * fields this module does not model -- `comment`, `additionalGuests`, and the
+ * rooms and resources that carry no address at all -- are not silently dropped.
+ * `changed` is false when the diff was a no-op, which lets the caller leave
+ * `attendees` out of the patch instead of rewriting an identical guest list.
+ */
+function mergeRawAttendees(
+  current: GoogleEventAttendee[],
+  diff: AttendeeDiffInput,
+): { attendees: GoogleEventAttendee[]; changed: boolean } {
+  // Google matches addresses case-insensitively, so the diff has to as well.
+  const removeKeys = new Set(diff.removeEmails.map((email) => email.toLowerCase()));
+  const kept = current.filter((a) => !(a.email && removeKeys.has(a.email.toLowerCase())));
+
+  const attendees: GoogleEventAttendee[] = [...kept];
+  for (const attendee of diff.add) {
+    const key = attendee.email.toLowerCase();
+    if (attendees.some((a) => a.email?.toLowerCase() === key)) continue;
+    attendees.push(buildAttendee(attendee));
+  }
+
+  const removedCount = current.length - kept.length;
+  const addedCount = attendees.length - kept.length;
+  return { attendees, changed: removedCount > 0 || addedCount > 0 };
 }
 
 /**
@@ -574,8 +628,24 @@ export async function updateEvent(
     if (input.transparency !== undefined) {
       requestBody.transparency = input.transparency;
     }
+    if (input.attendees !== undefined && input.attendeeDiff !== undefined) {
+      throw new ApiError(
+        "INVALID_ARGS",
+        "attendees and attendeeDiff cannot be combined; pick replacement or diff",
+      );
+    }
     if (input.attendees !== undefined) {
       requestBody.attendees = buildAttendees(input.attendees);
+    } else if (input.attendeeDiff !== undefined) {
+      // Read immediately before the write so the merge sees the freshest guest list.
+      const current = await api.events.get({ calendarId, eventId });
+      const merged = mergeRawAttendees(current.data.attendees ?? [], input.attendeeDiff);
+      // A no-op diff must not touch the guest list at all: rewriting an identical
+      // array still counts as a change to Google, which mails every guest when
+      // sendUpdates is not "none".
+      if (merged.changed) {
+        requestBody.attendees = merged.attendees;
+      }
     }
     if (start !== undefined && end !== undefined && allDay !== undefined) {
       Object.assign(
