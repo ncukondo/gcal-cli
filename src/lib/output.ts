@@ -1,4 +1,4 @@
-import type { Calendar, CalendarEvent, ErrorCode } from "../types/index.ts";
+import type { Calendar, CalendarEvent, ErrorCode, FailedCalendar } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { expandEventsByDay, type DayRange, type EventDay } from "./event-days.ts";
 
@@ -148,6 +148,17 @@ export function formatHiddenAllDayWarning(events: CalendarEvent[]): string {
   if (remaining > 0) lines.push(`  ... and ${remaining} more`);
 
   return lines.join("\n");
+}
+
+/**
+ * One line for the end of the text output. The details are already on stderr;
+ * this only tells a stdout reader that the listing is incomplete.
+ */
+export function formatFailedCalendarsNote(failed: FailedCalendar[]): string {
+  if (failed.length === 0) return "";
+
+  const noun = failed.length === 1 ? "calendar" : "calendars";
+  return `Note: ${failed.length} ${noun} could not be fetched (see warnings above).`;
 }
 
 interface QuietRow {

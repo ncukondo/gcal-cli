@@ -2,11 +2,13 @@ import { Command } from "commander";
 import type { CalendarEvent, AppConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import type { ListEventsOptions } from "../lib/api.ts";
+import { fetchFromCalendars } from "../lib/multi-calendar.ts";
 import { resolveTimezone, formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { selectCalendars } from "../lib/config.ts";
 import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
 import {
   formatEventListText,
+  formatFailedCalendarsNote,
   formatHiddenAllDayWarning,
   formatJsonSuccess,
   formatQuietText,
@@ -161,18 +163,11 @@ export async function handleList(
   };
 
   const writeErr = deps.writeErr ?? (() => {});
-  const settled = await Promise.allSettled(
-    calendars.map((cal) => deps.listEvents(cal.id, cal.name, apiOptions)),
+  const { events: allEvents, failedCalendars } = await fetchFromCalendars(
+    calendars,
+    (cal) => deps.listEvents(cal.id, cal.name, apiOptions),
+    writeErr,
   );
-  const allEvents: CalendarEvent[] = [];
-  for (let i = 0; i < settled.length; i++) {
-    const result = settled[i]!;
-    if (result.status === "fulfilled") {
-      allEvents.push(...result.value);
-    } else {
-      writeErr(`Warning: failed to fetch calendar "${calendars[i]!.name}": ${result.reason}`);
-    }
-  }
 
   // Sort by start time
   allEvents.sort((a, b) => a.start.localeCompare(b.start));
@@ -193,14 +188,21 @@ export async function handleList(
 
   // Output
   if (options.format === "json") {
-    deps.write(formatJsonSuccess({ events: filtered, count: filtered.length }));
+    deps.write(
+      formatJsonSuccess({
+        events: filtered,
+        count: filtered.length,
+        failed_calendars: failedCalendars,
+      }),
+    );
   } else {
     const dayRange = toDayRange(dateRange);
     if (options.quiet) {
       deps.write(formatQuietText(filtered, dayRange));
     } else {
-      const text = formatEventListText(filtered, dayRange);
-      deps.write(text || "No events found.");
+      const text = formatEventListText(filtered, dayRange) || "No events found.";
+      const note = formatFailedCalendarsNote(failedCalendars);
+      deps.write(note ? `${text}\n\n${note}` : text);
     }
   }
 

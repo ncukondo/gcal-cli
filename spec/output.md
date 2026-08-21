@@ -72,8 +72,35 @@ Rules:
   reported.
 - At most 5 titles are listed; the rest are summarised as `... and N more`.
 - `gcal list` emits the notice in every mode including `--quiet` and `-f json`.
-  `gcal search` suppresses all stderr output under `--quiet`, so the notice is
-  omitted there.
+  `gcal search` suppresses its stderr output under `--quiet` apart from the
+  failed-calendar warning, so the notice is omitted there.
+
+#### Partial Fetch Failures
+
+`gcal list` and `gcal search` query every enabled calendar at once. A calendar
+that fails is warned about on **stderr** and the remaining calendars are still
+listed, with one line after the listing so a stdout reader knows it is
+incomplete:
+
+```
+Warning: failed to fetch calendar "Work": ApiError: Rate Limit Exceeded ...   (stderr)
+
+2026-01-24 (Fri)
+  10:00-11:00   Team Meeting (Main Calendar) [busy]
+
+Note: 1 calendar could not be fetched (see warnings above).
+```
+
+Rules:
+
+- The `Note:` line is omitted under `--quiet` (`-q` is a minimal-output
+  contract); the stderr warning is not, in either command. A failed calendar is
+  a failure notice rather than data, so it is the one stderr message `search`
+  still emits under `--quiet`.
+- When **every** calendar fails, nothing is printed to stdout at all: the first
+  error is raised and handled as a normal error, so the exit code follows its
+  `error.code`. With the common single-calendar setup, "all failed" is simply
+  "the fetch failed".
 
 ### `gcal search` Text Output
 
@@ -197,6 +224,36 @@ Use `-f json` for machine-readable output.
 }
 ```
 
+`gcal list` and `gcal search` add `failed_calendars` to `data`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "events": [ ... ],
+    "count": 3,
+    "failed_calendars": [
+      {
+        "id": "work@group.calendar.google.com",
+        "name": "Work",
+        "error": { "code": "RATE_LIMITED", "message": "Rate Limit Exceeded ..." }
+      }
+    ]
+  }
+}
+```
+
+The key is **always present**, `[]` when nothing failed, so an agent never has
+to test for it. A response with `failed_calendars: []` is the only one that
+covers every enabled calendar. When every calendar fails there is no success
+response at all -- the first error is returned as an error response.
+
+One case still returns `count: 0` with `failed_calendars: []` without any
+calendar having been queried: a config where no calendar has `enabled = true`
+(or a `-c` selection matching none). Nothing failed, so this is a success, but
+it is not the same as "queried and empty" -- `gcal calendars` shows which are
+enabled.
+
 ### Error Response
 
 ```json
@@ -314,6 +371,23 @@ Meet かどうかを決められない。判定に使えるのは `conferenceSol
 `{"type": null, "uri": null}` ではなく `null` を返す（説明できることが何も無いため）。
 その場合は数秒後に `gcal show` で取得できる（`spec/commands.md` の `gcal add` を参照）。
 
+### FailedCalendar
+
+A calendar whose fetch failed while at least one other calendar succeeded.
+`error.code` is the `ErrorCode` of the underlying `ApiError`, or `API_ERROR`
+when the failure carries no code of its own.
+
+```json
+{
+  "id": "string",
+  "name": "string",
+  "error": {
+    "code": "ErrorCode",
+    "message": "string"
+  }
+}
+```
+
 ### Calendar
 
 ```json
@@ -360,7 +434,8 @@ Meet かどうかを決められない。判定に使えるのは `conferenceSol
         "calendar_name": "Main Calendar"
       }
     ],
-    "count": 2
+    "count": 2,
+    "failed_calendars": []
   }
 }
 ```
@@ -373,7 +448,8 @@ Meet かどうかを決められない。判定に使えるのは `conferenceSol
   "data": {
     "query": "meeting",
     "events": [ ... ],
-    "count": 3
+    "count": 3,
+    "failed_calendars": []
   }
 }
 ```

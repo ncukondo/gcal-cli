@@ -175,4 +175,42 @@ describe("search command pipeline: config → API → filter → output", () => 
     expect(searchingLine).toContain("2026-03-31");
     expect(searchingLine).not.toContain("2026-04-01");
   });
+
+  it("reports a calendar the API rejected while keeping the events it got", async () => {
+    const rateLimited = new Error("Rate Limit Exceeded") as Error & { code: number };
+    rateLimited.code = 429;
+    const mockApi = createMockApi({
+      events: { primary: [makeGoogleEvent({ id: "e1", summary: "Team Meeting" })] },
+      errors: { listEventsByCalendar: { "work@group.calendar.google.com": rateLimited } },
+    });
+    const mockFs = createMockFs(SAMPLE_CONFIG_TOML);
+
+    const config = loadConfig(mockFs);
+    const out = captureWrite();
+    const writeErr = vi.fn();
+
+    const result = await handleSearch({
+      api: mockApi,
+      query: "Meeting",
+      format: "json",
+      calendars: selectCalendars(undefined, config),
+      timezone: resolveTimezone(undefined, config.timezone),
+      write: out.write,
+      writeErr,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const json = JSON.parse(out.output());
+    expect(json.data.count).toBe(1);
+    expect(json.data.failed_calendars).toEqual([
+      {
+        id: "work@group.calendar.google.com",
+        name: "Work",
+        error: { code: "RATE_LIMITED", message: expect.stringContaining("Rate Limit Exceeded") },
+      },
+    ]);
+    expect(writeErr).toHaveBeenCalledWith(
+      expect.stringContaining('failed to fetch calendar "Work"'),
+    );
+  });
 });
