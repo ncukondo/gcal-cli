@@ -65,7 +65,8 @@ describe.runIf(enabled)(
       const payload = JSON.parse(result.stderr) as ErrorPayload;
       expect(payload.success).toBe(false);
       expect(payload.error.code).toBe("FORBIDDEN");
-      // The API wording is kept, and nothing tells the user to authenticate again.
+      // The API wording is kept, and the user is told a re-auth is not the fix.
+      expect(payload.error.message).toContain("Re-authenticating will not help");
       expect(payload.error.message).not.toContain("gcal auth");
       expect(payload.error.message.toLowerCase()).not.toContain("not authenticated");
     });
