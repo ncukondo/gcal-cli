@@ -259,7 +259,13 @@ describe("update command pipeline: API → normalize → output", () => {
             id: "evt-1",
             attendees: [
               { email: "boss@example.com", responseStatus: "accepted", organizer: true },
-              { email: "alice@example.com", responseStatus: "tentative" },
+              {
+                email: "alice@example.com",
+                responseStatus: "tentative",
+                comment: "joining 10 min late",
+                additionalGuests: 2,
+              },
+              { displayName: "Meeting Room A", responseStatus: "accepted" },
               { email: "bob@example.com", responseStatus: "needsAction" },
             ],
           }),
@@ -284,17 +290,56 @@ describe("update command pipeline: API → normalize → output", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    expect(mockApi.events.get).toHaveBeenCalledTimes(1);
     expect(stderr.join("\n")).toContain(
       "Note: dave@example.com is not an attendee of this event; nothing to remove.",
     );
 
+    // The comment, the guest count and the room -- none of which CalendarEvent
+    // carries -- have to come back out the other side untouched.
     const patchFn = mockApi.events.patch as ReturnType<typeof vi.fn>;
     expect(patchFn.mock.calls[0]![0].requestBody.attendees).toEqual([
-      { email: "boss@example.com", responseStatus: "accepted" },
-      { email: "alice@example.com", responseStatus: "tentative" },
+      { email: "boss@example.com", responseStatus: "accepted", organizer: true },
+      {
+        email: "alice@example.com",
+        responseStatus: "tentative",
+        comment: "joining 10 min late",
+        additionalGuests: 2,
+      },
+      { displayName: "Meeting Room A", responseStatus: "accepted" },
       { email: "carol@example.com" },
     ]);
+  });
+
+  it("leaves the guest list out of the patch when the diff changes nothing", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [
+          makeGoogleEvent({
+            id: "evt-1",
+            attendees: [{ email: "alice@example.com", responseStatus: "accepted" }],
+          }),
+        ],
+      },
+    });
+    const out = captureWrite();
+
+    const result = await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
+      removeAttendee: ["dave@example.com"],
+      notify: "all",
+    });
+
+    expect(result.exitCode).toBe(0);
+    const patchFn = mockApi.events.patch as ReturnType<typeof vi.fn>;
+    expect(patchFn.mock.calls[0]![0].requestBody).not.toHaveProperty("attendees");
   });
 
   it("rejects removing the organizer before patching", async () => {

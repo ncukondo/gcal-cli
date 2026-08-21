@@ -189,8 +189,25 @@ function resolveDurationOnly(
   };
 }
 
-async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTime | null> {
-  const { timezone, calendarId, calendarName, eventId, getEvent } = opts;
+/**
+ * Whether the new times can only be derived from the event's current ones.
+ * Kept separate from resolveTimeUpdate so the handler can fetch the event once
+ * and share that snapshot with the attendee checks.
+ */
+function needsExistingForTime(opts: UpdateHandlerOptions): boolean {
+  const hasStart = opts.start !== undefined;
+  const hasEnd = opts.end !== undefined;
+  const hasDuration = opts.duration !== undefined;
+  return (
+    (hasStart && !hasEnd && !hasDuration) || (hasEnd && !hasStart) || (hasDuration && !hasStart)
+  );
+}
+
+function resolveTimeUpdate(
+  opts: UpdateHandlerOptions,
+  existing: CalendarEvent | undefined,
+): ResolvedTime | null {
+  const { timezone } = opts;
   const hasStart = opts.start !== undefined;
   const hasEnd = opts.end !== undefined;
   const hasDuration = opts.duration !== undefined;
@@ -199,14 +216,6 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
 
   // Parse duration once when present
   const durationMs = hasDuration ? parseDuration(opts.duration!) : undefined;
-
-  // Determine if we need to fetch the existing event
-  const needExisting =
-    (hasStart && !hasEnd && !hasDuration) || (hasEnd && !hasStart) || (hasDuration && !hasStart);
-  let existing: CalendarEvent | undefined;
-  if (needExisting) {
-    existing = await getEvent(calendarId, calendarName, eventId, timezone);
-  }
 
   // Determine allDay from start format, or from existing event
   const allDay = hasStart ? isDateOnly(opts.start!) : existing!.all_day;
@@ -273,33 +282,25 @@ async function resolveTimeUpdate(opts: UpdateHandlerOptions): Promise<ResolvedTi
   return null;
 }
 
-/** A guest list merged against the event's current attendees, plus what changed. */
-interface AttendeeDiff {
-  merged: AttendeeInput[];
+/** What a guest list diff will do, as addresses, for the notes and the dry run. */
+interface AttendeeDiffPreview {
+  merged: string[];
   added: string[];
   removed: string[];
 }
 
 /**
- * The API replaces the whole attendees array, so every attendee we keep has to
- * be written back with its RSVP and flags intact.
+ * Applies the CLI's policy to a diff and previews the outcome. The write itself
+ * is merged again in the API layer, against the raw attendee objects, so that
+ * fields this projection does not carry survive the round trip; this pass only
+ * decides what to reject and what to tell the user.
  */
-function toAttendeeInput(attendee: EventAttendee): AttendeeInput {
-  const input: AttendeeInput = {
-    email: attendee.email,
-    responseStatus: attendee.response_status,
-  };
-  if (attendee.display_name !== null) input.displayName = attendee.display_name;
-  if (attendee.optional) input.optional = true;
-  return input;
-}
-
-function mergeAttendees(
+function previewAttendeeDiff(
   current: EventAttendee[],
   add: AttendeeInput[],
   remove: AttendeeInput[],
   writeStderr: (msg: string) => void,
-): AttendeeDiff {
+): AttendeeDiffPreview {
   // Google matches addresses case-insensitively, so the CLI has to as well.
   const removeKeys = new Set(remove.map((a) => a.email.toLowerCase()));
 
@@ -319,14 +320,15 @@ function mergeAttendees(
     }
   }
 
+  const kept = current.filter((a) => !removeKeys.has(a.email.toLowerCase()));
   const removed = current.filter((a) => removeKeys.has(a.email.toLowerCase()));
-  const merged = current.filter((a) => !removeKeys.has(a.email.toLowerCase())).map(toAttendeeInput);
+  const merged = kept.map((a) => a.email);
 
   const added: string[] = [];
   for (const attendee of add) {
     const key = attendee.email.toLowerCase();
-    if (merged.some((a) => a.email.toLowerCase() === key)) continue;
-    merged.push({ email: attendee.email });
+    if (merged.some((email) => email.toLowerCase() === key)) continue;
+    merged.push(attendee.email);
     added.push(attendee.email);
   }
 
@@ -377,26 +379,45 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     );
   }
 
-  // Only the diff options need the current guest list, so a plain update stays one call.
-  let attendeeDiff: AttendeeDiff | undefined;
-  if (addAttendees.length > 0 || removeAttendees.length > 0) {
-    const existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
-    attendeeDiff = mergeAttendees(
-      existing.attendees,
+  const replacesAttendees = opts.clearAttendees === true || attendees.length > 0;
+  const editsAttendees = addAttendees.length > 0 || removeAttendees.length > 0;
+  // Commander already keeps the two modes apart on the CLI, but handleUpdate is
+  // exported: without this the diff would be computed and then silently dropped.
+  if (replacesAttendees && editsAttendees) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      "--attendee / --clear-attendees cannot be combined with --add-attendee / --remove-attendee",
+    );
+  }
+
+  // One read, shared by the time resolution and the attendee policy, so a plain
+  // update still makes no extra call and the two never see different snapshots.
+  let existing: CalendarEvent | undefined;
+  if (editsAttendees || needsExistingForTime(opts)) {
+    existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+  }
+
+  let attendeeDiff: AttendeeDiffPreview | undefined;
+  if (editsAttendees) {
+    attendeeDiff = previewAttendeeDiff(
+      existing!.attendees,
       addAttendees,
       removeAttendees,
       opts.writeStderr,
     );
   }
 
-  const replacesAttendees = opts.clearAttendees === true || attendees.length > 0;
-
   const input: UpdateEventInput = {};
 
   if (replacesAttendees) {
     input.attendees = attendees;
-  } else if (attendeeDiff) {
-    input.attendees = attendeeDiff.merged;
+  } else if (editsAttendees) {
+    // The API layer merges this against the raw attendee objects and drops the
+    // write entirely when it turns out to change nothing.
+    input.attendeeDiff = {
+      add: addAttendees,
+      removeEmails: removeAttendees.map((a) => a.email),
+    };
   }
   if (opts.meet) {
     input.meet = true;
@@ -419,7 +440,7 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     input.transparency = "transparent";
   }
 
-  const timeResult = await resolveTimeUpdate(opts);
+  const timeResult = resolveTimeUpdate(opts, existing);
   if (timeResult) {
     const withTime = input as UpdateEventInput & { start: string; end: string; allDay: boolean };
     withTime.start = timeResult.start;
@@ -446,7 +467,7 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (replacesAttendees) {
       changes.attendees = attendees.map((a) => a.email);
     } else if (attendeeDiff) {
-      changes.attendees = attendeeDiff.merged.map((a) => a.email);
+      changes.attendees = attendeeDiff.merged;
       changes.attendees_added = attendeeDiff.added;
       changes.attendees_removed = attendeeDiff.removed;
     }
