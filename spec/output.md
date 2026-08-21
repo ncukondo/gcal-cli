@@ -248,6 +248,12 @@ to test for it. A response with `failed_calendars: []` is the only one that
 covers every enabled calendar. When every calendar fails there is no success
 response at all -- the first error is returned as an error response.
 
+One case still returns `count: 0` with `failed_calendars: []` without any
+calendar having been queried: a config where no calendar has `enabled = true`
+(or a `-c` selection matching none). Nothing failed, so this is a success, but
+it is not the same as "queried and empty" -- `gcal calendars` shows which are
+enabled.
+
 ### Error Response
 
 ```json
@@ -428,7 +434,8 @@ when the failure carries no code of its own.
         "calendar_name": "Main Calendar"
       }
     ],
-    "count": 2
+    "count": 2,
+    "failed_calendars": []
   }
 }
 ```
@@ -441,7 +448,8 @@ when the failure carries no code of its own.
   "data": {
     "query": "meeting",
     "events": [ ... ],
-    "count": 3
+    "count": 3,
+    "failed_calendars": []
   }
 }
 ```
