@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleUpdate } from "../../src/commands/update.ts";
-import { getEvent } from "../../src/lib/api.ts";
+import { getEventWithRaw } from "../../src/lib/api.ts";
 import { createMockApi, makeGoogleEvent, makeAllDayGoogleEvent, captureWrite } from "./helpers.ts";
 
 function makeGetEvent(mockApi: ReturnType<typeof createMockApi>) {
   return (calId: string, calName: string, evtId: string, tz?: string) =>
-    getEvent(mockApi, calId, calName, evtId, tz);
+    getEventWithRaw(mockApi, calId, calName, evtId, tz);
 }
 
 describe("update command pipeline: API → normalize → output", () => {
@@ -249,6 +249,130 @@ describe("update command pipeline: API → normalize → output", () => {
         end: "2026-03-01",
       }),
     ).rejects.toThrow("--end format (date-only) does not match existing event type (timed)");
+  });
+
+  it("resolves --add-attendee / --remove-attendee by get -> merge -> patch", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [
+          makeGoogleEvent({
+            id: "evt-1",
+            attendees: [
+              { email: "boss@example.com", responseStatus: "accepted", organizer: true },
+              {
+                email: "alice@example.com",
+                responseStatus: "tentative",
+                comment: "joining 10 min late",
+                additionalGuests: 2,
+              },
+              { displayName: "Meeting Room A", responseStatus: "accepted" },
+              { email: "bob@example.com", responseStatus: "needsAction" },
+            ],
+          }),
+        ],
+      },
+    });
+    const out = captureWrite();
+    const stderr: string[] = [];
+
+    const result = await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: (msg) => stderr.push(msg),
+      getEvent: makeGetEvent(mockApi),
+      addAttendee: ["carol@example.com"],
+      removeAttendee: ["BOB@example.com", "dave@example.com"],
+    });
+
+    expect(result.exitCode).toBe(0);
+    // One read feeds the policy, the preview and the merge that gets written.
+    expect(mockApi.events.get).toHaveBeenCalledTimes(1);
+    expect(stderr.join("\n")).toContain(
+      "Note: dave@example.com is not an attendee of this event; nothing to remove.",
+    );
+
+    // The comment, the guest count and the room -- none of which CalendarEvent
+    // carries -- have to come back out the other side untouched.
+    const patchFn = mockApi.events.patch as ReturnType<typeof vi.fn>;
+    expect(patchFn.mock.calls[0]![0].requestBody.attendees).toEqual([
+      { email: "boss@example.com", responseStatus: "accepted", organizer: true },
+      {
+        email: "alice@example.com",
+        responseStatus: "tentative",
+        comment: "joining 10 min late",
+        additionalGuests: 2,
+      },
+      { displayName: "Meeting Room A", responseStatus: "accepted" },
+      { email: "carol@example.com" },
+    ]);
+  });
+
+  it("leaves the guest list out of the patch when the diff changes nothing", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [
+          makeGoogleEvent({
+            id: "evt-1",
+            attendees: [{ email: "alice@example.com", responseStatus: "accepted" }],
+          }),
+        ],
+      },
+    });
+    const out = captureWrite();
+
+    const result = await handleUpdate({
+      api: mockApi,
+      eventId: "evt-1",
+      calendarId: "primary",
+      calendarName: "Main Calendar",
+      format: "json",
+      timezone: "Asia/Tokyo",
+      write: out.write,
+      writeStderr: vi.fn(),
+      getEvent: makeGetEvent(mockApi),
+      removeAttendee: ["dave@example.com"],
+      notify: "all",
+    });
+
+    expect(result.exitCode).toBe(0);
+    const patchFn = mockApi.events.patch as ReturnType<typeof vi.fn>;
+    expect(patchFn.mock.calls[0]![0].requestBody).not.toHaveProperty("attendees");
+  });
+
+  it("rejects removing the organizer before patching", async () => {
+    const mockApi = createMockApi({
+      events: {
+        primary: [
+          makeGoogleEvent({
+            id: "evt-1",
+            attendees: [{ email: "boss@example.com", responseStatus: "accepted", organizer: true }],
+          }),
+        ],
+      },
+    });
+    const out = captureWrite();
+
+    await expect(
+      handleUpdate({
+        api: mockApi,
+        eventId: "evt-1",
+        calendarId: "primary",
+        calendarName: "Main Calendar",
+        format: "json",
+        timezone: "Asia/Tokyo",
+        write: out.write,
+        writeStderr: vi.fn(),
+        getEvent: makeGetEvent(mockApi),
+        removeAttendee: ["boss@example.com"],
+      }),
+    ).rejects.toThrow("cannot remove the event organizer");
+
+    expect(mockApi.events.patch).not.toHaveBeenCalled();
   });
 
   it("does not fetch existing event for type warning when --start and --end are both provided", async () => {

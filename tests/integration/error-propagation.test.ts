@@ -136,8 +136,8 @@ describe("error propagation: API errors → command handler → output", () => {
           write: vi.fn(),
           writeStderr: vi.fn(),
           getEvent: async (calId, calName, evtId, tz) => {
-            const { getEvent } = await import("../../src/lib/api.ts");
-            return getEvent(mockApi, calId, calName, evtId, tz);
+            const { getEventWithRaw } = await import("../../src/lib/api.ts");
+            return getEventWithRaw(mockApi, calId, calName, evtId, tz);
           },
           title: "Updated",
         }),

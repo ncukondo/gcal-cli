@@ -26,8 +26,12 @@ function dateOffset(days: number): string {
 // never reach a real inbox even if a notification were sent by mistake.
 const GUEST_A = "gcal-cli-e2e-a@example.com";
 const GUEST_B = "gcal-cli-e2e-b@example.com";
+const GUEST_C = "gcal-cli-e2e-c@example.com";
+const GUEST_UNKNOWN = "gcal-cli-e2e-nobody@example.com";
 
 const start = `${dateOffset(51)}T10:00`;
+// A separate day so the diff suite cannot collide with the suites above.
+const diffStart = `${dateOffset(53)}T10:00`;
 
 interface EventPayload {
   data: {
@@ -149,6 +153,96 @@ describe.runIf(creds)(
       );
 
       expect(result.exitCode).toBe(3);
+    });
+  },
+  E2E_TIMEOUT,
+);
+
+describe.runIf(creds)(
+  "E2E: attendee diff",
+  () => {
+    const cleanup = new TestCleanup();
+    let eventId = "";
+
+    afterAll(async () => {
+      await cleanup.deleteAll();
+    });
+
+    it("creates an event with two guests", async () => {
+      const { json, result } = await runCliJson(
+        "add",
+        "--title",
+        testEventTitle("AttendeeDiff"),
+        "--start",
+        diffStart,
+        "--attendee",
+        GUEST_A,
+        "--attendee",
+        GUEST_B,
+      );
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      const payload = json as EventPayload;
+      eventId = payload.data.event.id;
+      cleanup.track(eventId);
+
+      expect(emailsOf(payload)).toEqual(expect.arrayContaining([GUEST_A, GUEST_B]));
+    });
+
+    it("--add-attendee adds a guest and keeps the existing ones", async () => {
+      const { json, result } = await runCliJson("update", eventId, "--add-attendee", GUEST_C);
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(emailsOf(json as EventPayload)).toEqual(
+        expect.arrayContaining([GUEST_A, GUEST_B, GUEST_C]),
+      );
+
+      await retryUntil(async () => {
+        const shown = await runCliJson("show", eventId);
+        expect(emailsOf(shown.json as EventPayload)).toEqual(
+          expect.arrayContaining([GUEST_A, GUEST_B, GUEST_C]),
+        );
+      });
+    });
+
+    it("--remove-attendee drops one guest and keeps the others", async () => {
+      const { json, result } = await runCliJson("update", eventId, "--remove-attendee", GUEST_B);
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      const emails = emailsOf(json as EventPayload);
+      expect(emails).not.toContain(GUEST_B);
+      expect(emails).toEqual(expect.arrayContaining([GUEST_A, GUEST_C]));
+
+      await retryUntil(async () => {
+        const shown = await runCliJson("show", eventId);
+        const current = emailsOf(shown.json as EventPayload);
+        expect(current).not.toContain(GUEST_B);
+        expect(current).toEqual(expect.arrayContaining([GUEST_A, GUEST_C]));
+      });
+    });
+
+    it("removing a non-attendee succeeds and notes it on stderr", async () => {
+      const result = await runCli("update", eventId, "--remove-attendee", GUEST_UNKNOWN);
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(result.stderr).toContain(`Note: ${GUEST_UNKNOWN} is not an attendee`);
+
+      const { json } = await runCliJson("show", eventId);
+      expect(emailsOf(json as EventPayload)).toEqual(expect.arrayContaining([GUEST_A, GUEST_C]));
+    });
+
+    it("rejects --attendee together with --add-attendee", async () => {
+      const result = await runCli(
+        "update",
+        eventId,
+        "--attendee",
+        GUEST_A,
+        "--add-attendee",
+        GUEST_C,
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("cannot be used with");
     });
   },
   E2E_TIMEOUT,
