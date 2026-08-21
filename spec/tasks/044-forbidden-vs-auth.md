@@ -40,26 +40,46 @@ Google Tasks API 側にも同じ経路がある**（`mapApiError()` は `api.ts`
 
 ## Design Decisions
 
-### まず実際のエラー本文を確認する — これが本タスクの前提
+### 確認済み: 実 API が返す 403 の形（2026-08-21 採取）
+
+**このタスクの前提だった事実確認は完了している。** 書き込み不可の ICS 購読カレンダー
+（`...@import.calendar.google.com`）に `events.insert` を試み、以下を採取した。
+
+```
+constructor          GaxiosError
+e.code               403          (number)
+e.status             403
+e.message            "You need to have writer access to this calendar."
+e.errors             [ { domain: "calendar",
+                         reason: "requiredAccessLevel",
+                         message: "You need to have writer access to this calendar." } ]
+e.response.data.error.errors   同じ配列
+```
+
+判明したこと:
+
+- **`reason` は `e.errors[0].reason` から直接読める。** `e.response.data.error.errors` を
+  掘る必要はない（両方に載っている）。`isGoogleApiError()` の型を
+  `errors?: { domain?: string; reason?: string; message?: string }[]` で拡張すればよい
+- 読み取り専用カレンダーへの書き込みは `reason: "requiredAccessLevel"`
+- `message` は既に人間に十分な内容（"You need to have writer access to this calendar."）で、
+  **現状はこれが「認証が必要」として提示されている**のが問題の実体
+
+まだ未確認の `reason`（実装時に同様の手口で採取するか、判明するまで `AUTH_REQUIRED` に倒す）:
+
+- `forbiddenForNonOrganizer` — 他人主催イベントの会議情報を変更しようとした場合。
+  Google のドキュメントに記載があるが、本採取では再現していない（第2アカウントが必要）
+- `insufficientPermissions` — OAuth スコープ不足。**これは再認証で直るので `AUTH_REQUIRED` のまま**
+- `rateLimitExceeded` / `quotaExceeded` — Out of Scope
+
+### 403 は権限不足だけではない
 
 **403 は権限不足以外の理由でも返る。** 代表的なのは OAuth スコープ不足で、これは本当に再認証が要る。
 したがって 403 を一律に振り分け直すと、今度は逆方向の誤りを作る。
 
-Google は 403 のレスポンス本文に `reason` を持つ（`forbiddenForNonOrganizer`,
-`insufficientPermissions`, `rateLimitExceeded`, `quotaExceeded` など）。
-**実装に入る前に、実 API が返す本文と、それが `googleapis` の例外オブジェクトの
-どのプロパティに載るかを確認すること。** 未確認の文字列マッチを先に書くと、
-正しく見えて後で静かに壊れる。
-
-確認手段の案:
-
-- E2E で他人が主催するイベントを用意し（テスト用に 2 アカウント必要）、`--remove-meet` を実行する
-- あるいは意図的にスコープを絞ったトークンで書き込みを試す
-- `googleapis` の `GaxiosError` は `error.errors[].reason` や `error.response.data.error.errors[].reason`
-  を持つことがある。`isGoogleApiError()` は `code: number` しか見ていないので、型の拡張が必要になる
-
-**確認できた事実だけを根拠に実装する。分からなければ、その 403 は現状どおり `AUTH_REQUIRED` に倒す**
-（安全側。再認証を促すのは無駄だが害は小さい）。
+**確認できた `reason` だけを根拠に振り分ける。未知の `reason` は現状どおり `AUTH_REQUIRED` に倒す**
+（安全側。再認証を促すのは無駄だが害は小さい）。新しい `reason` を足すときは、
+上記と同じ手口で実 API から採取してから足すこと。推測で文字列を並べない。
 
 ### `reason` で振り分ける
 
@@ -68,8 +88,9 @@ Google は 403 のレスポンス本文に `reason` を持つ（`forbiddenForNon
 | 状況 | ErrorCode | 終了コード |
 |---|---|---|
 | 401 全般 | `AUTH_REQUIRED` | 2 |
-| 403 / スコープ不足・認証由来 | `AUTH_REQUIRED` | 2 |
-| 403 / 権限不足（非主催者・読み取り専用カレンダー等） | `FORBIDDEN`（新設） | 1 |
+| 403 / `insufficientPermissions`（スコープ不足） | `AUTH_REQUIRED` | 2 |
+| 403 / `requiredAccessLevel`（読み取り専用カレンダー）**確認済み** | `FORBIDDEN`（新設） | 1 |
+| 403 / `forbiddenForNonOrganizer`（非主催者） | `FORBIDDEN`（新設） | 1 |
 | 403 / レート制限・クォータ | 別タスク（本タスクの対象外） | — |
 | `reason` が不明・取得できない | `AUTH_REQUIRED`（現状維持） | 2 |
 
@@ -105,8 +126,9 @@ Error: <API の原文> You may not have permission to change this event; only it
 
 ## Implementation Steps
 
-- [ ] **先に事実確認**: 実 API が 403 で返す本文と `reason` を確認し、`googleapis` の例外の
-      どのプロパティから読めるかを特定する。判明した内容をこのタスクファイルに追記する
+- [x] **先に事実確認**: 実 API が 403 で返す本文と `reason` を確認する
+      → Design Decisions の「確認済み」節を参照。`e.errors[0].reason` から読め、
+      読み取り専用カレンダーは `requiredAccessLevel` を返す
 - [ ] `src/lib/api-utils.ts`: `isGoogleApiError()` を `reason` を読めるよう拡張（型と実装）
 - [ ] `src/types/index.ts`: `ErrorCode` に `FORBIDDEN` を追加
 - [ ] `src/lib/output.ts`: `ERROR_CODE_EXIT_MAP` に `FORBIDDEN: ExitCode.GENERAL` を追加
@@ -122,19 +144,20 @@ Error: <API の原文> You may not have permission to change this event; only it
 
 ## E2E Test
 
-`tests/e2e/` に追加する。**他人が主催するイベントが必要なため、用意できない環境ではスキップする**
+`tests/e2e/` に追加する。**読み取り専用カレンダーが必要なため、用意できない環境ではスキップする**
 （`tests/e2e/helpers.ts` の既存パターンに合わせる）。
 
-- [ ] 他人が主催するイベントに `gcal update <id> --remove-meet` を実行すると
+- [ ] 読み取り専用カレンダーに `gcal add -c <read-only-cal-id>` を実行すると
       終了コード 1 で `FORBIDDEN` が返り、再認証を促すメッセージが出ないこと
-- [ ] 自分が主催するイベントでは同じ操作が成功すること（対照）
-- [ ] トークンが無効な状態では従来どおり終了コード 2 / `AUTH_REQUIRED` であること
+- [ ] 書き込み可能なカレンダーでは同じ操作が成功すること（対照）
 
-環境変数（例 `GCAL_E2E_FOREIGN_EVENT_ID`）で他人主催イベントを指定し、未設定ならスキップする方式を想定。
+環境変数 `GCAL_E2E_READONLY_CALENDAR_ID` で読み取り専用カレンダーを指定し、未設定ならスキップする。
+非主催者イベント（`forbiddenForNonOrganizer`）は第2アカウントが要るため E2E では扱わず、
+ユニットテストでモックする。
 
 ## Acceptance Criteria
 
-- [ ] 実 API が返す 403 の `reason` を確認し、その根拠がタスクファイルに記録されている
+- [x] 実 API が返す 403 の `reason` を確認し、その根拠がタスクファイルに記録されている
 - [ ] 権限不足の 403 が `FORBIDDEN` / 終了コード 1 になる
 - [ ] 認証由来の 403（スコープ不足）は従来どおり `AUTH_REQUIRED` / 終了コード 2 のまま
 - [ ] `reason` が読めない 403 は `AUTH_REQUIRED` に倒れる（安全側の既定）
