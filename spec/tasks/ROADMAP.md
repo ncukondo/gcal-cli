@@ -6,12 +6,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Pending
 
-### Phase 18: Agent-facing Reliability (issues #64–#66)
-
-50. [050-tasks-list-date-shortcuts](./050-tasks-list-date-shortcuts.md) — `tasks list` に `--today` / `--overdue` / `--days` を追加 (#66)
-
-50 は 049（マージ済み）に依存する。
-
 ### Phase 17: Error Reporting
 
 46. [046-rate-limit-backoff](./046-rate-limit-backoff.md) — レート制限時の自動 exponential backoff
@@ -27,6 +21,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 48. [048-stdout-flush-on-exit](./completed/048-stdout-flush-on-exit.md) — JSON 出力がパイプで 64KB を超えると切れる (#64, PR #68)
 49. [049-tasks-list-sort-by-due](./completed/049-tasks-list-sort-by-due.md) — `tasks list` を期日順に並べる (#65, PR #67)
+50. [050-tasks-list-date-shortcuts](./completed/050-tasks-list-date-shortcuts.md) — `tasks list` に `--today` / `--overdue` / `--days` を追加 (#66, PR #69)
 
 ### Phase 17: Error Reporting
 
