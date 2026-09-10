@@ -163,6 +163,9 @@ export function registerCommands(program: Command): void {
       completed?: boolean;
       dueBefore?: string;
       dueAfter?: string;
+      today?: boolean;
+      overdue?: boolean;
+      days?: number;
     }>();
     try {
       const config = loadConfig(fsAdapter);
@@ -176,12 +179,16 @@ export function registerCommands(program: Command): void {
         quiet: globalOpts.quiet,
         write: (msg) => process.stdout.write(msg + "\n"),
         configTaskLists: config.task_lists,
+        timezone: resolveTimezone(globalOpts.timezone, config.timezone),
       };
       if (listOpts.list !== undefined) opts.list = listOpts.list;
       if (listOpts.all) opts.all = true;
       if (listOpts.completed) opts.completed = true;
       if (listOpts.dueBefore !== undefined) opts.dueBefore = listOpts.dueBefore;
       if (listOpts.dueAfter !== undefined) opts.dueAfter = listOpts.dueAfter;
+      if (listOpts.today) opts.today = true;
+      if (listOpts.overdue) opts.overdue = true;
+      if (listOpts.days !== undefined) opts.days = listOpts.days;
       const result = await handleTaskList(opts);
       process.exit(result.exitCode);
     } catch (error) {

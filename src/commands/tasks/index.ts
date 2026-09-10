@@ -22,7 +22,20 @@ export function createTasksCommand(): {
     .option("--all", "Include completed tasks")
     .option("--completed", "Show only completed tasks")
     .option("--due-before <date>", "Tasks due before date (YYYY-MM-DD)")
-    .option("--due-after <date>", "Tasks due after date (YYYY-MM-DD)");
+    .option("--due-after <date>", "Tasks due after date (YYYY-MM-DD)")
+    .option("--today", "Tasks due today")
+    .option("--overdue", "Tasks due today or earlier")
+    .option("--days <n>", "Tasks due within the next n days (today included)", (v: string) =>
+      Number.parseInt(v, 10),
+    );
+
+  // Mutual exclusivity: the shortcuts exclude each other and --due-before/--due-after
+  const findOpt = (long: string) => listCmd.options.find((o) => o.long === long)!;
+  findOpt("--today").conflicts(["overdue", "days", "dueBefore", "dueAfter"]);
+  findOpt("--overdue").conflicts(["today", "days", "dueBefore", "dueAfter"]);
+  findOpt("--days").conflicts(["today", "overdue", "dueBefore", "dueAfter"]);
+  findOpt("--due-before").conflicts(["today", "overdue", "days"]);
+  findOpt("--due-after").conflicts(["today", "overdue", "days"]);
   tasksCmd.addCommand(listCmd);
 
   const showCmd = new Command("show")
