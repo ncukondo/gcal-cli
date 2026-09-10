@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
 import { ExitCode } from "../../types/index.ts";
-import { handleTaskList } from "./list.ts";
+import type { Task } from "../../types/index.ts";
+import { handleTaskList, sortTasksByDue } from "./list.ts";
 import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
 function makeListClient(tasks: ReturnType<typeof makeRawTask>[]) {
@@ -38,6 +39,70 @@ const completedTaskWithDue = makeRawTask({
   due: "2026-03-20T00:00:00.000Z",
   completed: "2026-03-19T10:00:00.000Z",
   updated: "2026-03-20T10:00:00.000Z",
+});
+
+function makeTask(overrides: Partial<Task> & { id: string }): Task {
+  return {
+    title: overrides.id,
+    notes: null,
+    status: "needsAction",
+    due: null,
+    completed: null,
+    list_id: "@default",
+    list_title: "My Tasks",
+    parent: null,
+    updated: "2026-03-24T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("sortTasksByDue", () => {
+  it("sorts tasks by due date ascending", () => {
+    const tasks = [
+      makeTask({ id: "c", due: "2026-03-27" }),
+      makeTask({ id: "a", due: "2026-03-25" }),
+      makeTask({ id: "b", due: "2026-03-26" }),
+    ];
+
+    expect(sortTasksByDue(tasks).map((t) => t.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("places tasks without due date last, keeping their API order", () => {
+    const tasks = [
+      makeTask({ id: "none-1" }),
+      makeTask({ id: "b", due: "2026-03-26" }),
+      makeTask({ id: "none-2" }),
+      makeTask({ id: "a", due: "2026-03-25" }),
+    ];
+
+    expect(sortTasksByDue(tasks).map((t) => t.id)).toEqual(["a", "b", "none-1", "none-2"]);
+  });
+
+  it("keeps API order for tasks with the same due date (stable)", () => {
+    const tasks = [
+      makeTask({ id: "same-1", due: "2026-03-25" }),
+      makeTask({ id: "later", due: "2026-03-26" }),
+      makeTask({ id: "same-2", due: "2026-03-25" }),
+      makeTask({ id: "same-3", due: "2026-03-25" }),
+    ];
+
+    expect(sortTasksByDue(tasks).map((t) => t.id)).toEqual(["same-1", "same-2", "same-3", "later"]);
+  });
+
+  it("returns an empty array for empty input", () => {
+    expect(sortTasksByDue([])).toEqual([]);
+  });
+
+  it("does not mutate the input array", () => {
+    const tasks = [
+      makeTask({ id: "b", due: "2026-03-26" }),
+      makeTask({ id: "a", due: "2026-03-25" }),
+    ];
+
+    sortTasksByDue(tasks);
+
+    expect(tasks.map((t) => t.id)).toEqual(["b", "a"]);
+  });
 });
 
 describe("handleTaskList", () => {
