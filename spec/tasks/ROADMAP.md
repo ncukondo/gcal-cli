@@ -8,10 +8,9 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 18: Agent-facing Reliability (issues #64–#66)
 
-49. [049-tasks-list-sort-by-due](./049-tasks-list-sort-by-due.md) — `tasks list` を期日順に並べる (#65)
 50. [050-tasks-list-date-shortcuts](./050-tasks-list-date-shortcuts.md) — `tasks list` に `--today` / `--overdue` / `--days` を追加 (#66)
 
-48 と 49 は独立。50 は 49 に依存する。
+50 は 049（マージ済み）に依存する。
 
 ### Phase 17: Error Reporting
 
@@ -27,6 +26,7 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ### Phase 18: Agent-facing Reliability (issues #64–#66)
 
 48. [048-stdout-flush-on-exit](./completed/048-stdout-flush-on-exit.md) — JSON 出力がパイプで 64KB を超えると切れる (#64, PR #68)
+49. [049-tasks-list-sort-by-due](./completed/049-tasks-list-sort-by-due.md) — `tasks list` を期日順に並べる (#65, PR #67)
 
 ### Phase 17: Error Reporting
 
