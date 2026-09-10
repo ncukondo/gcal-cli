@@ -175,7 +175,7 @@ My Tasks:
   □ Call dentist
 ```
 
-With `--all` (期日の昇順、期日なしは末尾):
+With `--all`:
 ```
 My Tasks:
   □ Buy groceries (due: 03/25)
