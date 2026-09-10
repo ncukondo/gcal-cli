@@ -110,7 +110,7 @@ stderr に短いメッセージを書いて `process.exit(ExitCode.ARGUMENT)` �
 
 ## Implementation Steps
 
-- [ ] 実機で現象を再現し（`bun run dev tasks list -f json | wc -c` 等）、記録する
+- [x] 実機で現象を再現し（`bun run dev tasks list -f json | wc -c` 等）、記録する
 - [ ] `src/cli.ts`: `finish(result)` ヘルパーを追加（テスト先行: `src/cli.test.ts` に
       `process.exitCode` が設定されることを確認するテスト）
 - [ ] `tests/integration/stdout-flush.test.ts` + `tests/integration/fixtures/large-output.ts`:
