@@ -400,6 +400,10 @@ gcal tasks lists -q          # ID only
 
 List tasks in a task list. Shows only incomplete tasks by default.
 
+Tasks are sorted by due date ascending; tasks without a due date come last.
+Within the same due date (and among tasks without one) the API order is kept.
+The same order applies to text, `-q` and JSON output, and under `--all` / `--completed`.
+
 ```bash
 gcal tasks list [options]
 

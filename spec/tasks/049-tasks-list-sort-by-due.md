@@ -69,15 +69,15 @@ export し、ユニットテストの対象にする）。テキスト・`--quie
 
 ## Implementation Steps
 
-- [ ] `src/commands/tasks/list.test.ts`: `sortTasksByDue` のユニットテスト
+- [x] `src/commands/tasks/list.test.ts`: `sortTasksByDue` のユニットテスト
       （昇順 / 期日なしが末尾 / 同一期日で API 順維持 / 空配列）
-- [ ] `src/commands/tasks/list.ts`: `sortTasksByDue` を実装・export
-- [ ] `src/commands/tasks/list.test.ts`: `handleTaskList` のテキスト・`--quiet`・JSON で
+- [x] `src/commands/tasks/list.ts`: `sortTasksByDue` を実装・export
+- [x] `src/commands/tasks/list.test.ts`: `handleTaskList` のテキスト・`--quiet`・JSON で
       順序が期日順になること（API 順を意図的にバラした入力で）
-- [ ] `src/commands/tasks/list.test.ts`: `--all` / `--completed` でも同じ規則で並ぶこと
-- [ ] `src/commands/tasks/list.ts`: `handleTaskList` に組み込む
-- [ ] `spec/google-tasks.md` / `spec/commands.md`: 並び順を明記
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `src/commands/tasks/list.test.ts`: `--all` / `--completed` でも同じ規則で並ぶこと
+- [x] `src/commands/tasks/list.ts`: `handleTaskList` に組み込む
+- [x] `spec/google-tasks.md` / `spec/commands.md`: 並び順を明記
+- [x] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
@@ -85,9 +85,9 @@ export し、ユニットテストの対象にする）。テキスト・`--quie
 
 ## Acceptance Criteria
 
-- [ ] `gcal tasks list` の出力が期日の昇順になっている
-- [ ] 期日なしのタスクが末尾にまとまっている
-- [ ] 同じ期日のタスクは API の返却順を維持している
-- [ ] テキスト・`--quiet`・JSON（`data.tasks`）で順序が一致している
-- [ ] `--all` / `--completed` でも同じ規則で並ぶ
-- [ ] 既存テストが pass する（既存テストが API 順に依存していた場合は、期待値を期日順に直す）
+- [x] `gcal tasks list` の出力が期日の昇順になっている
+- [x] 期日なしのタスクが末尾にまとまっている
+- [x] 同じ期日のタスクは API の返却順を維持している
+- [x] テキスト・`--quiet`・JSON（`data.tasks`）で順序が一致している
+- [x] `--all` / `--completed` でも同じ規則で並ぶ
+- [x] 既存テストが pass する（既存テストが API 順に依存していた場合は、期待値を期日順に直す）

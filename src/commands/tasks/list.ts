@@ -86,6 +86,20 @@ function filterTasks(
   return filtered;
 }
 
+/**
+ * Sort tasks by due date ascending. `due` is already normalized to YYYY-MM-DD,
+ * so plain string comparison is enough. Tasks without a due date go last.
+ * The sort is stable: tasks with equal due (or no due) keep API order.
+ */
+export function sortTasksByDue(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    if (a.due === b.due) return 0;
+    if (a.due === null) return 1;
+    if (b.due === null) return -1;
+    return a.due < b.due ? -1 : 1;
+  });
+}
+
 export async function handleTaskList(opts: HandleTaskListOptions): Promise<CommandResult> {
   const { client, format, quiet, write, configTaskLists, all, completed, dueBefore, dueAfter } =
     opts;
@@ -117,7 +131,7 @@ export async function handleTaskList(opts: HandleTaskListOptions): Promise<Comma
   };
   if (dueBefore !== undefined) filterOpts.dueBefore = dueBefore;
   if (dueAfter !== undefined) filterOpts.dueAfter = dueAfter;
-  const tasks = filterTasks(allTasks, filterOpts);
+  const tasks = sortTasksByDue(filterTasks(allTasks, filterOpts));
 
   if (quiet) {
     write(formatQuietTaskList(tasks));
