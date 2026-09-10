@@ -339,6 +339,38 @@ describe("handleTaskList", () => {
     });
   });
 
+  describe("date shortcuts", () => {
+    // "Today" is 2026-03-25 in UTC for these tests.
+    const now = () => new Date("2026-03-25T12:00:00Z");
+    const shortcutTasks = [
+      makeRawTask({ id: "task-yesterday", title: "Yesterday", due: "2026-03-24T00:00:00.000Z" }),
+      makeRawTask({ id: "task-today", title: "Today", due: "2026-03-25T00:00:00.000Z" }),
+      makeRawTask({ id: "task-tomorrow", title: "Tomorrow", due: "2026-03-26T00:00:00.000Z" }),
+      makeRawTask({ id: "task-plus-two", title: "PlusTwo", due: "2026-03-27T00:00:00.000Z" }),
+      makeRawTask({ id: "task-plus-three", title: "PlusThree", due: "2026-03-28T00:00:00.000Z" }),
+      makeRawTask({ id: "task-no-due", title: "NoDue" }),
+    ];
+
+    it("--today returns only tasks due today", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        today: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Today (due: 03/25)");
+    });
+  });
+
   describe("date validation", () => {
     it("returns error for invalid --due-before date", async () => {
       const client = makeListClient(sampleTasks);
