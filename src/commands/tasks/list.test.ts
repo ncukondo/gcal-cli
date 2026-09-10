@@ -480,6 +480,167 @@ describe("handleTaskList", () => {
     });
   });
 
+  describe("due date ordering", () => {
+    // Deliberately scrambled API order: no-due first, then out-of-order dues.
+    const scrambledTasks = [
+      makeRawTask({ id: "task-no-due-1", title: "No due first" }),
+      makeRawTask({ id: "task-late", title: "Late", due: "2026-03-27T00:00:00.000Z" }),
+      makeRawTask({ id: "task-mid-1", title: "Mid one", due: "2026-03-26T00:00:00.000Z" }),
+      makeRawTask({ id: "task-no-due-2", title: "No due second" }),
+      makeRawTask({ id: "task-early", title: "Early", due: "2026-03-25T00:00:00.000Z" }),
+      makeRawTask({ id: "task-mid-2", title: "Mid two", due: "2026-03-26T00:00:00.000Z" }),
+    ];
+    const expectedTitles = ["Early", "Mid one", "Mid two", "Late", "No due first", "No due second"];
+
+    it("text output lists tasks by due ascending with no-due tasks last", async () => {
+      const client = makeListClient(scrambledTasks);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "text",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+      });
+
+      const lines = output.join("\n").split("\n").slice(1);
+      expect(lines).toEqual([
+        "  □ Early (due: 03/25)",
+        "  □ Mid one (due: 03/26)",
+        "  □ Mid two (due: 03/26)",
+        "  □ Late (due: 03/27)",
+        "  □ No due first",
+        "  □ No due second",
+      ]);
+    });
+
+    it("quiet output uses the same order", async () => {
+      const client = makeListClient(scrambledTasks);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+      });
+
+      expect(output.join("\n").split("\n")).toEqual([
+        "□ Early (due: 03/25)",
+        "□ Mid one (due: 03/26)",
+        "□ Mid two (due: 03/26)",
+        "□ Late (due: 03/27)",
+        "□ No due first",
+        "□ No due second",
+      ]);
+    });
+
+    it("json data.tasks uses the same order", async () => {
+      const client = makeListClient(scrambledTasks);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "json",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+      });
+
+      const json = JSON.parse(output.join(""));
+      expect(json.data.tasks.map((t: { title: string }) => t.title)).toEqual(expectedTitles);
+    });
+
+    it("--all sorts completed and incomplete tasks together by due", async () => {
+      const client = makeListClient([
+        makeRawTask({ id: "t-none", title: "Open no due" }),
+        makeRawTask({
+          id: "t-done-late",
+          title: "Done late",
+          status: "completed",
+          due: "2026-03-28T00:00:00.000Z",
+          completed: "2026-03-10T10:00:00.000Z",
+        }),
+        makeRawTask({ id: "t-open", title: "Open", due: "2026-03-26T00:00:00.000Z" }),
+        makeRawTask({
+          id: "t-done-early",
+          title: "Done early",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-30T10:00:00.000Z",
+        }),
+        makeRawTask({
+          id: "t-done-none",
+          title: "Done no due",
+          status: "completed",
+          completed: "2026-03-01T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "json",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        all: true,
+      });
+
+      const json = JSON.parse(output.join(""));
+      expect(json.data.tasks.map((t: { title: string }) => t.title)).toEqual([
+        "Done early",
+        "Open",
+        "Done late",
+        "Open no due",
+        "Done no due",
+      ]);
+    });
+
+    it("--completed sorts by due, not by completed date", async () => {
+      const client = makeListClient([
+        makeRawTask({
+          id: "t-done-none",
+          title: "Done no due",
+          status: "completed",
+          completed: "2026-03-01T10:00:00.000Z",
+        }),
+        makeRawTask({
+          id: "t-done-late",
+          title: "Done late",
+          status: "completed",
+          due: "2026-03-28T00:00:00.000Z",
+          completed: "2026-03-02T10:00:00.000Z",
+        }),
+        makeRawTask({
+          id: "t-done-early",
+          title: "Done early",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-30T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        completed: true,
+      });
+
+      expect(output.join("\n").split("\n")).toEqual([
+        "☑ Done early (due: 03/24, completed: 03/30)",
+        "☑ Done late (due: 03/28, completed: 03/02)",
+        "☑ Done no due (completed: 03/01)",
+      ]);
+    });
+  });
+
   describe("API options", () => {
     it("passes showCompleted=true to API when --all", async () => {
       const client = makeListClient([]);

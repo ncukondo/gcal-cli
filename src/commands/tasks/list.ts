@@ -131,7 +131,7 @@ export async function handleTaskList(opts: HandleTaskListOptions): Promise<Comma
   };
   if (dueBefore !== undefined) filterOpts.dueBefore = dueBefore;
   if (dueAfter !== undefined) filterOpts.dueAfter = dueAfter;
-  const tasks = filterTasks(allTasks, filterOpts);
+  const tasks = sortTasksByDue(filterTasks(allTasks, filterOpts));
 
   if (quiet) {
     write(formatQuietTaskList(tasks));
