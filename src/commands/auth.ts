@@ -95,6 +95,9 @@ export async function handleAuth(opts: HandleAuthOptions): Promise<CommandResult
     return { exitCode: ExitCode.SUCCESS };
   } finally {
     server.close();
+    // close() only stops listening; the browser's keep-alive connection would
+    // otherwise hold the event loop for keepAliveTimeout (5s under Node).
+    server.closeAllConnections();
   }
 }
 

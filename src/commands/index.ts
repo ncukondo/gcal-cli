@@ -20,7 +20,7 @@ import { handleTaskUndone, type HandleTaskUndoneOptions } from "./tasks/undone.t
 import { handleTaskDelete, type HandleTaskDeleteOptions } from "./tasks/delete.ts";
 import { fsAdapter, createGoogleCalendarApi, createGoogleTasksClient } from "./shared.ts";
 import type { GoogleTasksClient } from "../lib/tasks-api.ts";
-import { resolveGlobalOptions, handleError } from "../cli.ts";
+import { resolveGlobalOptions, handleError, finish } from "../cli.ts";
 import { loadConfig, selectCalendars } from "../lib/config.ts";
 import type { OutputFormat, TaskListConfig } from "../types/index.ts";
 import {
@@ -62,7 +62,7 @@ async function runTaskAction(
       write: (msg) => process.stdout.write(msg + "\n"),
       configTaskLists: config.task_lists,
     });
-    process.exit(result.exitCode);
+    finish(result);
   } catch (error) {
     handleError(error, globalOpts.format);
   }
@@ -96,7 +96,7 @@ export function registerCommands(program: Command): void {
           promptFn: createReadlinePrompt(),
         });
       }
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -117,7 +117,7 @@ export function registerCommands(program: Command): void {
         write: (msg) => process.stdout.write(msg + "\n"),
         configCalendars: config.calendars,
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -150,7 +150,7 @@ export function registerCommands(program: Command): void {
         write: (msg) => process.stdout.write(msg + "\n"),
         configTaskLists: config.task_lists,
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -190,7 +190,7 @@ export function registerCommands(program: Command): void {
       if (listOpts.overdue) opts.overdue = true;
       if (listOpts.days !== undefined) opts.days = listOpts.days;
       const result = await handleTaskList(opts);
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -214,7 +214,7 @@ export function registerCommands(program: Command): void {
       };
       if (showOpts.list !== undefined) opts.list = showOpts.list;
       const result = await handleTaskShow(opts);
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -303,7 +303,7 @@ export function registerCommands(program: Command): void {
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
       const result = await handleList(handleOpts, deps);
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -343,7 +343,7 @@ export function registerCommands(program: Command): void {
         write: (msg) => process.stdout.write(msg + "\n"),
         writeErr: (msg) => process.stderr.write(msg + "\n"),
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -383,7 +383,7 @@ export function registerCommands(program: Command): void {
         timezone,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -420,7 +420,7 @@ export function registerCommands(program: Command): void {
         notify: deleteOpts.notify,
         write: (msg) => process.stdout.write(msg + "\n"),
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -463,7 +463,7 @@ export function registerCommands(program: Command): void {
       if (globalOpts.timezone) handleOpts.timezone = globalOpts.timezone;
 
       const result = await handleAdd(handleOpts, deps);
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -536,7 +536,7 @@ export function registerCommands(program: Command): void {
         local: initOpts.local ?? false,
         timezone: initOpts.timezone ?? globalOpts.timezone,
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }
@@ -578,7 +578,7 @@ export function registerCommands(program: Command): void {
         getEvent: (calId, calName, evtId, tz) => getEventWithRaw(api, calId, calName, evtId, tz),
         ...updateOpts,
       });
-      process.exit(result.exitCode);
+      finish(result);
     } catch (error) {
       handleError(error, globalOpts.format);
     }

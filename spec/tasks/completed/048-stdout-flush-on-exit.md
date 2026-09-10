@@ -110,29 +110,29 @@ stderr に短いメッセージを書いて `process.exit(ExitCode.ARGUMENT)` �
 
 ## Implementation Steps
 
-- [ ] 実機で現象を再現し（`bun run dev tasks list -f json | wc -c` 等）、記録する
-- [ ] `src/cli.ts`: `finish(result)` ヘルパーを追加（テスト先行: `src/cli.test.ts` に
+- [x] 実機で現象を再現し（`bun run dev tasks list -f json | wc -c` 等）、記録する
+- [x] `src/cli.ts`: `finish(result)` ヘルパーを追加（テスト先行: `src/cli.test.ts` に
       `process.exitCode` が設定されることを確認するテスト）
-- [ ] `tests/integration/stdout-flush.test.ts` + `tests/integration/fixtures/large-output.ts`:
+- [x] `tests/integration/stdout-flush.test.ts` + `tests/integration/fixtures/large-output.ts`:
       200KB 超をパイプ越しに全量受け取れることを確認するテスト（この時点では失敗する）
-- [ ] `src/commands/index.ts`: すべての `process.exit(result.exitCode)` を `finish(result)` に置換
-- [ ] `src/cli.ts`: `handleError()` の `process.exit` を `process.exitCode` に変更
-- [ ] 実機で自然終了することを確認（`tasks list` / `list` / `search` / エラー経路）。
+- [x] `src/commands/index.ts`: すべての `process.exit(result.exitCode)` を `finish(result)` に置換
+- [x] `src/cli.ts`: `handleError()` の `process.exit` を `process.exitCode` に変更
+- [x] 実機で自然終了することを確認（`tasks list` / `list` / `search` / エラー経路）。
       止まる場合はフラッシュ待ち方式に切り替え、PR に理由を書く
-- [ ] `command:*` / `resolveGlobalOptions()` の exit の扱いを決めて実装（または現状維持の理由を PR に記載）
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `command:*` / `resolveGlobalOptions()` の exit の扱いを決めて実装（または現状維持の理由を PR に記載）
+- [x] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
-- [ ] `tests/e2e/output-and-filters.test.ts`（または新規）: `runCliJson("tasks", "list")` /
+- [x] `tests/e2e/output-and-filters.test.ts`（または新規）: `runCliJson("tasks", "list")` /
       `runCliJson("list", "--days", "60")` が JSON として parse できること。
       64KB を超えるかは実データ次第なので保証はしないが、パイプ経由で全量読む経路の煙テストとして置く
 
 ## Acceptance Criteria
 
-- [ ] `gcal tasks list -f json | jq .` が 64KB を超える出力でも壊れない
-- [ ] 終了コードが従来どおり（成功 0、エラー時は `error.code` に対応する値）
-- [ ] すべてのコマンドが数秒以内に自然終了する（ハングしない）
-- [ ] `src/commands/index.ts` に `process.exit(` の直接呼び出しが残っていない
-- [ ] 子プロセスでパイプ越しに 64KB 超を読む回帰テストが `test:all` に含まれ pass する
-- [ ] 既存テストが pass する
+- [x] `gcal tasks list -f json | jq .` が 64KB を超える出力でも壊れない
+- [x] 終了コードが従来どおり（成功 0、エラー時は `error.code` に対応する値）
+- [x] すべてのコマンドが数秒以内に自然終了する（ハングしない）
+- [x] `src/commands/index.ts` に `process.exit(` の直接呼び出しが残っていない
+- [x] 子プロセスでパイプ越しに 64KB 超を読む回帰テストが `test:all` に含まれ pass する
+- [x] 既存テストが pass する
