@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { enum as zenum } from "zod";
-import type { ErrorCode, OutputFormat } from "./types/index.ts";
+import type { CommandResult, ErrorCode, OutputFormat } from "./types/index.ts";
 import { ExitCode } from "./types/index.ts";
 import { formatJsonError, errorCodeToExitCode } from "./lib/output.ts";
 import pkg from "../package.json";
@@ -24,11 +24,13 @@ export function createProgram(): Command {
     .option("-q, --quiet", "Minimal output", false)
     .option("--tz, --timezone <zone>", "Timezone (e.g., Asia/Tokyo)");
 
-  // Handle unknown commands: show help and exit with code 3
+  // Handle unknown commands: show help and exit with code 3. Commander stops
+  // parsing after this listener, so setting process.exitCode is enough and
+  // keeps the exit path the same as finish()/handleError().
   program.on("command:*", (operands) => {
     process.stderr.write(`error: unknown command '${operands[0]}'\n\n`);
     program.outputHelp({ error: true });
-    process.exit(ExitCode.ARGUMENT);
+    process.exitCode = ExitCode.ARGUMENT;
   });
 
   return program;
@@ -48,6 +50,19 @@ export function resolveGlobalOptions(program: Command): GlobalOptions {
     timezone: raw.timezone,
     quiet: raw.quiet,
   };
+}
+
+/**
+ * Record the command's exit code and let the process end naturally.
+ *
+ * Calling `process.exit()` right after `process.stdout.write()` discards
+ * whatever is still queued in the async write buffer. Through a pipe that is
+ * everything past the 64KB kernel pipe buffer, which truncates large JSON
+ * output (#64). Setting `process.exitCode` instead lets Node/Bun drain
+ * stdout/stderr before exiting while preserving the exit status.
+ */
+export function finish(result: CommandResult): void {
+  process.exitCode = result.exitCode;
 }
 
 function getErrorCode(error: unknown): ErrorCode {
@@ -80,5 +95,5 @@ export function handleError(error: unknown, format: OutputFormat): void {
     process.stderr.write(`Error: ${message}\n`);
   }
 
-  process.exit(errorCodeToExitCode(errorCode));
+  process.exitCode = errorCodeToExitCode(errorCode);
 }
