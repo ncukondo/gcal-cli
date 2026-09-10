@@ -369,6 +369,177 @@ describe("handleTaskList", () => {
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
       expect(output.join("\n")).toBe("□ Today (due: 03/25)");
     });
+
+    it("--overdue returns overdue and today's tasks, not later or undated ones", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Yesterday (due: 03/24)\n□ Today (due: 03/25)");
+    });
+
+    it("--overdue --all includes completed tasks due by today", async () => {
+      const client = makeListClient([
+        ...shortcutTasks,
+        makeRawTask({
+          id: "task-done-yesterday",
+          title: "DoneYesterday",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        all: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const text = output.join("\n");
+      expect(text).toContain("☑ DoneYesterday");
+      expect(text).toContain("□ Yesterday");
+      expect(text).toContain("□ Today");
+      expect(text).not.toContain("Tomorrow");
+    });
+
+    it("--days 3 returns today through two days ahead, not three days ahead", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 3,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe(
+        "□ Today (due: 03/25)\n□ Tomorrow (due: 03/26)\n□ PlusTwo (due: 03/27)",
+      );
+    });
+
+    it("--days 1 behaves like --today", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 1,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Today (due: 03/25)");
+    });
+
+    it("--days 0 is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 0,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+      expect(client.tasks.list).not.toHaveBeenCalled();
+    });
+
+    it("--days -1 is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: -1,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+    });
+
+    it("decides 'today' in the given timezone (UTC 23:30 is the next day in Asia/Tokyo)", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+      const lateNow = () => new Date("2026-03-25T23:30:00Z");
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        today: true,
+        timezone: "Asia/Tokyo",
+        now: lateNow,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Tomorrow (due: 03/26)");
+    });
+
+    it("keeps due-date ordering in JSON output with --days", async () => {
+      const client = makeListClient([shortcutTasks[2]!, shortcutTasks[1]!, shortcutTasks[0]!]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "json",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        days: 2,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const json = JSON.parse(output.join("")) as { data: { tasks: { due: string }[] } };
+      expect(json.data.tasks.map((t) => t.due)).toEqual(["2026-03-25", "2026-03-26"]);
+    });
   });
 
   describe("date validation", () => {
