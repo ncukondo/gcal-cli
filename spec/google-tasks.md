@@ -69,11 +69,31 @@ Options:
   --list, -l <name|id>    タスクリスト名または ID（省略時: デフォルトリスト）
   --all                   完了済みも含めて表示
   --completed             完了済みのみ表示
-  --due-before <date>     指定日以前に期限のタスク (YYYY-MM-DD)
-  --due-after <date>      指定日以降に期限のタスク (YYYY-MM-DD)
+  --due-before <date>     指定日以前に期限のタスク (YYYY-MM-DD、指定日を含む)
+  --due-after <date>      指定日以降に期限のタスク (YYYY-MM-DD、指定日を含む)
+  --today                 今日 due のタスク
+  --overdue               今日までに due のタスク（期限超過 + 今日）
+  --days <n>              今日から n 日以内に due のタスク（今日を含む、n >= 1）
 ```
 
 デフォルトでは未完了タスク (`needsAction`) のみ表示する。
+
+`--today` / `--overdue` / `--days` は `--due-after` / `--due-before` の糖衣で、
+互いに排他、かつ `--due-before` / `--due-after` とも排他（併用は commander の
+オプション競合エラー）。「今日」を `T` とすると:
+
+| Option        | 等価な指定                                    |
+|---------------|-----------------------------------------------|
+| `--today`     | `--due-after T --due-before T`                |
+| `--overdue`   | `--due-before T`                              |
+| `--days <n>`  | `--due-after T --due-before (T + n - 1 日)`   |
+
+- 「今日」は `gcal list --today` と同じタイムゾーン（`--tz`、次に config の `timezone`）で決める。
+- `--days` は正の整数のみ。0 以下は `--days must be a positive integer`（終了コード 3）。
+  `--days 1` は `--today` と同じ。
+- 期日なしのタスクはどの due フィルタにも一致しない。
+- ステータスの絞り込みとは直交する。`--overdue` 単独では未完了のみ、`--overdue --all` なら
+  完了済みも出る。
 
 期日 (`due`) の昇順で表示する。期日なしのタスクは末尾にまとめ、同じ期日・期日なしの中では
 API の返却順を維持する。この順序はテキスト・`--quiet`・JSON (`data.tasks`) で共通で、
