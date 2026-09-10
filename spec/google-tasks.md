@@ -75,6 +75,10 @@ Options:
 
 デフォルトでは未完了タスク (`needsAction`) のみ表示する。
 
+期日 (`due`) の昇順で表示する。期日なしのタスクは末尾にまとめ、同じ期日・期日なしの中では
+API の返却順を維持する。この順序はテキスト・`--quiet`・JSON (`data.tasks`) で共通で、
+`--all` / `--completed` でも同じ規則（完了日では並べない）。
+
 ### `gcal tasks show <task-id>`
 
 タスクの詳細を表示する。
@@ -171,12 +175,12 @@ My Tasks:
   □ Call dentist
 ```
 
-With `--all`:
+With `--all` (期日の昇順、期日なしは末尾):
 ```
 My Tasks:
   □ Buy groceries (due: 03/25)
-  ☑ Fix login bug (completed: 03/22)
   □ Write report (due: 03/26)
+  ☑ Fix login bug (completed: 03/22)
 ```
 
 #### `gcal tasks show`

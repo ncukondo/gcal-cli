@@ -69,14 +69,14 @@ export し、ユニットテストの対象にする）。テキスト・`--quie
 
 ## Implementation Steps
 
-- [ ] `src/commands/tasks/list.test.ts`: `sortTasksByDue` のユニットテスト
+- [x] `src/commands/tasks/list.test.ts`: `sortTasksByDue` のユニットテスト
       （昇順 / 期日なしが末尾 / 同一期日で API 順維持 / 空配列）
-- [ ] `src/commands/tasks/list.ts`: `sortTasksByDue` を実装・export
-- [ ] `src/commands/tasks/list.test.ts`: `handleTaskList` のテキスト・`--quiet`・JSON で
+- [x] `src/commands/tasks/list.ts`: `sortTasksByDue` を実装・export
+- [x] `src/commands/tasks/list.test.ts`: `handleTaskList` のテキスト・`--quiet`・JSON で
       順序が期日順になること（API 順を意図的にバラした入力で）
-- [ ] `src/commands/tasks/list.test.ts`: `--all` / `--completed` でも同じ規則で並ぶこと
-- [ ] `src/commands/tasks/list.ts`: `handleTaskList` に組み込む
-- [ ] `spec/google-tasks.md` / `spec/commands.md`: 並び順を明記
+- [x] `src/commands/tasks/list.test.ts`: `--all` / `--completed` でも同じ規則で並ぶこと
+- [x] `src/commands/tasks/list.ts`: `handleTaskList` に組み込む
+- [x] `spec/google-tasks.md` / `spec/commands.md`: 並び順を明記
 - [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
