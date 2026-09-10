@@ -116,6 +116,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -137,6 +138,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -156,6 +158,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -173,6 +176,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -199,6 +203,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const text = output.join("\n");
@@ -218,6 +223,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: [],
+        timezone: "UTC",
       });
 
       expect(client.tasks.list).toHaveBeenCalledWith(
@@ -234,6 +240,7 @@ describe("handleTaskList", () => {
         format: "text",
         quiet: false,
         write,
+        timezone: "UTC",
         configTaskLists: [
           { id: "disabled-list", name: "Disabled", enabled: false },
           { id: "work-list", name: "Work", enabled: true },
@@ -263,6 +270,7 @@ describe("handleTaskList", () => {
         format: "text",
         quiet: false,
         write,
+        timezone: "UTC",
         configTaskLists: [
           { id: "@default", name: "My Tasks", enabled: true },
           { id: "work-id", name: "Work", enabled: true },
@@ -285,6 +293,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: [],
+        timezone: "UTC",
         list: "some-direct-id",
       });
 
@@ -305,6 +314,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "2026-03-25",
       });
 
@@ -326,6 +336,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueAfter: "2026-03-26",
       });
 
@@ -335,6 +346,265 @@ describe("handleTaskList", () => {
       expect(text).toContain("Write report");
       // Tasks with no due date are excluded when filtering by due-after
       expect(text).not.toContain("Call dentist");
+    });
+  });
+
+  describe("date shortcuts", () => {
+    // "Today" is 2026-03-25 in UTC for these tests.
+    const now = () => new Date("2026-03-25T12:00:00Z");
+    const shortcutTasks = [
+      makeRawTask({ id: "task-yesterday", title: "Yesterday", due: "2026-03-24T00:00:00.000Z" }),
+      makeRawTask({ id: "task-today", title: "Today", due: "2026-03-25T00:00:00.000Z" }),
+      makeRawTask({ id: "task-tomorrow", title: "Tomorrow", due: "2026-03-26T00:00:00.000Z" }),
+      makeRawTask({ id: "task-plus-two", title: "PlusTwo", due: "2026-03-27T00:00:00.000Z" }),
+      makeRawTask({ id: "task-plus-three", title: "PlusThree", due: "2026-03-28T00:00:00.000Z" }),
+      makeRawTask({ id: "task-no-due", title: "NoDue" }),
+    ];
+
+    it("--today returns only tasks due today", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        today: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Today (due: 03/25)");
+    });
+
+    it("--overdue returns overdue and today's tasks, not later or undated ones", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Yesterday (due: 03/24)\n□ Today (due: 03/25)");
+    });
+
+    it("--overdue --all includes completed tasks due by today", async () => {
+      const client = makeListClient([
+        ...shortcutTasks,
+        makeRawTask({
+          id: "task-done-yesterday",
+          title: "DoneYesterday",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        all: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const text = output.join("\n");
+      expect(text).toContain("☑ DoneYesterday");
+      expect(text).toContain("□ Yesterday");
+      expect(text).toContain("□ Today");
+      expect(text).not.toContain("Tomorrow");
+    });
+
+    it("--overdue --completed returns only completed tasks due by today", async () => {
+      const client = makeListClient([
+        ...shortcutTasks,
+        makeRawTask({
+          id: "task-done-yesterday",
+          title: "DoneYesterday",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+        makeRawTask({
+          id: "task-done-tomorrow",
+          title: "DoneTomorrow",
+          status: "completed",
+          due: "2026-03-26T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        completed: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("☑ DoneYesterday (due: 03/24, completed: 03/24)");
+    });
+
+    it("--days 1.5 (parsed to a non-integer) is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 1.5,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+      expect(client.tasks.list).not.toHaveBeenCalled();
+    });
+
+    it("--days 3 returns today through two days ahead, not three days ahead", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 3,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe(
+        "□ Today (due: 03/25)\n□ Tomorrow (due: 03/26)\n□ PlusTwo (due: 03/27)",
+      );
+    });
+
+    it("--days 1 behaves like --today", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 1,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Today (due: 03/25)");
+    });
+
+    it("--days 0 is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 0,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+      expect(client.tasks.list).not.toHaveBeenCalled();
+    });
+
+    it("--days -1 is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: -1,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+    });
+
+    it("decides 'today' in the given timezone (UTC 23:30 is the next day in Asia/Tokyo)", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+      const lateNow = () => new Date("2026-03-25T23:30:00Z");
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        today: true,
+        timezone: "Asia/Tokyo",
+        now: lateNow,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("□ Tomorrow (due: 03/26)");
+    });
+
+    it("keeps due-date ordering in JSON output with --days", async () => {
+      const client = makeListClient([shortcutTasks[2]!, shortcutTasks[1]!, shortcutTasks[0]!]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "json",
+        quiet: false,
+        write,
+        configTaskLists: defaultConfig,
+        days: 2,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const json = JSON.parse(output.join("")) as { data: { tasks: { due: string }[] } };
+      expect(json.data.tasks.map((t) => t.due)).toEqual(["2026-03-25", "2026-03-26"]);
     });
   });
 
@@ -349,6 +619,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "not-a-date",
       });
 
@@ -366,6 +637,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueAfter: "2026-02-30",
       });
 
@@ -383,6 +655,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "2026-12-31",
         dueAfter: "2026-01-01",
       });
@@ -402,6 +675,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -422,6 +696,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -442,6 +717,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -469,6 +745,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -501,6 +778,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const lines = output.join("\n").split("\n").slice(1);
@@ -524,6 +802,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(output.join("\n").split("\n")).toEqual([
@@ -546,6 +825,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const json = JSON.parse(output.join(""));
@@ -585,6 +865,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -629,6 +910,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -651,6 +933,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -669,6 +952,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -705,6 +989,7 @@ describe("handleTaskList", () => {
           quiet: false,
           write: vi.fn(),
           configTaskLists: [],
+          timezone: "UTC",
         }),
       ).rejects.toThrow(ApiError);
     });

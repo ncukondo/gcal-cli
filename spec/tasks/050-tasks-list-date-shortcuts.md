@@ -93,35 +93,35 @@ gcal tasks list -l Calendar --overdue -f json
 
 ## Implementation Steps
 
-- [ ] `src/lib/date-utils.ts`（または `timezone.ts`）: `todayInZone()` を移動・export
+- [x] `src/lib/date-utils.ts`（または `timezone.ts`）: `todayInZone()` を移動・export
       （`src/commands/list.ts` から参照を差し替え、既存テストが通ること）
-- [ ] `src/commands/tasks/list.test.ts`: `--today` が今日 due のみ返すこと（`now` を固定）
-- [ ] `src/commands/tasks/list.test.ts`: `--overdue` が期限超過 + 今日を返し、明日以降と
+- [x] `src/commands/tasks/list.test.ts`: `--today` が今日 due のみ返すこと（`now` を固定）
+- [x] `src/commands/tasks/list.test.ts`: `--overdue` が期限超過 + 今日を返し、明日以降と
       期日なしを含まないこと
-- [ ] `src/commands/tasks/list.test.ts`: `--days 3` が今日〜2 日後を含み 3 日後を含まないこと、
+- [x] `src/commands/tasks/list.test.ts`: `--days 3` が今日〜2 日後を含み 3 日後を含まないこと、
       `--days 0` がエラーになること
-- [ ] `src/commands/tasks/list.test.ts`: タイムゾーンをまたぐケース（`now` を UTC 23:30 に固定し、
+- [x] `src/commands/tasks/list.test.ts`: タイムゾーンをまたぐケース（`now` を UTC 23:30 に固定し、
       `Asia/Tokyo` では翌日扱いになること）
-- [ ] `src/commands/tasks/list.ts`: `today` / `overdue` / `days` / `timezone` / `now` を
+- [x] `src/commands/tasks/list.ts`: `today` / `overdue` / `days` / `timezone` / `now` を
       `HandleTaskListOptions` に追加し、`dueAfter` / `dueBefore` に変換
-- [ ] `src/commands/tasks/index.ts`: オプション定義と `conflicts()`
-- [ ] `src/commands/index.ts`: `tasksListCmd.action` で `timezone` を解決しハンドラに渡す
-- [ ] `spec/commands.md` / `spec/google-tasks.md`: Options と排他を追記
-- [ ] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
+- [x] `src/commands/tasks/index.ts`: オプション定義と `conflicts()`
+- [x] `src/commands/index.ts`: `tasksListCmd.action` で `timezone` を解決しハンドラに渡す
+- [x] `spec/commands.md` / `spec/google-tasks.md`: Options と排他を追記
+- [x] `bun run test:all` / `lint` / `format:check` / `typecheck` pass
 
 ## E2E Test
 
-- [ ] `tests/e2e/`: `gcal tasks list --today -f json` が `success: true` を返し、
+- [x] `tests/e2e/`: `gcal tasks list --today -f json` が `success: true` を返し、
       `data.tasks` の各 `due` が今日の日付であること（0 件でもよい）
-- [ ] `gcal tasks list --today --due-before 2026-01-01` が競合エラー（0 以外の終了コード）になること
+- [x] `gcal tasks list --today --due-before 2026-01-01` が競合エラー（0 以外の終了コード）になること
 
 ## Acceptance Criteria
 
-- [ ] `--today` / `--overdue` / `--days <n>` が上の表のとおりに絞り込む
-- [ ] 「今日」が `gcal list --today` と同じタイムゾーン基準で決まる
-- [ ] ショートカット同士、および `--due-before` / `--due-after` との併用が競合エラーになる
-- [ ] `--days 0` 以下がエラーになる
-- [ ] ステータスフィルタ（既定 / `--all` / `--completed`）と組み合わせられる
-- [ ] 出力（テキスト・`--quiet`・JSON）は 049 の期日順のまま
-- [ ] `spec/commands.md` / `spec/google-tasks.md` が実装と一致している
-- [ ] 既存テストが pass する
+- [x] `--today` / `--overdue` / `--days <n>` が上の表のとおりに絞り込む
+- [x] 「今日」が `gcal list --today` と同じタイムゾーン基準で決まる
+- [x] ショートカット同士、および `--due-before` / `--due-after` との併用が競合エラーになる
+- [x] `--days 0` 以下がエラーになる
+- [x] ステータスフィルタ（既定 / `--all` / `--completed`）と組み合わせられる
+- [x] 出力（テキスト・`--quiet`・JSON）は 049 の期日順のまま
+- [x] `spec/commands.md` / `spec/google-tasks.md` が実装と一致している
+- [x] 既存テストが pass する
