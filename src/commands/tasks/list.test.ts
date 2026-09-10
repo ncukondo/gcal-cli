@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleTasksClient } from "../../lib/tasks-api.ts";
-import { ExitCode } from "../../types/index.ts";
-import type { Task } from "../../types/index.ts";
+import { ExitCode, type Task } from "../../types/index.ts";
 import { handleTaskList, sortTasksByDue } from "./list.ts";
 import { makeRawTask, makeClient, makeOutput, defaultConfig } from "./test-helpers.ts";
 
