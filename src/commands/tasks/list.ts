@@ -32,7 +32,7 @@ export interface HandleTaskListOptions {
   /** Tasks due within the next n days, today included. Sugar for --due-after T --due-before T+n-1. */
   days?: number;
   /** IANA timezone used to decide what "today" is (same basis as `gcal list --today`). */
-  timezone?: string;
+  timezone: string;
   /** Clock override for tests. */
   now?: () => Date;
 }
@@ -144,11 +144,7 @@ export async function handleTaskList(opts: HandleTaskListOptions): Promise<Comma
   const { client, format, quiet, write, configTaskLists, all, completed } = opts;
   let { dueBefore, dueAfter } = opts;
 
-  const shortcut = resolveDueShortcuts(
-    opts,
-    opts.timezone ?? "UTC",
-    opts.now ?? (() => new Date()),
-  );
+  const shortcut = resolveDueShortcuts(opts, opts.timezone, opts.now ?? (() => new Date()));
   if ("error" in shortcut) {
     write(`Error: ${shortcut.error}`);
     return { exitCode: ExitCode.ARGUMENT };

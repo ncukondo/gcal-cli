@@ -22,6 +22,13 @@ describe("tasks list command options", () => {
     expect(daysOpt.parseArg?.("3")).toBe(3);
   });
 
+  it("--days rejects non-integer values (1.5, abc) as NaN so the handler reports an error", () => {
+    const daysOpt = optionOf("--days");
+    expect(daysOpt.parseArg?.("1.5")).toBeNaN();
+    expect(daysOpt.parseArg?.("abc")).toBeNaN();
+    expect(daysOpt.parseArg?.("")).toBeNaN();
+  });
+
   it("--today conflicts with the other shortcuts and --due-before/--due-after", () => {
     const opt = optionOf("--today");
     expect(opt.conflictsWith).toEqual(

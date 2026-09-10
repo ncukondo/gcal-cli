@@ -116,6 +116,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -137,6 +138,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -156,6 +158,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -173,6 +176,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -199,6 +203,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const text = output.join("\n");
@@ -218,6 +223,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: [],
+        timezone: "UTC",
       });
 
       expect(client.tasks.list).toHaveBeenCalledWith(
@@ -234,6 +240,7 @@ describe("handleTaskList", () => {
         format: "text",
         quiet: false,
         write,
+        timezone: "UTC",
         configTaskLists: [
           { id: "disabled-list", name: "Disabled", enabled: false },
           { id: "work-list", name: "Work", enabled: true },
@@ -263,6 +270,7 @@ describe("handleTaskList", () => {
         format: "text",
         quiet: false,
         write,
+        timezone: "UTC",
         configTaskLists: [
           { id: "@default", name: "My Tasks", enabled: true },
           { id: "work-id", name: "Work", enabled: true },
@@ -285,6 +293,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: [],
+        timezone: "UTC",
         list: "some-direct-id",
       });
 
@@ -305,6 +314,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "2026-03-25",
       });
 
@@ -326,6 +336,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueAfter: "2026-03-26",
       });
 
@@ -419,6 +430,62 @@ describe("handleTaskList", () => {
       expect(text).toContain("□ Yesterday");
       expect(text).toContain("□ Today");
       expect(text).not.toContain("Tomorrow");
+    });
+
+    it("--overdue --completed returns only completed tasks due by today", async () => {
+      const client = makeListClient([
+        ...shortcutTasks,
+        makeRawTask({
+          id: "task-done-yesterday",
+          title: "DoneYesterday",
+          status: "completed",
+          due: "2026-03-24T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+        makeRawTask({
+          id: "task-done-tomorrow",
+          title: "DoneTomorrow",
+          status: "completed",
+          due: "2026-03-26T00:00:00.000Z",
+          completed: "2026-03-24T10:00:00.000Z",
+        }),
+      ]);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        overdue: true,
+        completed: true,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(output.join("\n")).toBe("☑ DoneYesterday (due: 03/24, completed: 03/24)");
+    });
+
+    it("--days 1.5 (parsed to a non-integer) is an argument error", async () => {
+      const client = makeListClient(shortcutTasks);
+      const { output, write } = makeOutput();
+
+      const result = await handleTaskList({
+        client,
+        format: "text",
+        quiet: true,
+        write,
+        configTaskLists: defaultConfig,
+        days: 1.5,
+        timezone: "UTC",
+        now,
+      });
+
+      expect(result.exitCode).toBe(ExitCode.ARGUMENT);
+      expect(output.join("")).toContain("--days must be a positive integer");
+      expect(client.tasks.list).not.toHaveBeenCalled();
     });
 
     it("--days 3 returns today through two days ahead, not three days ahead", async () => {
@@ -552,6 +619,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "not-a-date",
       });
 
@@ -569,6 +637,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueAfter: "2026-02-30",
       });
 
@@ -586,6 +655,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         dueBefore: "2026-12-31",
         dueAfter: "2026-01-01",
       });
@@ -605,6 +675,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -625,6 +696,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -645,6 +717,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
@@ -672,6 +745,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -704,6 +778,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const lines = output.join("\n").split("\n").slice(1);
@@ -727,6 +802,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       expect(output.join("\n").split("\n")).toEqual([
@@ -749,6 +825,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
       });
 
       const json = JSON.parse(output.join(""));
@@ -788,6 +865,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -832,6 +910,7 @@ describe("handleTaskList", () => {
         quiet: true,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -854,6 +933,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         all: true,
       });
 
@@ -872,6 +952,7 @@ describe("handleTaskList", () => {
         quiet: false,
         write,
         configTaskLists: defaultConfig,
+        timezone: "UTC",
         completed: true,
       });
 
@@ -908,6 +989,7 @@ describe("handleTaskList", () => {
           quiet: false,
           write: vi.fn(),
           configTaskLists: [],
+          timezone: "UTC",
         }),
       ).rejects.toThrow(ApiError);
     });

@@ -1,5 +1,14 @@
 import { Command } from "commander";
 
+/**
+ * Parse the --days value strictly: only unsigned decimal integers are accepted.
+ * Anything else (1.5, abc, "") becomes NaN so handleTaskList reports
+ * "--days must be a positive integer" instead of silently truncating.
+ */
+function parseDays(value: string): number {
+  return /^\d+$/.test(value) ? Number(value) : Number.NaN;
+}
+
 export function createTasksCommand(): {
   tasksCmd: Command;
   listsCmd: Command;
@@ -21,13 +30,11 @@ export function createTasksCommand(): {
     .option("-l, --list <name-or-id>", "Task list name or ID")
     .option("--all", "Include completed tasks")
     .option("--completed", "Show only completed tasks")
-    .option("--due-before <date>", "Tasks due before date (YYYY-MM-DD)")
-    .option("--due-after <date>", "Tasks due after date (YYYY-MM-DD)")
+    .option("--due-before <date>", "Tasks due on or before date (YYYY-MM-DD)")
+    .option("--due-after <date>", "Tasks due on or after date (YYYY-MM-DD)")
     .option("--today", "Tasks due today")
-    .option("--overdue", "Tasks due today or earlier")
-    .option("--days <n>", "Tasks due within the next n days (today included)", (v: string) =>
-      Number.parseInt(v, 10),
-    );
+    .option("--overdue", "Tasks due today or earlier (overdue + today)")
+    .option("--days <n>", "Tasks due within the next n days, today included (n >= 1)", parseDays);
 
   // Mutual exclusivity: the shortcuts exclude each other and --due-before/--due-after
   const findOpt = (long: string) => listCmd.options.find((o) => o.long === long)!;
