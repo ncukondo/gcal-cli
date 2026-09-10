@@ -14,10 +14,9 @@ import {
   formatQuietText,
 } from "../lib/output.ts";
 import type { DayRange } from "../lib/event-days.ts";
-import { addDaysToDateString } from "../lib/date-utils.ts";
+import { addDaysToDateString, todayInZone } from "../lib/date-utils.ts";
 import { collect } from "./shared.ts";
 import { addDays } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
 
 export interface DateRangeInput {
   today?: boolean;
@@ -30,10 +29,6 @@ export interface DateRange {
   timeMin: string;
   timeMax: string;
   warning?: string;
-}
-
-function todayInZone(now: Date, timezone: string): string {
-  return formatInTimeZone(now, timezone, "yyyy-MM-dd");
 }
 
 export function resolveDateRange(

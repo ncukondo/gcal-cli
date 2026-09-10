@@ -1,3 +1,5 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isDateOnly(input: string): boolean {
@@ -15,4 +17,11 @@ export function addDaysToDateString(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const date = new Date(Date.UTC(y!, m! - 1, d! + days));
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Return the calendar date (YYYY-MM-DD) of `now` as seen in `timezone`.
+ */
+export function todayInZone(now: Date, timezone: string): string {
+  return formatInTimeZone(now, timezone, "yyyy-MM-dd");
 }
