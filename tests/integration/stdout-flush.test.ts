@@ -21,6 +21,7 @@ interface SpawnResult {
 // direct `spawn(..., { stdio: "pipe" })`. Route the fixture through a real
 // shell pipe (`| cat`) to get the same 64KB pipe buffer a user's shell uses.
 // `pipefail` makes the shell report the fixture's exit code, not cat's.
+// Requires `bun` on PATH, even when this suite runs under plain vitest (Node).
 function runFixtureThroughPipe(size: number, exitCode: number): Promise<SpawnResult> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(

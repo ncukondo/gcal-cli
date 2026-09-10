@@ -41,7 +41,7 @@ describe("handleAuth", () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
 
-    const mockServer = { close: vi.fn() };
+    const mockServer = { close: vi.fn(), closeAllConnections: vi.fn() };
     const mockTokens = makeTokenData();
     const mockStartOAuthFlow = vi.fn().mockResolvedValue({
       authUrl: "https://accounts.google.com/o/oauth2/auth?test=1",
@@ -69,6 +69,7 @@ describe("handleAuth", () => {
     expect(output.some((msg) => msg.includes("http"))).toBe(true);
     expect(openUrl).toHaveBeenCalledWith(expect.stringContaining("accounts.google.com"));
     expect(mockServer.close).toHaveBeenCalled();
+    expect(mockServer.closeAllConnections).toHaveBeenCalled();
   });
 
   it("invokes OAuth flow and outputs JSON on success", async () => {
@@ -76,7 +77,7 @@ describe("handleAuth", () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "test-client-id");
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-client-secret");
 
-    const mockServer = { close: vi.fn() };
+    const mockServer = { close: vi.fn(), closeAllConnections: vi.fn() };
     const mockTokens = makeTokenData();
     const mockStartOAuthFlow = vi.fn().mockResolvedValue({
       authUrl: "https://accounts.google.com/o/oauth2/auth?test=1",
@@ -107,6 +108,7 @@ describe("handleAuth", () => {
     expect(json.success).toBe(true);
     expect(json.data.authenticated).toBe(true);
     expect(mockServer.close).toHaveBeenCalled();
+    expect(mockServer.closeAllConnections).toHaveBeenCalled();
   });
 
   it("handles missing client credentials (text)", async () => {
@@ -162,7 +164,7 @@ describe("handleAuth", () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "");
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
 
-    const mockServer = { close: vi.fn() };
+    const mockServer = { close: vi.fn(), closeAllConnections: vi.fn() };
     const mockTokens = makeTokenData();
     const mockStartOAuthFlow = vi.fn().mockResolvedValue({
       authUrl: "https://accounts.google.com/o/oauth2/auth?test=1",
