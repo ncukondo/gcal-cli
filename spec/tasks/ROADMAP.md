@@ -8,7 +8,6 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ### Phase 18: Agent-facing Reliability (issues #64–#66)
 
-48. [048-stdout-flush-on-exit](./048-stdout-flush-on-exit.md) — JSON 出力がパイプで 64KB を超えると切れる (#64)
 49. [049-tasks-list-sort-by-due](./049-tasks-list-sort-by-due.md) — `tasks list` を期日順に並べる (#65)
 50. [050-tasks-list-date-shortcuts](./050-tasks-list-date-shortcuts.md) — `tasks list` に `--today` / `--overdue` / `--days` を追加 (#66)
 
@@ -24,6 +23,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 ## In Progress
 
 ## Completed
+
+### Phase 18: Agent-facing Reliability (issues #64–#66)
+
+48. [048-stdout-flush-on-exit](./completed/048-stdout-flush-on-exit.md) — JSON 出力がパイプで 64KB を超えると切れる (#64, PR #68)
 
 ### Phase 17: Error Reporting
 
