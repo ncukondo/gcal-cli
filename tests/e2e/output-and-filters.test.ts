@@ -32,6 +32,23 @@ describe.runIf(creds)(
       expect(typeof data.data.count).toBe("number");
       expect(data.data.count).toBe(data.data.events.length);
     });
+
+    // Smoke tests for the pipe exit path (#64): runCli reads stdout through a
+    // pipe, so output that is only partially flushed before exit fails to
+    // parse. Whether these exceed 64KB depends on the account's real data.
+    it("list -f json --days 60 is fully delivered through a pipe", async () => {
+      const { json, result } = await runCliJson("list", "--days", "60");
+
+      expect(result.exitCode).toBe(0);
+      expect((json as { success: boolean }).success).toBe(true);
+    });
+
+    it("tasks list -f json is fully delivered through a pipe", async () => {
+      const { json, result } = await runCliJson("tasks", "list");
+
+      expect(result.exitCode).toBe(0);
+      expect((json as { success: boolean }).success).toBe(true);
+    });
   },
   E2E_TIMEOUT,
 );
