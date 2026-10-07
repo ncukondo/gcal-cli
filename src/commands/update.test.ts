@@ -104,6 +104,7 @@ function makeMockApi(
     events: {
       list: vi.fn().mockResolvedValue({ data: { items: [] } }),
       get: getFn,
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
       patch: patchFn,
       delete: vi.fn(),
@@ -1042,11 +1043,16 @@ describe("update command", () => {
       expect(result.exitCode).toBe(0);
     });
 
-    it("does not fetch the event when neither diff option is given", async () => {
+    it("reads the event only once, for the series check, when neither diff option is given", async () => {
       const api = makeMockApi();
-      await runUpdate(api, { eventId: "evt1", title: "Renamed", attendee: ["alice@example.com"] });
+      const result = await runUpdate(api, {
+        eventId: "evt1",
+        title: "Renamed",
+        attendee: ["alice@example.com"],
+      });
 
-      expect(api.events.get).not.toHaveBeenCalled();
+      expect(result.getEventCalls).toBe(1);
+      expect(api.events.instances).not.toHaveBeenCalled();
     });
 
     it("shows the merged guest list and the diff in a JSON dry run", async () => {

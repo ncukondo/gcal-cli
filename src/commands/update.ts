@@ -6,7 +6,14 @@ import type {
   GoogleCalendarApi,
   UpdateEventInput,
 } from "../lib/api.ts";
-import { updateEvent, ApiError } from "../lib/api.ts";
+import { updateEvent, ApiError, listInstances, patchInstance } from "../lib/api.ts";
+import {
+  RESTORABLE_FIELDS,
+  buildRestoreBody,
+  findOverriddenInstances,
+  isRecurringMaster,
+} from "../lib/recurring-exceptions.ts";
+import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
@@ -58,6 +65,13 @@ export interface UpdateHandlerOptions {
   meet?: boolean;
   /** Detach the conference currently attached to the event. */
   removeMeet?: boolean;
+  /**
+   * On a recurring series, write the modified occurrences' own values back
+   * after updating the series. See spec/commands.md.
+   */
+  preserveExceptions?: boolean;
+  /** On a recurring series, let the update replace the modified occurrences' own values. */
+  overwriteExceptions?: boolean;
 }
 
 interface ResolvedTime {
@@ -345,6 +359,94 @@ function previewAttendeeDiff(
   return { merged, added, removed: removed.map((a) => a.email) };
 }
 
+/** An affected occurrence as reported to the user, without the raw response. */
+interface ExceptionSummary {
+  id: string;
+  start: string;
+  original_start: string;
+  fields: ExceptionField[];
+}
+
+interface RestoreFailure {
+  id: string;
+  start: string;
+  error: string;
+  /** What the occurrence held, so it can be put back by hand. */
+  values: Record<string, unknown>;
+}
+
+function summarizeException(instance: OverriddenInstance): ExceptionSummary {
+  return {
+    id: instance.id,
+    start: instance.start,
+    original_start: instance.original_start,
+    fields: instance.fields,
+  };
+}
+
+function formatExceptionLines(instances: OverriddenInstance[]): string[] {
+  return instances.map((i) => `  ${i.id}  ${i.start}  (${i.fields.join(", ")})`);
+}
+
+/** The fields this update writes, in the terms an occurrence can override them. */
+function changingFields(
+  input: UpdateEventInput,
+  attendeeDiff: AttendeeDiffPreview | undefined,
+): ExceptionField[] {
+  const fields: ExceptionField[] = [];
+  if (input.title !== undefined) fields.push("title");
+  if (input.description !== undefined) fields.push("description");
+  if (input.transparency !== undefined) fields.push("transparency");
+  const diffChanges =
+    attendeeDiff !== undefined && attendeeDiff.added.length + attendeeDiff.removed.length > 0;
+  if (input.attendees !== undefined || diffChanges) fields.push("attendees");
+  if (input.meet || input.removeMeet) fields.push("conference");
+  if (input.start !== undefined) fields.push("time");
+  return fields;
+}
+
+/**
+ * Patching a series master overwrites the fields it writes on every occurrence,
+ * modified ones included; changing its time resets them outright. So a series
+ * update first looks for occurrences that would lose their own values, and
+ * refuses to go ahead silently. Returns what to do with them.
+ */
+function decideExceptionAction(
+  opts: UpdateHandlerOptions,
+  changing: ExceptionField[],
+  affected: OverriddenInstance[],
+): "preserve" | "overwrite" | "abort" {
+  const list = formatExceptionLines(affected).join("\n");
+  const resetsAll = changing.includes("time");
+  const unrestorable = affected.some(
+    (i) => resetsAll || i.fields.some((f) => !RESTORABLE_FIELDS.includes(f)),
+  );
+
+  if (opts.preserveExceptions) {
+    if (unrestorable) {
+      const why = resetsAll
+        ? "Changing the time of a series makes Google reset every modified occurrence"
+        : "--preserve-exceptions can only restore title, description, free/busy and guests";
+      throw new ApiError(
+        "INVALID_ARGS",
+        `${why}, so these occurrences cannot be preserved:\n${list}\n` +
+          "Re-run with --overwrite-exceptions to replace them, or update the series without this change.",
+      );
+    }
+    return "preserve";
+  }
+  if (opts.overwriteExceptions) return "overwrite";
+  if (opts.dryRun) return "abort";
+
+  const hint = resetsAll
+    ? "Changing the time of a series resets every modified occurrence. Re-run with --overwrite-exceptions to proceed anyway."
+    : "Re-run with --preserve-exceptions to keep their values, or --overwrite-exceptions to replace them (--dry-run previews).";
+  throw new ApiError(
+    "INVALID_ARGS",
+    `Event "${opts.eventId}" is a recurring series, and ${affected.length} occurrence(s) have their own values that this update would overwrite:\n${list}\n${hint}`,
+  );
+}
+
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
   const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
 
@@ -400,13 +502,18 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     );
   }
 
-  // The one read. The new times, the attendee policy, the dry-run preview and
-  // the guest list that gets written all come from this single snapshot, and a
-  // plain update never makes the call at all.
-  let existing: FetchedEvent | undefined;
-  if (editsAttendees || needsExistingForTime(opts)) {
-    existing = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+  if (opts.preserveExceptions && opts.overwriteExceptions) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      "--preserve-exceptions and --overwrite-exceptions cannot be combined",
+    );
   }
+
+  // The one read. The new times, the attendee policy, the dry-run preview, the
+  // guest list that gets written and the recurring-series check all come from
+  // this single snapshot. It is made for every update: only the event itself
+  // says whether it is a series master whose occurrences the patch would hit.
+  const existing: FetchedEvent = await opts.getEvent(calendarId, calendarName, eventId, timezone);
 
   let attendeeDiff: AttendeeDiffPreview | undefined;
   if (editsAttendees) {
@@ -452,7 +559,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     input.transparency = "transparent";
   }
 
-  const timeResult = resolveTimeUpdate(opts, existing?.event);
+  const timeResult = resolveTimeUpdate(
+    opts,
+    needsExistingForTime(opts) ? existing.event : undefined,
+  );
   if (timeResult) {
     const withTime = input as UpdateEventInput & { start: string; end: string; allDay: boolean };
     withTime.start = timeResult.start;
@@ -468,6 +578,17 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       } else if (!existing.all_day && timeResult.allDay) {
         opts.writeStderr("\u26A0 Event type changed from timed to all-day");
       }
+    }
+  }
+
+  let affected: OverriddenInstance[] = [];
+  let exceptionAction: "preserve" | "overwrite" | "abort" | undefined;
+  const changing = changingFields(input, attendeeDiff);
+  if (isRecurringMaster(existing.raw) && changing.length > 0) {
+    const instances = await listInstances(api, calendarId, eventId);
+    affected = findOverriddenInstances(existing.raw, instances, changing);
+    if (affected.length > 0) {
+      exceptionAction = decideExceptionAction(opts, changing, affected);
     }
   }
 
@@ -493,14 +614,19 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     if (withTime.allDay !== undefined) changes.allDay = withTime.allDay;
 
     if (format === "json") {
-      write(
-        formatJsonSuccess({
-          dry_run: true,
-          action: "update",
-          event_id: eventId,
-          changes,
-        }),
-      );
+      const data: Record<string, unknown> = {
+        dry_run: true,
+        action: "update",
+        event_id: eventId,
+        changes,
+      };
+      if (exceptionAction) {
+        data.exceptions = {
+          action: exceptionAction,
+          instances: affected.map(summarizeException),
+        };
+      }
+      write(formatJsonSuccess(data));
     } else {
       const lines = [`DRY RUN: Would update event "${eventId}":`];
       if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
@@ -523,6 +649,16 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       if (changes.remove_meet !== undefined) {
         lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
       }
+      if (exceptionAction) {
+        const fate = {
+          preserve: "would be restored after the update (--preserve-exceptions)",
+          overwrite: "would be overwritten (--overwrite-exceptions)",
+          abort:
+            "would be overwritten; the update will abort unless --preserve-exceptions or --overwrite-exceptions is given",
+        }[exceptionAction];
+        lines.push(`  modified occurrences (${affected.length}) ${fate}:`);
+        lines.push(...formatExceptionLines(affected).map((l) => `  ${l}`));
+      }
       write(lines.join("\n"));
     }
     return { exitCode: ExitCode.SUCCESS };
@@ -530,13 +666,40 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   const updated = await updateEvent(api, calendarId, calendarName, eventId, input);
 
+  // The series is already written; a failed restore is reported with the values
+  // it was meant to write, so nothing is lost even then.
+  const failed: RestoreFailure[] = [];
+  if (exceptionAction === "preserve") {
+    for (const instance of affected) {
+      const body = buildRestoreBody(instance.raw, instance.fields);
+      try {
+        await patchInstance(api, calendarId, instance.id, body);
+      } catch (err) {
+        failed.push({
+          id: instance.id,
+          start: instance.start,
+          error: (err as Error).message,
+          values: body,
+        });
+      }
+    }
+  }
+
   if (opts.meet && !opts.quiet) {
     const note = meetFollowUpNote(updated);
     if (note) opts.writeStderr(note);
   }
 
   if (format === "json") {
-    write(formatJsonSuccess({ event: updated, message: "Event updated" }));
+    const data: Record<string, unknown> = { event: updated, message: "Event updated" };
+    if (exceptionAction) {
+      data.exceptions = {
+        action: exceptionAction === "preserve" ? "preserved" : "overwritten",
+        instances: affected.map(summarizeException),
+        failed,
+      };
+    }
+    write(formatJsonSuccess(data));
   } else if (opts.quiet) {
     write(updated.id);
   } else {
@@ -544,7 +707,24 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     write(`Event updated\n\n${detail}`);
   }
 
-  return { exitCode: ExitCode.SUCCESS };
+  if (exceptionAction === "preserve") {
+    const restored = affected.length - failed.length;
+    if (restored > 0 && !opts.quiet) {
+      opts.writeStderr(`Restored ${restored} modified occurrence(s) to their own values.`);
+    }
+    for (const f of failed) {
+      opts.writeStderr(
+        `\u26A0 Could not restore occurrence ${f.id} (${f.start}): ${f.error}\n` +
+          `  Its own values were: ${JSON.stringify(f.values)}`,
+      );
+    }
+  } else if (exceptionAction === "overwrite" && !opts.quiet) {
+    opts.writeStderr(
+      `Overwrote ${affected.length} modified occurrence(s):\n${formatExceptionLines(affected).join("\n")}`,
+    );
+  }
+
+  return { exitCode: failed.length > 0 ? ExitCode.GENERAL : ExitCode.SUCCESS };
 }
 
 export function createUpdateCommand(): Command {
@@ -594,7 +774,20 @@ export function createUpdateCommand(): Command {
   );
   cmd.option("--meet", "Create a Google Meet conference and attach it");
   cmd.option("--remove-meet", "Remove the Google Meet conference from the event");
+  cmd.option(
+    "--preserve-exceptions",
+    "On a recurring series, keep occurrences that have their own values for the changed fields (restored after the update)",
+  );
+  cmd.option(
+    "--overwrite-exceptions",
+    "On a recurring series, let the update replace occurrences' own values for the changed fields",
+  );
   cmd.option("--dry-run", "Preview without executing");
+
+  const preserveOpt = cmd.options.find((o) => o.long === "--preserve-exceptions")!;
+  const overwriteOpt = cmd.options.find((o) => o.long === "--overwrite-exceptions")!;
+  preserveOpt.conflicts(["overwriteExceptions"]);
+  overwriteOpt.conflicts(["preserveExceptions"]);
 
   const meetOpt = cmd.options.find((o) => o.long === "--meet")!;
   const removeMeetOpt = cmd.options.find((o) => o.long === "--remove-meet")!;
@@ -641,6 +834,15 @@ Examples:
   gcal update abc123 --remove-attendee carol@example.com                     # Drop one guest
   gcal update abc123 --meet                                                  # Attach a Meet link
   gcal update abc123 --remove-meet                                           # Drop the Meet link
+  gcal update series1 -d "New agenda" --preserve-exceptions                  # Series: keep per-occurrence descriptions
+
+Recurring series:
+  Updating a series master overwrites the changed fields on every occurrence,
+  including occurrences edited individually. If any occurrence has its own value
+  for a field being changed, the update aborts and lists them unless
+  --preserve-exceptions or --overwrite-exceptions is given. Changing the time of
+  a series resets every modified occurrence, so only --overwrite-exceptions
+  applies then. --dry-run lists the affected occurrences.
 `,
   );
 
