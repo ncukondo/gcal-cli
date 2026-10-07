@@ -11,6 +11,7 @@ function makeMockApi(opts?: { rejectDelete?: boolean }): GoogleCalendarApi {
     events: {
       list: vi.fn().mockResolvedValue({ data: { items: [] } }),
       get: vi.fn(),
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
       patch: vi.fn(),
       delete: opts?.rejectDelete

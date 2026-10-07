@@ -50,6 +50,15 @@ export interface GoogleCalendarApi {
       data: { items?: GoogleEvent[]; nextPageToken?: string };
     }>;
     get: (params: { calendarId: string; eventId: string }) => Promise<{ data: GoogleEvent }>;
+    /** Expands a recurring event into its occurrences, modified ones included. */
+    instances: (params: {
+      calendarId: string;
+      eventId: string;
+      pageToken?: string;
+      maxResults?: number;
+    }) => Promise<{
+      data: { items?: GoogleEvent[]; nextPageToken?: string };
+    }>;
     insert: (params: {
       calendarId: string;
       requestBody: GoogleEventWriteBody;
@@ -217,6 +226,17 @@ export interface GoogleEvent {
   attendees?: GoogleEventAttendee[] | null;
   hangoutLink?: string | null;
   conferenceData?: GoogleConferenceData | null;
+  location?: string | null;
+  /** Present only on a recurring series' master event. */
+  recurrence?: string[] | null;
+  /** Present only on an occurrence: the master it was expanded from. */
+  recurringEventId?: string | null;
+  /** Present only on an occurrence: where the rule placed it, before any move. */
+  originalStartTime?: {
+    date?: string | null;
+    dateTime?: string | null;
+    timeZone?: string | null;
+  } | null;
   created?: string | null;
   updated?: string | null;
 }
@@ -442,6 +462,61 @@ export async function getEvent(
 ): Promise<CalendarEvent> {
   const fetched = await getEventWithRaw(api, calendarId, calendarName, eventId, timeZone);
   return fetched.event;
+}
+
+/**
+ * Every occurrence of a recurring series, as the API returns them. A modified
+ * occurrence carries its own values; an unmodified one mirrors the master.
+ */
+export async function listInstances(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  eventId: string,
+): Promise<GoogleEvent[]> {
+  try {
+    const instances: GoogleEvent[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
+
+    do {
+      if (pages >= MAX_PAGES) {
+        throw new ApiError("API_ERROR", `Pagination limit of ${MAX_PAGES} pages exceeded`);
+      }
+      const params: Parameters<GoogleCalendarApi["events"]["instances"]>[0] = {
+        calendarId,
+        eventId,
+        maxResults: 2500,
+      };
+      if (pageToken) {
+        params.pageToken = pageToken;
+      }
+      const response = await api.events.instances(params);
+      instances.push(...(response.data.items ?? []));
+      pageToken = response.data.nextPageToken;
+      pages++;
+    } while (pageToken);
+
+    return instances;
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+/**
+ * Writes an occurrence's own values back after a series update. Never notifies:
+ * it puts back what the guests already had.
+ */
+export async function patchInstance(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  instanceId: string,
+  requestBody: Partial<GoogleEventWriteBody>,
+): Promise<void> {
+  try {
+    await api.events.patch({ calendarId, eventId: instanceId, requestBody, sendUpdates: "none" });
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
 }
 
 function buildTimeFields(

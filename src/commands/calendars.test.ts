@@ -21,6 +21,7 @@ function makeApi(calendars: Partial<Calendar>[]): GoogleCalendarApi {
     events: {
       list: vi.fn(),
       get: vi.fn(),
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
       patch: vi.fn(),
       delete: vi.fn(),
@@ -197,7 +198,14 @@ describe("handleCalendars", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
-      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        instances: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
     };
 
     await expect(
@@ -217,7 +225,14 @@ describe("handleCalendars", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
-      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        instances: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
     };
 
     await expect(
