@@ -17,6 +17,10 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## Completed
 
+### Phase 19: Recurring Events
+
+51. [051-recurring-exceptions](./completed/051-recurring-exceptions.md) — 繰り返し予定の本体更新で個別変更した回を黙って上書きしない (#70)
+
 ### Phase 18: Agent-facing Reliability (issues #64–#66)
 
 48. [048-stdout-flush-on-exit](./completed/048-stdout-flush-on-exit.md) — JSON 出力がパイプで 64KB を超えると切れる (#64, PR #68)
