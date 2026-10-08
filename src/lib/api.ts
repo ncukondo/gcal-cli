@@ -56,6 +56,8 @@ export interface GoogleCalendarApi {
       eventId: string;
       pageToken?: string;
       maxResults?: number;
+      /** Include the occurrences deleted from the series, as `status: "cancelled"`. */
+      showDeleted?: boolean;
     }) => Promise<{
       data: { items?: GoogleEvent[]; nextPageToken?: string };
     }>;
@@ -63,6 +65,17 @@ export interface GoogleCalendarApi {
       calendarId: string;
       requestBody: GoogleEventWriteBody;
       sendUpdates?: SendUpdates;
+      conferenceDataVersion?: number;
+    }) => Promise<{ data: GoogleEvent }>;
+    /**
+     * Adds an event under an iCalUID of the caller's choosing. It is the only
+     * way to create an event whose ID follows the `<id>_R<datetime>` form the
+     * web UI gives a series split off with "This and following events". Never
+     * notifies guests: the API takes no sendUpdates here.
+     */
+    import: (params: {
+      calendarId: string;
+      requestBody: GoogleEventImportBody;
       conferenceDataVersion?: number;
     }) => Promise<{ data: GoogleEvent }>;
     patch: (params: {
@@ -116,7 +129,15 @@ export interface GoogleEventWriteBody {
   attendees?: GoogleEventAttendee[];
   /** A createRequest asks Google to allocate a conference; null detaches the existing one. */
   conferenceData?: { createRequest: { requestId: string } } | null;
+  location?: string | null;
 }
+
+/**
+ * The body of an import. A split series is imported from its master as read,
+ * so this takes the response shape: fields this module does not model --
+ * reminders, color, visibility, guest permissions -- carry over untouched.
+ */
+export type GoogleEventImportBody = GoogleEvent & { iCalUID: string };
 
 interface GoogleEventAttendeeWrite {
   email: string;
@@ -186,6 +207,7 @@ export interface GoogleConferenceEntryPoint {
 }
 
 export interface GoogleConferenceData {
+  conferenceId?: string | null;
   createRequest?: {
     requestId?: string | null;
     status?: { statusCode?: string | null } | null;
@@ -227,6 +249,8 @@ export interface GoogleEvent {
   hangoutLink?: string | null;
   conferenceData?: GoogleConferenceData | null;
   location?: string | null;
+  iCalUID?: string | null;
+  organizer?: { email?: string | null; self?: boolean | null } | null;
   /** Present only on a recurring series' master event. */
   recurrence?: string[] | null;
   /** Present only on an occurrence: the master it was expanded from. */
@@ -472,6 +496,7 @@ export async function listInstances(
   api: GoogleCalendarApi,
   calendarId: string,
   eventId: string,
+  options: { showDeleted?: boolean } = {},
 ): Promise<GoogleEvent[]> {
   try {
     const instances: GoogleEvent[] = [];
@@ -487,6 +512,9 @@ export async function listInstances(
         eventId,
         maxResults: 2500,
       };
+      if (options.showDeleted) {
+        params.showDeleted = true;
+      }
       if (pageToken) {
         params.pageToken = pageToken;
       }
@@ -514,6 +542,28 @@ export async function patchInstance(
 ): Promise<void> {
   try {
     await api.events.patch({ calendarId, eventId: instanceId, requestBody, sendUpdates: "none" });
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+/** Adds an event under the iCalUID in the body. Returns the response as is. */
+export async function importEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  requestBody: GoogleEventImportBody,
+): Promise<GoogleEvent> {
+  try {
+    const params: Parameters<GoogleCalendarApi["events"]["import"]>[0] = {
+      calendarId,
+      requestBody,
+    };
+    // Without it the API drops the conference, and the copy loses its Meet link.
+    if (requestBody.conferenceData) {
+      params.conferenceDataVersion = 1;
+    }
+    const response = await api.events.import(params);
+    return response.data;
   } catch (error: unknown) {
     mapApiError(error);
   }

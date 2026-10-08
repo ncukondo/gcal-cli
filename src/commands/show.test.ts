@@ -53,6 +53,7 @@ function makeMockApi(event?: CalendarEvent): GoogleCalendarApi {
         : vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 })),
       instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
+      import: vi.fn(),
       patch: vi.fn(),
       delete: vi.fn(),
     },

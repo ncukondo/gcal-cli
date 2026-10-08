@@ -72,6 +72,7 @@ export function createMockApi(data: MockApiData = {}): GoogleCalendarApi {
           insertedEvents.push(event);
           return { data: event };
         }),
+      import: vi.fn(),
       patch: vi
         .fn()
         .mockImplementation(

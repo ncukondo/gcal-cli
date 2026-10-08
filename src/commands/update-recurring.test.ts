@@ -58,6 +58,7 @@ function makeApi(
       get: vi.fn().mockResolvedValue({ data: target }),
       instances: vi.fn().mockResolvedValue({ data: { items: instances } }),
       insert: vi.fn(),
+      import: vi.fn(),
       patch: vi.fn(
         patchImpl ??
           ((p: { eventId: string; requestBody: Partial<GoogleEvent> }) =>

@@ -114,6 +114,12 @@ function toEventInsertParams(
   return { ...params, requestBody: toEventBody(params.requestBody) };
 }
 
+function toEventImportParams(
+  params: Parameters<GoogleCalendarApi["events"]["import"]>[0],
+): calendar_v3.Params$Resource$Events$Import {
+  return { ...params, requestBody: params.requestBody as calendar_v3.Schema$Event };
+}
+
 function toEventPatchParams(
   params: Parameters<GoogleCalendarApi["events"]["patch"]>[0],
 ): calendar_v3.Params$Resource$Events$Patch {
@@ -152,6 +158,10 @@ export function createGoogleCalendarApi(calendar: CalendarClient): GoogleCalenda
       },
       insert: async (p) => {
         const res = await calendar.events.insert(toEventInsertParams(p));
+        return { data: res.data };
+      },
+      import: async (p) => {
+        const res = await calendar.events.import(toEventImportParams(p));
         return { data: res.data };
       },
       patch: async (p) => {

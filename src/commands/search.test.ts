@@ -51,6 +51,7 @@ function makeMockApi(events: CalendarEvent[] = []): GoogleCalendarApi {
       get: vi.fn(),
       instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
+      import: vi.fn(),
       patch: vi.fn(),
       delete: vi.fn(),
     },
