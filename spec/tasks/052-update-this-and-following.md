@@ -30,6 +30,10 @@ API での再現:
 - (1) の後に `recurrence` を元に戻しても、分割点以降の例外は戻らない（移動はリセット、削除は復活）。
   ロールバックでは例外も書き戻す必要がある
 - 元のシリーズを削除すると、そこから分割したシリーズも削除される（410 Gone）
+- 本体に説明が無いと、本体へのどんな書き込み（規則だけの patch を含む）でも、各回が持つ説明が消える
+- `_R` のシリーズの規則を書き換えると、Google はそれを cancelled にして別 ID で作り直す。
+  続けて import した残りは元のシリーズに RDATE / EXDATE として取り込まれる
+- 後ろで分割済みの元のシリーズを前の回で分割すると、後ろの分割は新シリーズに取り込まれる
 
 ## 決めたこと
 
@@ -47,6 +51,8 @@ API での再現:
   出席者がいて `--notify` が `none` 以外のとき、そのことを stderr に出す
 - (2) が失敗したら、元の `recurrence` に戻し、分割点以降の例外を書き戻してから、失敗として報告する。
   ロールバックにも失敗したら、元の `recurrence` を含めて報告する
+- 分割してできたシリーズ（`_R`）の回はさらに分割しない（`INVALID_ARGS`）
+- 分割点より前の回で値を持つものは、切り詰めの後に読み直し、変わった値を書き戻す
 - 出力: 新シリーズの本体を表示し、`split`（元の ID、新しい ID、分割点、両方の `recurrence`）を付ける。
   quiet は新シリーズの ID
 
@@ -59,18 +65,18 @@ API での再現:
 
 ## Implementation Steps
 
-- [ ] `events.import` と `instances` の `showDeleted` を API 抽象に追加
-- [ ] RRULE の切り詰め・続き（COUNT / UNTIL / 終日）と新シリーズ ID を計算する純粋関数
-- [ ] 分割点以降の例外の分類（書き戻す値・衝突・削除された回）
-- [ ] `--this-and-following` の実行（切り詰め → import → 書き戻し）とロールバック
-- [ ] `--dry-run`、text / JSON / quiet 出力
-- [ ] help と spec を更新
+- [x] `events.import` と `instances` の `showDeleted` を API 抽象に追加
+- [x] RRULE の切り詰め・続き（COUNT / UNTIL / 終日）と新シリーズ ID を計算する純粋関数
+- [x] 分割点以降の例外の分類（書き戻す値・衝突・削除された回）
+- [x] `--this-and-following` の実行（切り詰め → import → 書き戻し）とロールバック
+- [x] `--dry-run`、text / JSON / quiet 出力
+- [x] help と spec を更新
 
 ## E2E Test
 
-- [ ] 使い捨てシリーズで分割し、Web UI の結果と ID・RRULE・例外が一致することを確認して削除する
+- [x] 使い捨てシリーズで分割し、Web UI の結果と ID・RRULE・例外が一致することを確認して削除する
 
 ## Acceptance Criteria
 
-- [ ] 単体テスト: RRULE の切り詰め（UNTIL / COUNT / 終日）、新シリーズの body、
+- [x] 単体テスト: RRULE の切り詰め（UNTIL / COUNT / 終日）、新シリーズの body、
   分割点以降の例外（中止・保持・上書き・自動の書き戻し・削除し直し）、dry-run、部分失敗とロールバック
