@@ -8,8 +8,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * web UI does it, checked against a throwaway series on 2026-10-08: the
  * original master's rule is cut short just before the occurrence, and a new
  * series starting there is added under the ID `<original>_R<start>`. The
- * occurrences after the split keep their IDs, `<original>_<start>Z`, so a
- * series is always named after the series it was first split from.
+ * occurrences after the split keep their IDs, `<original>_<start>Z`.
  */
 
 /** When an occurrence starts, as the API gives `start` / `originalStartTime`. */
@@ -29,7 +28,16 @@ function stamp(when: OccurrenceTime): string {
 
 /** The ID the web UI gives a series split off at `splitAt`. */
 export function splitSeriesId(masterId: string, splitAt: OccurrenceTime): string {
-  return `${masterId.replace(SPLIT_SUFFIX, "")}_R${stamp(splitAt)}`;
+  return `${masterId}_R${stamp(splitAt)}`;
+}
+
+/**
+ * Whether the series was itself split off another one. Google treats such a
+ * series as part of the original: rewriting its rule makes Google cancel it
+ * and re-create it under a new ID (seen on 2026-10-08), so it is not split again.
+ */
+export function isSplitOffSeries(masterId: string): boolean {
+  return SPLIT_SUFFIX.test(masterId);
 }
 
 function rewriteRule(recurrence: string[], rewrite: (parts: string[]) => string[]): string[] {

@@ -151,6 +151,28 @@ describe("update --this-and-following (#72)", () => {
       expect(api.events.import).not.toHaveBeenCalled();
     });
 
+    it("refuses an occurrence of a series that was itself split off", async () => {
+      // Seen on 2026-10-08: rewriting the rule of an `_R` series makes Google
+      // cancel it and re-create it under a new ID, and the imported remainder
+      // is folded into the original series.
+      const splitOff = "s_R20261020T010000";
+      const api = makeApi({
+        master: master(),
+        instances: series({ 23: { recurringEventId: splitOff } }),
+      });
+      vi.mocked(api.events.get).mockImplementation(async ({ eventId }) => ({
+        data:
+          eventId === splitOff
+            ? master({ id: splitOff })
+            : occurrence(23, { recurringEventId: splitOff }),
+      }));
+      const error = await failure(run(api, { title: "New" }));
+      expect(error.code).toBe("INVALID_ARGS");
+      expect(error.message).toContain(splitOff);
+      expect(api.events.patch).not.toHaveBeenCalled();
+      expect(api.events.import).not.toHaveBeenCalled();
+    });
+
     it("updates the whole series when the split is at the first occurrence", async () => {
       const api = makeApi({ master: master(), instances: series() });
       const result = await run(api, { eventId: occurrenceId(19), title: "New" });

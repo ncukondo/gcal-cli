@@ -3,6 +3,7 @@ import type { GoogleEvent } from "./api.ts";
 import {
   buildSplitSeriesBody,
   continueRecurrence,
+  isSplitOffSeries,
   planSplit,
   splitSeriesId,
   truncateRecurrence,
@@ -20,12 +21,14 @@ describe("splitSeriesId", () => {
       "opram52gebhe394g6dbfidm6t8_R20261023",
     );
   });
+});
 
-  it("splits a series that was itself split off under the original base", () => {
-    expect(splitSeriesId("abc_R20261023T010000", { dateTime: "2026-10-30T10:00:00+09:00" })).toBe(
-      "abc_R20261030T010000",
-    );
-    expect(splitSeriesId("abc_R20261023", { date: "2026-10-30" })).toBe("abc_R20261030");
+describe("isSplitOffSeries", () => {
+  it("recognizes the IDs of series split off another one", () => {
+    expect(isSplitOffSeries("abc_R20261023T010000")).toBe(true);
+    expect(isSplitOffSeries("abc_R20261023")).toBe(true);
+    expect(isSplitOffSeries("abc")).toBe(false);
+    expect(isSplitOffSeries("abc_20261023T010000Z")).toBe(false);
   });
 });
 

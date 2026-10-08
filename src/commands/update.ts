@@ -928,6 +928,8 @@ This and following (--this-and-following):
   follow --preserve-exceptions / --overwrite-exceptions as above. --notify
   covers the original series only: the new series is added without
   invitations. At the first occurrence, the whole series is updated instead.
+  A series that was itself split off (ID ending in _R<start>) cannot be split
+  again.
 `,
   );
 

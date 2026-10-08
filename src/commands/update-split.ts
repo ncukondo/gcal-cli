@@ -22,7 +22,7 @@ import {
   findOverriddenInstances,
 } from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
-import { buildSplitSeriesBody, planSplit } from "../lib/recurring-split.ts";
+import { buildSplitSeriesBody, isSplitOffSeries, planSplit } from "../lib/recurring-split.ts";
 import type { SplitPlan } from "../lib/recurring-split.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import type { CalendarEvent, CommandResult, OutputFormat } from "../types/index.ts";
@@ -68,6 +68,15 @@ export async function prepareSplit(
       "INVALID_ARGS",
       `--this-and-following needs the ID of an occurrence of a recurring series; "${eventId}" is ${what}.` +
         " Use `gcal list` to find the occurrence to split at.",
+    );
+  }
+
+  if (isSplitOffSeries(masterId)) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      `"${eventId}" belongs to ${masterId}, a series that was itself split off another one. ` +
+        "Splitting it again is not supported: Google re-creates such a series under a new ID when its rule changes. " +
+        "Update its occurrences one by one, or split it in the Google Calendar web UI.",
     );
   }
 
