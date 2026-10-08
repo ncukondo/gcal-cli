@@ -14,6 +14,8 @@ import {
   isRecurringMaster,
 } from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
+import { prepareSplit, runSplit } from "./update-split.ts";
+import type { SplitTarget } from "./update-split.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
@@ -72,6 +74,11 @@ export interface UpdateHandlerOptions {
   preserveExceptions?: boolean;
   /** On a recurring series, let the update replace the modified occurrences' own values. */
   overwriteExceptions?: boolean;
+  /**
+   * Split the series at this occurrence and update the new series, as the web
+   * UI's "This and following events" does. See spec/commands.md.
+   */
+  thisAndFollowing?: boolean;
 }
 
 interface ResolvedTime {
@@ -570,7 +577,26 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   // guest list that gets written and the recurring-series check all come from
   // this single snapshot. It is made for every update: only the event itself
   // says whether it is a series master whose occurrences the patch would hit.
-  const existing: FetchedEvent = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+  let existing: FetchedEvent = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+
+  // A split updates the new series, so from here on the update works against
+  // that series as it would be, not against the occurrence it was given.
+  let split: SplitTarget | undefined;
+  if (opts.thisAndFollowing) {
+    const prepared = await prepareSplit(api, calendarId, calendarName, eventId, existing, (id) =>
+      opts.getEvent(calendarId, calendarName, id, timezone),
+    );
+    if ("masterId" in prepared) {
+      if (!opts.quiet) {
+        opts.writeStderr(
+          `Note: ${eventId} is the first occurrence of its series, so the whole series ${prepared.masterId} is updated.`,
+        );
+      }
+      return handleUpdate({ ...opts, eventId: prepared.masterId, thisAndFollowing: false });
+    }
+    split = prepared;
+    existing = prepared.snapshot;
+  }
 
   let attendeeDiff: AttendeeDiffPreview | undefined;
   if (editsAttendees) {
@@ -641,6 +667,23 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   let affected: OverriddenInstance[] = [];
   let exceptionAction: "preserve" | "overwrite" | "abort" | undefined;
   const changing = changingFields(input, attendeeDiff);
+
+  if (split) {
+    const changes = describeChanges(
+      opts,
+      input,
+      replacesAttendees ? attendees : undefined,
+      attendeeDiff,
+    );
+    return runSplit(
+      opts,
+      split,
+      input,
+      changing,
+      changes,
+      formatChangeLines(changes, attendeeDiff),
+    );
+  }
   if (isRecurringMaster(existing.raw) && changing.length > 0) {
     const instances = await listInstances(api, calendarId, eventId);
     affected = findOverriddenInstances(existing.raw, instances, changing);
@@ -808,6 +851,10 @@ export function createUpdateCommand(): Command {
   cmd.option(
     "--overwrite-exceptions",
     "On a recurring series, let the update replace occurrences' own values for the changed fields",
+  );
+  cmd.option(
+    "--this-and-following",
+    "On an occurrence of a recurring series, update it and all following occurrences (splits the series)",
   );
   cmd.option("--dry-run", "Preview without executing");
 
