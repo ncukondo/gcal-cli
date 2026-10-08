@@ -8,22 +8,18 @@ import type {
 import {
   ApiError,
   buildUpdateFields,
-  deleteEvent,
   importEvent,
   listInstances,
   normalizeEvent,
-  patchInstance,
   patchRecurrence,
   updateEvent,
 } from "../lib/api.ts";
-import {
-  buildRestoreBody,
-  changedFields,
-  findOverriddenInstances,
-} from "../lib/recurring-exceptions.ts";
+import { findOverriddenInstances } from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
 import { buildSplitSeriesBody, isSplitOffSeries, planSplit } from "../lib/recurring-split.ts";
 import type { SplitPlan } from "../lib/recurring-split.ts";
+import { restoreOccurrences, restoreWhatChanged } from "./recurring-restore.ts";
+import type { RestoreFailure } from "./recurring-restore.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import type { CalendarEvent, CommandResult, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
@@ -192,59 +188,9 @@ function fieldsToRestore(
   );
 }
 
-interface RestoreFailure {
-  id: string;
-  start: string;
-  error: string;
-  /** What the occurrence held, so it can be put back by hand. */
-  values: Record<string, unknown>;
-}
-
 /**
- * Writes the occurrences' own values back and deletes the deleted ones again.
- * Collects failures instead of stopping: each one is independent, and the
- * caller reports them with the values that were meant to be written.
- */
-async function restoreOccurrences(
-  api: GoogleCalendarApi,
-  calendarId: string,
-  restores: { instance: OverriddenInstance; fields: ExceptionField[] }[],
-  deleted: GoogleEvent[],
-): Promise<RestoreFailure[]> {
-  const failed: RestoreFailure[] = [];
-  for (const { instance, fields } of restores) {
-    if (fields.length === 0) continue;
-    const body = buildRestoreBody(instance.raw, fields);
-    try {
-      await patchInstance(api, calendarId, instance.id, body);
-    } catch (err) {
-      failed.push({
-        id: instance.id,
-        start: instance.start,
-        error: (err as Error).message,
-        values: body,
-      });
-    }
-  }
-  for (const occurrence of deleted) {
-    const id = occurrence.id ?? "";
-    try {
-      await deleteEvent(api, calendarId, id, "none");
-    } catch (err) {
-      const start =
-        occurrence.originalStartTime?.dateTime ?? occurrence.originalStartTime?.date ?? "";
-      failed.push({ id, start, error: (err as Error).message, values: { status: "cancelled" } });
-    }
-  }
-  return failed;
-}
-
-/**
- * Puts back what a write to the original series cleared on the occurrences
- * that stay with it. Seen on 2026-10-08: when the master has no description,
- * any write to it -- the rule alone included -- clears the descriptions its
- * occurrences have of their own. They are compared with a fresh read rather
- * than written back blindly, so only what Google actually changed is written.
+ * Puts back what cutting the rule short cleared on the occurrences that stay
+ * with the original series.
  */
 async function settlePreceding(
   api: GoogleCalendarApi,
@@ -252,22 +198,8 @@ async function settlePreceding(
   split: SplitTarget,
 ): Promise<{ restored: number; failed: RestoreFailure[] }> {
   const own = findOverriddenInstances(split.master, split.plan.preceding, ["time"]);
-  if (own.length === 0) return { restored: 0, failed: [] };
-
-  let current: GoogleEvent[] | undefined;
-  try {
-    current = await listInstances(api, calendarId, split.master.id ?? "");
-  } catch {
-    // Without a fresh read, every value of their own is written back.
-  }
-  const restores = own.map((instance) => {
-    const now = current?.find((i) => i.id === instance.id);
-    const fields = now ? changedFields(instance.raw, now) : instance.fields;
-    return { instance, fields: fields.filter((f) => f !== "conference") };
-  });
-  const failed = await restoreOccurrences(api, calendarId, restores, []);
-  const restored = restores.filter((r) => r.fields.length > 0).length - failed.length;
-  return { restored, failed };
+  const result = await restoreWhatChanged(api, calendarId, split.master.id ?? "", own, () => true);
+  return { restored: result.restored.length, failed: result.failed };
 }
 
 /**
