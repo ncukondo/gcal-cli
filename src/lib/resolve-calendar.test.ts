@@ -9,6 +9,7 @@ function createMockApi(overrides?: Partial<GoogleCalendarApi>): GoogleCalendarAp
     events: {
       list: vi.fn(),
       get: vi.fn(),
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
       patch: vi.fn(),
       delete: vi.fn(),

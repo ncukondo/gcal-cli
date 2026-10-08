@@ -8,6 +8,8 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  listInstances,
+  patchInstance,
   isAuthRequiredError,
   ApiError,
   MAX_PAGES,
@@ -482,6 +484,7 @@ function createMockApi(responses: Record<string, unknown>): GoogleCalendarApi {
         }
         return { data: response };
       }),
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn().mockImplementation(async () => {
         return { data: responses["inserted"] ?? responses["default"] };
       }),
@@ -546,7 +549,14 @@ describe("listCalendars", () => {
           data: { items: [{ id: "cal1", summary: "Cal" }], nextPageToken: "next" },
         }),
       },
-      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        instances: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
     };
 
     const error = await listCalendars(api).catch((e) => e);
@@ -628,6 +638,7 @@ describe("listEvents", () => {
       events: {
         list: listFn,
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -657,6 +668,7 @@ describe("listEvents", () => {
       events: {
         list: listFn,
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -722,6 +734,7 @@ describe("listEvents", () => {
           },
         }),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -732,6 +745,66 @@ describe("listEvents", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ code: "API_ERROR" });
     expect(error.message).toContain(`${MAX_PAGES}`);
+  });
+});
+
+function instancesApi(instances: GoogleCalendarApi["events"]["instances"]): GoogleCalendarApi {
+  return {
+    calendarList: { list: vi.fn() },
+    events: {
+      list: vi.fn(),
+      get: vi.fn(),
+      instances,
+      insert: vi.fn(),
+      patch: vi.fn().mockResolvedValue({ data: {} }),
+      delete: vi.fn(),
+    },
+  };
+}
+
+describe("listInstances", () => {
+  it("follows pagination and returns every occurrence as returned", async () => {
+    const instances = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { items: [{ id: "s_1" }], nextPageToken: "p2" } })
+      .mockResolvedValueOnce({ data: { items: [{ id: "s_2" }] } });
+    const api = instancesApi(instances);
+
+    const result = await listInstances(api, "primary", "s");
+
+    expect(result.map((i) => i.id)).toEqual(["s_1", "s_2"]);
+    expect(instances).toHaveBeenNthCalledWith(1, {
+      calendarId: "primary",
+      eventId: "s",
+      maxResults: 2500,
+    });
+    expect(instances).toHaveBeenNthCalledWith(2, {
+      calendarId: "primary",
+      eventId: "s",
+      maxResults: 2500,
+      pageToken: "p2",
+    });
+  });
+
+  it("maps API errors", async () => {
+    const api = instancesApi(
+      vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 })),
+    );
+    const error = await listInstances(api, "primary", "s").catch((e) => e);
+    expect(error).toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("patchInstance", () => {
+  it("patches the occurrence without notifying anyone", async () => {
+    const api = instancesApi(vi.fn());
+    await patchInstance(api, "primary", "s_1", { description: "own" });
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "primary",
+      eventId: "s_1",
+      requestBody: { description: "own" },
+      sendUpdates: "none",
+    });
   });
 });
 
@@ -769,7 +842,14 @@ describe("API error mapping", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Unauthorized"), { code: 401 })),
       },
-      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        instances: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
     };
 
     const error = await listCalendars(api).catch((e) => e);
@@ -783,6 +863,7 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn().mockRejectedValue(Object.assign(new Error("Forbidden"), { code: 403 })),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -810,6 +891,7 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn().mockRejectedValue(forbidden),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -844,6 +926,7 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn().mockRejectedValue(forbidden),
         delete: vi.fn(),
@@ -872,6 +955,7 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn().mockRejectedValue(limited),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -890,6 +974,7 @@ describe("API error mapping", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi
@@ -911,6 +996,7 @@ describe("API error mapping", () => {
         get: vi
           .fn()
           .mockRejectedValue(Object.assign(new Error("Internal Server Error"), { code: 500 })),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: vi.fn(),
@@ -927,7 +1013,14 @@ describe("API error mapping", () => {
       calendarList: {
         list: vi.fn().mockRejectedValue(new TypeError("Network error")),
       },
-      events: { list: vi.fn(), get: vi.fn(), insert: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+      events: {
+        list: vi.fn(),
+        get: vi.fn(),
+        instances: vi.fn(),
+        insert: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
+      },
     };
 
     await expect(listCalendars(api)).rejects.toThrow(TypeError);
@@ -1063,6 +1156,7 @@ describe("createEvent", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: insertFn,
         patch: vi.fn(),
         delete: vi.fn(),
@@ -1222,6 +1316,7 @@ describe("updateEvent", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: patchFn,
         delete: vi.fn(),
@@ -1894,6 +1989,7 @@ describe("deleteEvent", () => {
       events: {
         list: vi.fn(),
         get: vi.fn(),
+        instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
         insert: vi.fn(),
         patch: vi.fn(),
         delete: deleteFn,

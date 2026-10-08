@@ -51,6 +51,7 @@ export function createMockApi(data: MockApiData = {}): GoogleCalendarApi {
         }
         return { data: event };
       }),
+      instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi
         .fn()
         .mockImplementation(async (params: { calendarId: string; requestBody: unknown }) => {

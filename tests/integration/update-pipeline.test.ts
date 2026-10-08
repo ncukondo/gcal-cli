@@ -375,13 +375,14 @@ describe("update command pipeline: API → normalize → output", () => {
     expect(mockApi.events.patch).not.toHaveBeenCalled();
   });
 
-  it("does not fetch existing event for type warning when --start and --end are both provided", async () => {
+  it("does not warn about a type change when --start and --end are both provided", async () => {
     const mockApi = createMockApi({
       events: {
         primary: [makeGoogleEvent({ id: "evt-1" })],
       },
     });
     const out = captureWrite();
+    const writeStderr = vi.fn();
 
     await handleUpdate({
       api: mockApi,
@@ -391,13 +392,14 @@ describe("update command pipeline: API → normalize → output", () => {
       format: "json",
       timezone: "Asia/Tokyo",
       write: out.write,
-      writeStderr: vi.fn(),
+      writeStderr,
       getEvent: makeGetEvent(mockApi),
       start: "2026-03-01T14:00",
       end: "2026-03-01T15:00",
     });
 
-    // getEvent should NOT be called when both start and end are provided
-    expect(mockApi.events.get).not.toHaveBeenCalled();
+    // The one read is the recurring-series check; the times need nothing from it.
+    expect(mockApi.events.get).toHaveBeenCalledTimes(1);
+    expect(writeStderr).not.toHaveBeenCalled();
   });
 });
