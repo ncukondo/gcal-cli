@@ -395,6 +395,20 @@ export async function runSplit(
     throw await rollBack(api, calendarId, split, decision, err);
   }
 
+  // Before the occurrences are written back: a write to a master without a
+  // description clears theirs.
+  let event: CalendarEvent = normalizeEvent(created, calendarId, calendarName);
+  let meetError: string | undefined;
+  if (input.meet) {
+    try {
+      event = await updateEvent(api, calendarId, calendarName, created.id ?? plan.newSeriesId, {
+        meet: true,
+      });
+    } catch (err) {
+      meetError = (err as Error).message;
+    }
+  }
+
   const restores = decision.own.map((instance) => ({
     instance,
     fields: fieldsToRestore(instance, decision, changing),
@@ -408,13 +422,6 @@ export async function runSplit(
       decision.timeChanges ? [] : plan.deleted,
     )),
   ];
-
-  let event: CalendarEvent = normalizeEvent(created, calendarId, calendarName);
-  if (input.meet) {
-    event = await updateEvent(api, calendarId, calendarName, created.id ?? plan.newSeriesId, {
-      meet: true,
-    });
-  }
 
   if (sendUpdates !== "none" && (master.attendees?.length ?? 0) > 0) {
     opts.writeStderr(
@@ -465,6 +472,12 @@ export async function runSplit(
       );
     }
   }
+  if (meetError) {
+    opts.writeStderr(
+      `\u26A0 The series was split, but attaching a Google Meet conference to ${plan.newSeriesId} failed: ${meetError}\n` +
+        `  Run \`gcal update ${plan.newSeriesId} --meet\` to try again.`,
+    );
+  }
   for (const f of failed) {
     opts.writeStderr(
       `⚠ Could not restore occurrence ${f.id} (${f.start}): ${f.error}\n` +
@@ -472,7 +485,8 @@ export async function runSplit(
     );
   }
 
-  return { exitCode: failed.length > 0 ? ExitCode.GENERAL : ExitCode.SUCCESS };
+  const ok = failed.length === 0 && meetError === undefined;
+  return { exitCode: ok ? ExitCode.SUCCESS : ExitCode.GENERAL };
 }
 
 function writeDryRun(

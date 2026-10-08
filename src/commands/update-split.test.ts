@@ -254,6 +254,33 @@ describe("update --this-and-following (#72)", () => {
       });
     });
 
+    it("attaches Meet before writing occurrences back, which a master write can clear", async () => {
+      const api = makeApi({
+        master: master(),
+        instances: series({ 25: { description: "Own agenda" } }),
+      });
+      await run(api, { meet: true });
+      const ids = patches(api).map((p) => p.eventId);
+      expect(ids).toEqual([SERIES, NEW_SERIES, occurrenceId(25)]);
+    });
+
+    it("still writes occurrences back when attaching Meet fails, and says so", async () => {
+      const api = makeApi({
+        master: master(),
+        instances: series({ 25: { description: "Own agenda" } }),
+      });
+      const patch = api.events.patch;
+      vi.mocked(patch).mockImplementation(async (p) => {
+        if (p.eventId === NEW_SERIES) throw new Error("Conference failure");
+        return { data: { ...master(), ...p.requestBody } as GoogleEvent };
+      });
+      const result = await run(api, { meet: true });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Conference failure");
+      expect(patches(api).map((p) => p.eventId)).toContain(occurrenceId(25));
+      expect(result.output).toContain(NEW_SERIES);
+    });
+
     it("drops the conference from the new series with --remove-meet", async () => {
       const conferenceData = { conferenceId: "abc", entryPoints: [] };
       const api = makeApi({
