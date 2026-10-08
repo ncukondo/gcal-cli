@@ -11,6 +11,7 @@ import {
   listInstances,
   patchInstance,
   importEvent,
+  patchRecurrence,
   isAuthRequiredError,
   ApiError,
   MAX_PAGES,
@@ -809,6 +810,19 @@ describe("listInstances", () => {
       eventId: "s",
       maxResults: 2500,
       showDeleted: true,
+    });
+  });
+});
+
+describe("patchRecurrence", () => {
+  it("writes only the rule, notifying as asked", async () => {
+    const api = instancesApi(vi.fn());
+    await patchRecurrence(api, "primary", "s", ["RRULE:FREQ=DAILY;UNTIL=20261022T145959Z"], "all");
+    expect(api.events.patch).toHaveBeenCalledWith({
+      calendarId: "primary",
+      eventId: "s",
+      requestBody: { recurrence: ["RRULE:FREQ=DAILY;UNTIL=20261022T145959Z"] },
+      sendUpdates: "all",
     });
   });
 });
