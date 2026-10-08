@@ -447,6 +447,63 @@ function decideExceptionAction(
   );
 }
 
+/** What an update writes, as the dry run shows it. */
+function describeChanges(
+  opts: UpdateHandlerOptions,
+  input: UpdateEventInput,
+  replacement: AttendeeInput[] | undefined,
+  attendeeDiff: AttendeeDiffPreview | undefined,
+): Record<string, unknown> {
+  const changes: Record<string, unknown> = {};
+  if (input.title !== undefined) changes.title = input.title;
+  if (input.description !== undefined) changes.description = input.description;
+  if (input.transparency !== undefined) changes.transparency = input.transparency;
+  if (replacement) {
+    changes.attendees = replacement.map((a) => a.email);
+  } else if (attendeeDiff) {
+    changes.attendees = attendeeDiff.merged;
+    changes.attendees_added = attendeeDiff.added;
+    changes.attendees_removed = attendeeDiff.removed;
+  }
+  if (opts.notify !== undefined) changes.notify = opts.notify;
+  // The requestId is minted by the API layer, so a dry run never allocates one.
+  if (opts.meet) changes.meet = true;
+  if (opts.removeMeet) changes.remove_meet = true;
+  const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
+  if (withTime.start !== undefined) changes.start = withTime.start;
+  if (withTime.end !== undefined) changes.end = withTime.end;
+  if (withTime.allDay !== undefined) changes.allDay = withTime.allDay;
+  return changes;
+}
+
+function formatChangeLines(
+  changes: Record<string, unknown>,
+  attendeeDiff: AttendeeDiffPreview | undefined,
+): string[] {
+  const lines: string[] = [];
+  if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
+  if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
+  if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
+  if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
+  if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
+  if (changes.attendees !== undefined) {
+    const list = changes.attendees as string[];
+    let line = `  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`;
+    const diff = [
+      ...(attendeeDiff?.added ?? []).map((email) => `+${email}`),
+      ...(attendeeDiff?.removed ?? []).map((email) => `-${email}`),
+    ];
+    if (diff.length > 0) line += `   (${diff.join(", ")})`;
+    lines.push(line);
+  }
+  if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
+  if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
+  if (changes.remove_meet !== undefined) {
+    lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
+  }
+  return lines;
+}
+
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
   const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
 
@@ -593,25 +650,12 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   }
 
   if (opts.dryRun) {
-    const changes: Record<string, unknown> = {};
-    if (input.title !== undefined) changes.title = input.title;
-    if (input.description !== undefined) changes.description = input.description;
-    if (input.transparency !== undefined) changes.transparency = input.transparency;
-    if (replacesAttendees) {
-      changes.attendees = attendees.map((a) => a.email);
-    } else if (attendeeDiff) {
-      changes.attendees = attendeeDiff.merged;
-      changes.attendees_added = attendeeDiff.added;
-      changes.attendees_removed = attendeeDiff.removed;
-    }
-    if (opts.notify !== undefined) changes.notify = opts.notify;
-    // The requestId is minted by the API layer, so a dry run never allocates one.
-    if (opts.meet) changes.meet = true;
-    if (opts.removeMeet) changes.remove_meet = true;
-    const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
-    if (withTime.start !== undefined) changes.start = withTime.start;
-    if (withTime.end !== undefined) changes.end = withTime.end;
-    if (withTime.allDay !== undefined) changes.allDay = withTime.allDay;
+    const changes = describeChanges(
+      opts,
+      input,
+      replacesAttendees ? attendees : undefined,
+      attendeeDiff,
+    );
 
     if (format === "json") {
       const data: Record<string, unknown> = {
@@ -628,27 +672,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       }
       write(formatJsonSuccess(data));
     } else {
-      const lines = [`DRY RUN: Would update event "${eventId}":`];
-      if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
-      if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
-      if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
-      if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
-      if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
-      if (changes.attendees !== undefined) {
-        const list = changes.attendees as string[];
-        let line = `  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`;
-        const diff = [
-          ...(attendeeDiff?.added ?? []).map((email) => `+${email}`),
-          ...(attendeeDiff?.removed ?? []).map((email) => `-${email}`),
-        ];
-        if (diff.length > 0) line += `   (${diff.join(", ")})`;
-        lines.push(line);
-      }
-      if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
-      if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
-      if (changes.remove_meet !== undefined) {
-        lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
-      }
+      const lines = [
+        `DRY RUN: Would update event "${eventId}":`,
+        ...formatChangeLines(changes, attendeeDiff),
+      ];
       if (exceptionAction) {
         const fate = {
           preserve: "would be restored after the update (--preserve-exceptions)",
