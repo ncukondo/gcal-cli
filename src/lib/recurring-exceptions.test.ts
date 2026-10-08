@@ -174,4 +174,28 @@ describe("buildRestoreBody", () => {
       description: null,
     });
   });
+
+  it("writes back the location and the moved time", () => {
+    const own = instance("13", {
+      location: "Room 2",
+      start: { dateTime: "2026-08-13T15:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2026-08-13T15:30:00+09:00", timeZone: "Asia/Tokyo" },
+    });
+    expect(buildRestoreBody(own, ["location", "time"])).toEqual({
+      location: "Room 2",
+      start: { dateTime: "2026-08-13T15:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2026-08-13T15:30:00+09:00", timeZone: "Asia/Tokyo" },
+    });
+  });
+
+  it("writes back an all-day occurrence's dates", () => {
+    const own = instance("13", {
+      start: { date: "2026-08-14" },
+      end: { date: "2026-08-15" },
+    });
+    expect(buildRestoreBody(own, ["time"])).toEqual({
+      start: { date: "2026-08-14" },
+      end: { date: "2026-08-15" },
+    });
+  });
 });
