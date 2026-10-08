@@ -259,6 +259,7 @@ Options:
   --remove-meet                 Remove the conference from the event
   --preserve-exceptions         Recurring series: keep occurrences' own values (restored after the update)
   --overwrite-exceptions        Recurring series: let the update replace occurrences' own values
+  --this-and-following          Occurrence: update it and all following occurrences (splits the series)
   --dry-run                     Preview without executing
 ```
 
@@ -408,6 +409,78 @@ Recurring series (#70):
   ```
 - このため `update` は常にイベントを 1 回取得する（本体かどうかはイベント自身にしか分からない）。
   本体の場合はさらに `events.instances` を呼ぶ。
+
+This and following (`--this-and-following`, #72):
+
+Web UI の「これ以降のすべての予定」と同じく、指定した回でシリーズを分割し、変更を新しいシリーズに適用する。
+Google の挙動は 2026-10-08 に使い捨てシリーズで実測した（`spec/tasks/052-update-this-and-following.md`）。
+
+- 対象は**回の ID**（`recurringEventId` を持つ）。本体 ID・単発の予定は `INVALID_ARGS`。
+  自分が organizer でないシリーズも `INVALID_ARGS`（自分のコピーの規則だけが変わってしまうため）。
+- シリーズの最初の回を指定した場合は分割せず、本体の更新（上の Recurring series）として扱い、stderr に注記する。
+- 手順:
+  1. 本体と全回（削除された回を含む、`showDeleted`）を取得する
+  2. 本体の `recurrence` の `COUNT` / `UNTIL` を `UNTIL=<分割する回の 1 秒前>`（終日は前日）に置き換える。
+     `--notify` はこの書き込みに使う
+  3. 新シリーズを `events.import` で追加する。iCalUID は `<元ID>_R<分割する回の開始>@google.com`
+     （時刻指定は UTC の `YYYYMMDDTHHMMSS`、終日は `YYYYMMDD`）で、ID は Web UI と同じ `<元ID>_R...` になる。
+     本体の全フィールド（リマインダー・色・公開範囲など）をコピーし、変更を適用する。
+     `COUNT` は分割前の回数（削除された回を含む）を引いた残り、`UNTIL` はそのまま。
+     会議は同じものを引き継ぐ。`--meet` は追加後に新シリーズへ要求し、`--remove-meet` は引き継がない
+  4. 分割点以降の回は ID が変わらないので、その回の値を `patch` で書き戻し、削除されていた回は削除し直す
+     （import すると回の値は失われ、削除した回も復活するため）
+- 分割点以降の回が持つ値:
+  - 変更しないフィールドの値は**常に**書き戻す（Web UI と同じ）。title / description / free-busy /
+    出席者 / location / 移動した時刻を書き戻せる
+  - 変更するフィールドの値を持つ回があると、フラグ無しでは `INVALID_ARGS` で中止する。
+    `--preserve-exceptions` はその値も書き戻し、`--overwrite-exceptions` は新しい値のままにする
+  - 会議が本体と違う回は書き戻せないため、`--overwrite-exceptions` でしか進めない
+  - 時刻を変える場合（`--start` / `--end` / `--duration`）は新シリーズの回が別の ID になるので、
+    値を持つ回・削除された回があれば `--overwrite-exceptions` でしか進めない（何も書き戻さず、削除された回は復活する）
+- 手順 3 が失敗した場合は、本体の `recurrence` を元に戻し、分割点以降の回の値と削除を書き戻してから、
+  元のエラーに経過を添えて返す。元に戻すのにも失敗したら、元の `recurrence` をメッセージに含める。
+  手順 4 の失敗は回ごとに、書き戻すはずだった値とともに stderr と JSON（`exceptions.failed`）に出し、終了コードは 1。
+- 通知: `events.import` は `sendUpdates` を受け付けず、新シリーズの招待は送られない。
+  出席者がいて `--notify` が `none` 以外なら、そのことを stderr に出す。
+- 出力: 新シリーズの本体を表示する。text では最後に `New series: <ID> (split from <元ID> at <分割点>)`、
+  quiet では新シリーズの ID。JSON:
+
+  ```json
+  {
+    "event": { "id": "s_R20261023T010000", "...": "..." },
+    "message": "Event updated (this and following)",
+    "split": {
+      "series_id": "s",
+      "new_series_id": "s_R20261023T010000",
+      "split_at": "2026-10-23T10:00:00+09:00",
+      "recurrence": ["RRULE:FREQ=DAILY;UNTIL=20261023T005959Z"],
+      "new_recurrence": ["RRULE:FREQ=DAILY;COUNT=6"]
+    },
+    "exceptions": {
+      "action": "carried | preserved | overwritten",
+      "instances": [{ "id": "...", "start": "...", "original_start": "...", "fields": ["description"] }],
+      "deleted": ["s_20261026T010000Z"],
+      "failed": []
+    }
+  }
+  ```
+
+  `exceptions` は分割点以降に値を持つ回か削除された回があるときだけ付く。
+- `--dry-run` は分割点・両シリーズの規則・新シリーズの ID・変更・影響を受ける回を表示し、何も書き込まない。
+  JSON では `this_and_following: true` と `split`、`exceptions.action` は中止する場合 `"abort"`。
+
+  ```
+  DRY RUN: Would update event "s_20261023T010000Z" and all following occurrences:
+    split series "s" at 2026-10-23T10:00:00+09:00
+    original series: RRULE:FREQ=DAILY;UNTIL=20261023T005959Z   (was RRULE:FREQ=DAILY;COUNT=10)
+    new series "s_R20261023T010000": RRULE:FREQ=DAILY;COUNT=6
+    title: "New"
+    modified occurrences after the split (1) would keep their own values for the fields not changed:
+      s_20261025T010000Z  2026-10-25T10:00:00+09:00  (description)
+    deleted occurrences after the split (1) would stay deleted:
+      s_20261026T010000Z  2026-10-26T10:00:00+09:00
+  ```
+- 注意: 元のシリーズを削除すると、そこから分割したシリーズも Google が一緒に削除する（実測）。
 
 Quiet mode (`-q`): Event ID only.
 

@@ -909,6 +909,7 @@ Examples:
   gcal update abc123 --meet                                                  # Attach a Meet link
   gcal update abc123 --remove-meet                                           # Drop the Meet link
   gcal update series1 -d "New agenda" --preserve-exceptions                  # Series: keep per-occurrence descriptions
+  gcal update series1_20261023T010000Z -t "New" --this-and-following         # This and following occurrences
 
 Recurring series:
   Updating a series master overwrites the changed fields on every occurrence,
@@ -917,6 +918,16 @@ Recurring series:
   --preserve-exceptions or --overwrite-exceptions is given. Changing the time of
   a series resets every modified occurrence, so only --overwrite-exceptions
   applies then. --dry-run lists the affected occurrences.
+
+This and following (--this-and-following):
+  Given an occurrence ID, splits the series there as the web UI does: the
+  original series ends before the occurrence, and a new series with the
+  changes starts at it (ID <series>_R<start>; occurrence IDs stay the same).
+  Occurrences after the split keep their own values for the fields not being
+  changed, and deleted ones stay deleted. Own values for the changed fields
+  follow --preserve-exceptions / --overwrite-exceptions as above. --notify
+  covers the original series only: the new series is added without
+  invitations. At the first occurrence, the whole series is updated instead.
 `,
   );
 
