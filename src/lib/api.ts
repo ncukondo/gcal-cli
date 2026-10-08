@@ -56,6 +56,8 @@ export interface GoogleCalendarApi {
       eventId: string;
       pageToken?: string;
       maxResults?: number;
+      /** Include the occurrences deleted from the series, as `status: "cancelled"`. */
+      showDeleted?: boolean;
     }) => Promise<{
       data: { items?: GoogleEvent[]; nextPageToken?: string };
     }>;
@@ -63,6 +65,17 @@ export interface GoogleCalendarApi {
       calendarId: string;
       requestBody: GoogleEventWriteBody;
       sendUpdates?: SendUpdates;
+      conferenceDataVersion?: number;
+    }) => Promise<{ data: GoogleEvent }>;
+    /**
+     * Adds an event under an iCalUID of the caller's choosing. It is the only
+     * way to create an event whose ID follows the `<id>_R<datetime>` form the
+     * web UI gives a series split off with "This and following events". Never
+     * notifies guests: the API takes no sendUpdates here.
+     */
+    import: (params: {
+      calendarId: string;
+      requestBody: GoogleEventImportBody;
       conferenceDataVersion?: number;
     }) => Promise<{ data: GoogleEvent }>;
     patch: (params: {
@@ -116,7 +129,16 @@ export interface GoogleEventWriteBody {
   attendees?: GoogleEventAttendee[];
   /** A createRequest asks Google to allocate a conference; null detaches the existing one. */
   conferenceData?: { createRequest: { requestId: string } } | null;
+  location?: string | null;
+  recurrence?: string[];
 }
+
+/**
+ * The body of an import. A split series is imported from its master as read,
+ * so this takes the response shape: fields this module does not model --
+ * reminders, color, visibility, guest permissions -- carry over untouched.
+ */
+export type GoogleEventImportBody = GoogleEvent & { iCalUID: string };
 
 interface GoogleEventAttendeeWrite {
   email: string;
@@ -186,6 +208,7 @@ export interface GoogleConferenceEntryPoint {
 }
 
 export interface GoogleConferenceData {
+  conferenceId?: string | null;
   createRequest?: {
     requestId?: string | null;
     status?: { statusCode?: string | null } | null;
@@ -227,6 +250,8 @@ export interface GoogleEvent {
   hangoutLink?: string | null;
   conferenceData?: GoogleConferenceData | null;
   location?: string | null;
+  iCalUID?: string | null;
+  organizer?: { email?: string | null; self?: boolean | null } | null;
   /** Present only on a recurring series' master event. */
   recurrence?: string[] | null;
   /** Present only on an occurrence: the master it was expanded from. */
@@ -472,6 +497,7 @@ export async function listInstances(
   api: GoogleCalendarApi,
   calendarId: string,
   eventId: string,
+  options: { showDeleted?: boolean } = {},
 ): Promise<GoogleEvent[]> {
   try {
     const instances: GoogleEvent[] = [];
@@ -487,6 +513,9 @@ export async function listInstances(
         eventId,
         maxResults: 2500,
       };
+      if (options.showDeleted) {
+        params.showDeleted = true;
+      }
       if (pageToken) {
         params.pageToken = pageToken;
       }
@@ -514,6 +543,43 @@ export async function patchInstance(
 ): Promise<void> {
   try {
     await api.events.patch({ calendarId, eventId: instanceId, requestBody, sendUpdates: "none" });
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+/** Rewrites a series master's recurrence rule and nothing else. */
+export async function patchRecurrence(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  eventId: string,
+  recurrence: string[],
+  sendUpdates: SendUpdates = DEFAULT_SEND_UPDATES,
+): Promise<void> {
+  try {
+    await api.events.patch({ calendarId, eventId, requestBody: { recurrence }, sendUpdates });
+  } catch (error: unknown) {
+    mapApiError(error);
+  }
+}
+
+/** Adds an event under the iCalUID in the body. Returns the response as is. */
+export async function importEvent(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  requestBody: GoogleEventImportBody,
+): Promise<GoogleEvent> {
+  try {
+    const params: Parameters<GoogleCalendarApi["events"]["import"]>[0] = {
+      calendarId,
+      requestBody,
+    };
+    // Without it the API drops the conference, and the copy loses its Meet link.
+    if (requestBody.conferenceData) {
+      params.conferenceDataVersion = 1;
+    }
+    const response = await api.events.import(params);
+    return response.data;
   } catch (error: unknown) {
     mapApiError(error);
   }
@@ -708,6 +774,57 @@ export async function createEvent(
   }
 }
 
+/**
+ * The fields an update writes, apart from the conference. `attendeeBase` is
+ * the guest list a diff merges against; it is only read when the input
+ * carries a diff without a base of its own.
+ */
+export function buildUpdateFields(
+  input: UpdateEventInput,
+  attendeeBase: GoogleEventAttendee[] = [],
+): Partial<GoogleEventWriteBody> {
+  const { start, end, allDay } = input as Record<string, unknown>;
+  const timeFieldCount = [start, end, allDay].filter((v) => v !== undefined).length;
+  if (timeFieldCount > 0 && timeFieldCount < 3) {
+    throw new ApiError("INVALID_ARGS", "start, end, and allDay must all be provided together");
+  }
+
+  const requestBody: Partial<GoogleEventWriteBody> = {};
+  if (input.title !== undefined) {
+    requestBody.summary = input.title;
+  }
+  if (input.description !== undefined) {
+    requestBody.description = input.description;
+  }
+  if (input.transparency !== undefined) {
+    requestBody.transparency = input.transparency;
+  }
+  if (input.attendees !== undefined && input.attendeeDiff !== undefined) {
+    throw new ApiError(
+      "INVALID_ARGS",
+      "attendees and attendeeDiff cannot be combined; pick replacement or diff",
+    );
+  }
+  if (input.attendees !== undefined) {
+    requestBody.attendees = buildAttendees(input.attendees);
+  } else if (input.attendeeDiff !== undefined) {
+    const merged = mergeRawAttendees(input.attendeeDiff.base ?? attendeeBase, input.attendeeDiff);
+    // A no-op diff must not touch the guest list at all: rewriting an identical
+    // array still counts as a change to Google, which mails every guest when
+    // sendUpdates is not "none".
+    if (merged.changed) {
+      requestBody.attendees = merged.attendees;
+    }
+  }
+  if (start !== undefined && end !== undefined && allDay !== undefined) {
+    Object.assign(
+      requestBody,
+      buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone),
+    );
+  }
+  return requestBody;
+}
+
 export async function updateEvent(
   api: GoogleCalendarApi,
   calendarId: string,
@@ -717,52 +834,14 @@ export async function updateEvent(
   deps: ConferenceDeps = {},
 ): Promise<CalendarEvent> {
   try {
-    const { start, end, allDay } = input as Record<string, unknown>;
-    const timeFieldCount = [start, end, allDay].filter((v) => v !== undefined).length;
-    if (timeFieldCount > 0 && timeFieldCount < 3) {
-      throw new ApiError("INVALID_ARGS", "start, end, and allDay must all be provided together");
-    }
-
-    const requestBody: Partial<GoogleEventWriteBody> = {};
-    if (input.title !== undefined) {
-      requestBody.summary = input.title;
-    }
-    if (input.description !== undefined) {
-      requestBody.description = input.description;
-    }
-    if (input.transparency !== undefined) {
-      requestBody.transparency = input.transparency;
-    }
-    if (input.attendees !== undefined && input.attendeeDiff !== undefined) {
-      throw new ApiError(
-        "INVALID_ARGS",
-        "attendees and attendeeDiff cannot be combined; pick replacement or diff",
-      );
-    }
-    if (input.attendees !== undefined) {
-      requestBody.attendees = buildAttendees(input.attendees);
-    } else if (input.attendeeDiff !== undefined) {
-      // The caller normally passes the attendees it already read, so a diff-mode
-      // update costs one read. Reading here is the fallback for callers that
-      // have no snapshot of their own.
-      const base =
-        input.attendeeDiff.base ??
-        (await api.events.get({ calendarId, eventId })).data.attendees ??
-        [];
-      const merged = mergeRawAttendees(base, input.attendeeDiff);
-      // A no-op diff must not touch the guest list at all: rewriting an identical
-      // array still counts as a change to Google, which mails every guest when
-      // sendUpdates is not "none".
-      if (merged.changed) {
-        requestBody.attendees = merged.attendees;
-      }
-    }
-    if (start !== undefined && end !== undefined && allDay !== undefined) {
-      Object.assign(
-        requestBody,
-        buildTimeFields(start as string, end as string, allDay as boolean, input.timeZone),
-      );
-    }
+    // The caller normally passes the attendees it already read, so a diff-mode
+    // update costs one read. Reading here is the fallback for callers that
+    // have no snapshot of their own.
+    const attendeeBase =
+      input.attendeeDiff !== undefined && input.attendeeDiff.base === undefined
+        ? ((await api.events.get({ calendarId, eventId })).data.attendees ?? [])
+        : [];
+    const requestBody = buildUpdateFields(input, attendeeBase);
     const params: Parameters<GoogleCalendarApi["events"]["patch"]>[0] = {
       calendarId,
       eventId,

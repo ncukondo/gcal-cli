@@ -14,6 +14,8 @@ import {
   isRecurringMaster,
 } from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
+import { prepareSplit, runSplit } from "./update-split.ts";
+import type { SplitTarget } from "./update-split.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
 import { isDateOnly, addDaysToDateString } from "../lib/date-utils.ts";
@@ -72,6 +74,11 @@ export interface UpdateHandlerOptions {
   preserveExceptions?: boolean;
   /** On a recurring series, let the update replace the modified occurrences' own values. */
   overwriteExceptions?: boolean;
+  /**
+   * Split the series at this occurrence and update the new series, as the web
+   * UI's "This and following events" does. See spec/commands.md.
+   */
+  thisAndFollowing?: boolean;
 }
 
 interface ResolvedTime {
@@ -447,6 +454,63 @@ function decideExceptionAction(
   );
 }
 
+/** What an update writes, as the dry run shows it. */
+function describeChanges(
+  opts: UpdateHandlerOptions,
+  input: UpdateEventInput,
+  replacement: AttendeeInput[] | undefined,
+  attendeeDiff: AttendeeDiffPreview | undefined,
+): Record<string, unknown> {
+  const changes: Record<string, unknown> = {};
+  if (input.title !== undefined) changes.title = input.title;
+  if (input.description !== undefined) changes.description = input.description;
+  if (input.transparency !== undefined) changes.transparency = input.transparency;
+  if (replacement) {
+    changes.attendees = replacement.map((a) => a.email);
+  } else if (attendeeDiff) {
+    changes.attendees = attendeeDiff.merged;
+    changes.attendees_added = attendeeDiff.added;
+    changes.attendees_removed = attendeeDiff.removed;
+  }
+  if (opts.notify !== undefined) changes.notify = opts.notify;
+  // The requestId is minted by the API layer, so a dry run never allocates one.
+  if (opts.meet) changes.meet = true;
+  if (opts.removeMeet) changes.remove_meet = true;
+  const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
+  if (withTime.start !== undefined) changes.start = withTime.start;
+  if (withTime.end !== undefined) changes.end = withTime.end;
+  if (withTime.allDay !== undefined) changes.allDay = withTime.allDay;
+  return changes;
+}
+
+function formatChangeLines(
+  changes: Record<string, unknown>,
+  attendeeDiff: AttendeeDiffPreview | undefined,
+): string[] {
+  const lines: string[] = [];
+  if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
+  if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
+  if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
+  if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
+  if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
+  if (changes.attendees !== undefined) {
+    const list = changes.attendees as string[];
+    let line = `  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`;
+    const diff = [
+      ...(attendeeDiff?.added ?? []).map((email) => `+${email}`),
+      ...(attendeeDiff?.removed ?? []).map((email) => `-${email}`),
+    ];
+    if (diff.length > 0) line += `   (${diff.join(", ")})`;
+    lines.push(line);
+  }
+  if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
+  if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
+  if (changes.remove_meet !== undefined) {
+    lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
+  }
+  return lines;
+}
+
 export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandResult> {
   const { api, eventId, calendarId, calendarName, format, timezone, write } = opts;
 
@@ -513,7 +577,26 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   // guest list that gets written and the recurring-series check all come from
   // this single snapshot. It is made for every update: only the event itself
   // says whether it is a series master whose occurrences the patch would hit.
-  const existing: FetchedEvent = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+  let existing: FetchedEvent = await opts.getEvent(calendarId, calendarName, eventId, timezone);
+
+  // A split updates the new series, so from here on the update works against
+  // that series as it would be, not against the occurrence it was given.
+  let split: SplitTarget | undefined;
+  if (opts.thisAndFollowing) {
+    const prepared = await prepareSplit(api, calendarId, calendarName, eventId, existing, (id) =>
+      opts.getEvent(calendarId, calendarName, id, timezone),
+    );
+    if ("masterId" in prepared) {
+      if (!opts.quiet) {
+        opts.writeStderr(
+          `Note: ${eventId} is the first occurrence of its series, so the whole series ${prepared.masterId} is updated.`,
+        );
+      }
+      return handleUpdate({ ...opts, eventId: prepared.masterId, thisAndFollowing: false });
+    }
+    split = prepared;
+    existing = prepared.snapshot;
+  }
 
   let attendeeDiff: AttendeeDiffPreview | undefined;
   if (editsAttendees) {
@@ -584,6 +667,23 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   let affected: OverriddenInstance[] = [];
   let exceptionAction: "preserve" | "overwrite" | "abort" | undefined;
   const changing = changingFields(input, attendeeDiff);
+
+  if (split) {
+    const changes = describeChanges(
+      opts,
+      input,
+      replacesAttendees ? attendees : undefined,
+      attendeeDiff,
+    );
+    return runSplit(
+      opts,
+      split,
+      input,
+      changing,
+      changes,
+      formatChangeLines(changes, attendeeDiff),
+    );
+  }
   if (isRecurringMaster(existing.raw) && changing.length > 0) {
     const instances = await listInstances(api, calendarId, eventId);
     affected = findOverriddenInstances(existing.raw, instances, changing);
@@ -593,25 +693,12 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
   }
 
   if (opts.dryRun) {
-    const changes: Record<string, unknown> = {};
-    if (input.title !== undefined) changes.title = input.title;
-    if (input.description !== undefined) changes.description = input.description;
-    if (input.transparency !== undefined) changes.transparency = input.transparency;
-    if (replacesAttendees) {
-      changes.attendees = attendees.map((a) => a.email);
-    } else if (attendeeDiff) {
-      changes.attendees = attendeeDiff.merged;
-      changes.attendees_added = attendeeDiff.added;
-      changes.attendees_removed = attendeeDiff.removed;
-    }
-    if (opts.notify !== undefined) changes.notify = opts.notify;
-    // The requestId is minted by the API layer, so a dry run never allocates one.
-    if (opts.meet) changes.meet = true;
-    if (opts.removeMeet) changes.remove_meet = true;
-    const withTime = input as UpdateEventInput & { start?: string; end?: string; allDay?: boolean };
-    if (withTime.start !== undefined) changes.start = withTime.start;
-    if (withTime.end !== undefined) changes.end = withTime.end;
-    if (withTime.allDay !== undefined) changes.allDay = withTime.allDay;
+    const changes = describeChanges(
+      opts,
+      input,
+      replacesAttendees ? attendees : undefined,
+      attendeeDiff,
+    );
 
     if (format === "json") {
       const data: Record<string, unknown> = {
@@ -628,27 +715,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       }
       write(formatJsonSuccess(data));
     } else {
-      const lines = [`DRY RUN: Would update event "${eventId}":`];
-      if (changes.title !== undefined) lines.push(`  title: "${changes.title}"`);
-      if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
-      if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
-      if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
-      if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
-      if (changes.attendees !== undefined) {
-        const list = changes.attendees as string[];
-        let line = `  attendees: ${list.length > 0 ? list.join(", ") : "(none)"}`;
-        const diff = [
-          ...(attendeeDiff?.added ?? []).map((email) => `+${email}`),
-          ...(attendeeDiff?.removed ?? []).map((email) => `-${email}`),
-        ];
-        if (diff.length > 0) line += `   (${diff.join(", ")})`;
-        lines.push(line);
-      }
-      if (changes.notify !== undefined) lines.push(`  notify: ${String(changes.notify)}`);
-      if (changes.meet !== undefined) lines.push(`  meet: ${String(changes.meet)}`);
-      if (changes.remove_meet !== undefined) {
-        lines.push(`  remove_meet: ${String(changes.remove_meet)}`);
-      }
+      const lines = [
+        `DRY RUN: Would update event "${eventId}":`,
+        ...formatChangeLines(changes, attendeeDiff),
+      ];
       if (exceptionAction) {
         const fate = {
           preserve: "would be restored after the update (--preserve-exceptions)",
@@ -782,6 +852,10 @@ export function createUpdateCommand(): Command {
     "--overwrite-exceptions",
     "On a recurring series, let the update replace occurrences' own values for the changed fields",
   );
+  cmd.option(
+    "--this-and-following",
+    "On an occurrence of a recurring series, update it and all following occurrences (splits the series)",
+  );
   cmd.option("--dry-run", "Preview without executing");
 
   const preserveOpt = cmd.options.find((o) => o.long === "--preserve-exceptions")!;
@@ -835,6 +909,7 @@ Examples:
   gcal update abc123 --meet                                                  # Attach a Meet link
   gcal update abc123 --remove-meet                                           # Drop the Meet link
   gcal update series1 -d "New agenda" --preserve-exceptions                  # Series: keep per-occurrence descriptions
+  gcal update series1_20261023T010000Z -t "New" --this-and-following         # This and following occurrences
 
 Recurring series:
   Updating a series master overwrites the changed fields on every occurrence,
@@ -843,6 +918,18 @@ Recurring series:
   --preserve-exceptions or --overwrite-exceptions is given. Changing the time of
   a series resets every modified occurrence, so only --overwrite-exceptions
   applies then. --dry-run lists the affected occurrences.
+
+This and following (--this-and-following):
+  Given an occurrence ID, splits the series there as the web UI does: the
+  original series ends before the occurrence, and a new series with the
+  changes starts at it (ID <series>_R<start>; occurrence IDs stay the same).
+  Occurrences after the split keep their own values for the fields not being
+  changed, and deleted ones stay deleted. Own values for the changed fields
+  follow --preserve-exceptions / --overwrite-exceptions as above. --notify
+  covers the original series only: the new series is added without
+  invitations. At the first occurrence, the whole series is updated instead.
+  A series that was itself split off (ID ending in _R<start>) cannot be split
+  again.
 `,
   );
 

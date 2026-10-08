@@ -13,6 +13,7 @@ function makeMockApi(opts?: { rejectDelete?: boolean }): GoogleCalendarApi {
       get: vi.fn(),
       instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
+      import: vi.fn(),
       patch: vi.fn(),
       delete: opts?.rejectDelete
         ? vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { code: 404 }))

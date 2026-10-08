@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GoogleEvent } from "./api.ts";
 import {
   buildRestoreBody,
+  changedFields,
   findOverriddenInstances,
   isRecurringMaster,
 } from "./recurring-exceptions.ts";
@@ -173,5 +174,49 @@ describe("buildRestoreBody", () => {
     expect(buildRestoreBody(instance("13", { description: null }), ["description"])).toEqual({
       description: null,
     });
+  });
+
+  it("writes back the location and the moved time", () => {
+    const own = instance("13", {
+      location: "Room 2",
+      start: { dateTime: "2026-08-13T15:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2026-08-13T15:30:00+09:00", timeZone: "Asia/Tokyo" },
+    });
+    expect(buildRestoreBody(own, ["location", "time"])).toEqual({
+      location: "Room 2",
+      start: { dateTime: "2026-08-13T15:00:00+09:00", timeZone: "Asia/Tokyo" },
+      end: { dateTime: "2026-08-13T15:30:00+09:00", timeZone: "Asia/Tokyo" },
+    });
+  });
+
+  it("writes back an all-day occurrence's dates", () => {
+    const own = instance("13", {
+      start: { date: "2026-08-14" },
+      end: { date: "2026-08-15" },
+    });
+    expect(buildRestoreBody(own, ["time"])).toEqual({
+      start: { date: "2026-08-14" },
+      end: { date: "2026-08-15" },
+    });
+  });
+});
+
+describe("changedFields", () => {
+  it("is empty for the same occurrence read twice", () => {
+    expect(changedFields(instance("13"), instance("13"))).toEqual([]);
+  });
+
+  it("names the fields whose value changed between two reads", () => {
+    const before = instance("13", { description: "Own", location: "Room 2" });
+    const after = instance("13", { description: null, location: "Room 2" });
+    expect(changedFields(before, after)).toEqual(["description"]);
+  });
+
+  it("notices a moved occurrence put back where the rule placed it", () => {
+    const before = instance("13", {
+      start: { dateTime: "2026-08-13T15:00:00+09:00" },
+      end: { dateTime: "2026-08-13T16:00:00+09:00" },
+    });
+    expect(changedFields(before, instance("13"))).toEqual(["time"]);
   });
 });

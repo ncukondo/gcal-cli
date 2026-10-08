@@ -113,6 +113,24 @@ export function findOverriddenInstances(
   return result;
 }
 
+/**
+ * The fields whose value differs between two reads of the same occurrence,
+ * for noticing what a write to its series changed on it.
+ */
+export function changedFields(before: GoogleEvent, after: GoogleEvent): ExceptionField[] {
+  const was = normalizeEvent(before, "", "");
+  const now = normalizeEvent(after, "", "");
+  const fields: ExceptionField[] = ALL_VALUE_FIELDS.filter((f) => !COMPARATORS[f](was, now));
+  if ((before.location ?? "") !== (after.location ?? "")) fields.push("location");
+  if (
+    instant(before.start) !== instant(after.start) ||
+    instant(before.end) !== instant(after.end)
+  ) {
+    fields.push("time");
+  }
+  return fields;
+}
+
 /** Fields --preserve-exceptions can write back onto an occurrence. */
 export const RESTORABLE_FIELDS: readonly ExceptionField[] = [
   "title",
@@ -121,7 +139,23 @@ export const RESTORABLE_FIELDS: readonly ExceptionField[] = [
   "attendees",
 ];
 
-/** The patch that puts an occurrence's own values back for the given fields. */
+type TimeField = NonNullable<GoogleEventWriteBody["start"]>;
+
+/** The API's nullable time shape, as a write body takes it. */
+function toTimeField(value: GoogleEvent["start"]): TimeField {
+  const field: TimeField = {};
+  if (value?.date) field.date = value.date;
+  if (value?.dateTime) field.dateTime = value.dateTime;
+  if (value?.timeZone) field.timeZone = value.timeZone;
+  return field;
+}
+
+/**
+ * The patch that puts an occurrence's own values back for the given fields.
+ * `location` and `time` only come back where the occurrence keeps its ID,
+ * which a split series does and a series whose time changed does not, so
+ * RESTORABLE_FIELDS leaves them out.
+ */
 export function buildRestoreBody(
   occurrence: GoogleEvent,
   fields: ExceptionField[],
@@ -134,5 +168,10 @@ export function buildRestoreBody(
   }
   // Passed through as returned, so RSVPs and fields the CLI does not model survive.
   if (fields.includes("attendees")) body.attendees = occurrence.attendees ?? [];
+  if (fields.includes("location")) body.location = occurrence.location ?? null;
+  if (fields.includes("time")) {
+    body.start = toTimeField(occurrence.start);
+    body.end = toTimeField(occurrence.end);
+  }
   return body;
 }

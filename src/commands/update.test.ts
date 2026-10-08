@@ -106,6 +106,7 @@ function makeMockApi(
       get: getFn,
       instances: vi.fn().mockResolvedValue({ data: { items: [] } }),
       insert: vi.fn(),
+      import: vi.fn(),
       patch: patchFn,
       delete: vi.fn(),
     },
