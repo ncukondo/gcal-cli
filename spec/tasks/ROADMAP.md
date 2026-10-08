@@ -15,14 +15,11 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
-### Phase 19: Recurring Events
-
-52. [052-update-this-and-following](./052-update-this-and-following.md) — 繰り返し予定を「これ以降のすべての予定」で更新する (#72)
-
 ## Completed
 
 ### Phase 19: Recurring Events
 
+52. [052-update-this-and-following](./completed/052-update-this-and-following.md) — 繰り返し予定を「これ以降のすべての予定」で更新する (#72, PR #73, #74)
 51. [051-recurring-exceptions](./completed/051-recurring-exceptions.md) — 繰り返し予定の本体更新で個別変更した回を黙って上書きしない (#70)
 
 ### Phase 18: Agent-facing Reliability (issues #64–#66)
