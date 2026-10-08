@@ -279,3 +279,86 @@ describe("update on a recurring series with modified occurrences (#70)", () => {
     expect(help).toContain("--overwrite-exceptions");
   });
 });
+
+describe("update on a series whose master has no description", () => {
+  // Seen on 2026-10-08: when the master has no description, any write to it --
+  // a title-only patch included -- clears the descriptions occurrences hold.
+  function clearingApi(
+    instances: GoogleEvent[],
+    patchImpl?: (p: { eventId: string }) => Promise<{ data: GoogleEvent }>,
+  ) {
+    const api = makeApi(master({ description: null }), instances, patchImpl);
+    const cleared = instances.map((i) => ({ ...i, description: null }));
+    vi.mocked(api.events.instances)
+      .mockResolvedValueOnce({ data: { items: instances } })
+      .mockResolvedValue({ data: { items: cleared } });
+    return api;
+  }
+
+  const own = () => [
+    instance("2026-08-13", { description: "August agenda" }),
+    instance("2026-09-10", { description: null }),
+  ];
+
+  it("writes back the descriptions Google cleared on a title change", async () => {
+    const api = clearingApi(own());
+    const result = await run(api, { title: "Renamed" });
+
+    expect(result.exitCode).toBe(0);
+    expect(patchedIds(api)).toEqual([SERIES, AUG]);
+    expect(vi.mocked(api.events.patch).mock.calls[1]![0]).toEqual({
+      calendarId: "primary",
+      eventId: AUG,
+      requestBody: { description: "August agenda" },
+      sendUpdates: "none",
+    });
+    expect(result.stderr).toContain("Restored 1 modified occurrence(s)");
+  });
+
+  it("reports them in JSON", async () => {
+    const api = clearingApi(own());
+    const result = await run(api, { title: "Renamed", format: "json" });
+    const json = JSON.parse(result.output);
+    expect(json.data.restored).toEqual({
+      instances: [expect.objectContaining({ id: AUG, fields: ["description"] })],
+      failed: [],
+    });
+  });
+
+  it("writes nothing back when Google left them alone", async () => {
+    const api = makeApi(master({ description: null }), own());
+    const result = await run(api, { title: "Renamed", format: "json" });
+    expect(patchedIds(api)).toEqual([SERIES]);
+    expect(JSON.parse(result.output).data).not.toHaveProperty("restored");
+  });
+
+  it("does not re-read when no occurrence holds values the update leaves alone", async () => {
+    const api = makeApi(master({ description: null }), [
+      instance("2026-08-13", { description: null }),
+    ]);
+    await run(api, { title: "Renamed" });
+    expect(api.events.instances).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a time change alone: Google resets every occurrence anyway", async () => {
+    const api = clearingApi(own());
+    await run(api, {
+      start: "2026-08-13T19:00",
+      end: "2026-08-13T20:00",
+      overwriteExceptions: true,
+    });
+    expect(patchedIds(api)).toEqual([SERIES]);
+  });
+
+  it("reports what it could not write back, with the values, and fails", async () => {
+    const api = clearingApi(own(), (p) =>
+      p.eventId === AUG
+        ? Promise.reject(Object.assign(new Error("Backend Error"), { code: 500 }))
+        : Promise.resolve({ data: master({ summary: "Renamed" }) }),
+    );
+    const result = await run(api, { title: "Renamed" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(AUG);
+    expect(result.stderr).toContain("August agenda");
+  });
+});

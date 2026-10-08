@@ -6,15 +6,16 @@ import type {
   GoogleCalendarApi,
   UpdateEventInput,
 } from "../lib/api.ts";
-import { updateEvent, ApiError, listInstances, patchInstance } from "../lib/api.ts";
+import { updateEvent, ApiError, listInstances } from "../lib/api.ts";
 import {
   RESTORABLE_FIELDS,
-  buildRestoreBody,
   findOverriddenInstances,
   isRecurringMaster,
 } from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
 import { prepareSplit, runSplit } from "./update-split.ts";
+import { restoreOccurrences, restoreWhatChanged } from "./recurring-restore.ts";
+import type { RestoreFailure } from "./recurring-restore.ts";
 import type { SplitTarget } from "./update-split.ts";
 import { formatEventDetailText, formatJsonSuccess } from "../lib/output.ts";
 import { formatDateTimeInZone, parseDateTimeInZone } from "../lib/timezone.ts";
@@ -374,14 +375,6 @@ interface ExceptionSummary {
   fields: ExceptionField[];
 }
 
-interface RestoreFailure {
-  id: string;
-  start: string;
-  error: string;
-  /** What the occurrence held, so it can be put back by hand. */
-  values: Record<string, unknown>;
-}
-
 function summarizeException(instance: OverriddenInstance): ExceptionSummary {
   return {
     id: instance.id,
@@ -684,9 +677,19 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       formatChangeLines(changes, attendeeDiff),
     );
   }
+  // Occurrences holding their own values for fields the update leaves alone.
+  // Google is not meant to touch those, but does (see restoreWhatChanged), so
+  // they are checked again after the write. A time change resets them all
+  // anyway, which the abort below already covers.
+  let untouched: OverriddenInstance[] = [];
   if (isRecurringMaster(existing.raw) && changing.length > 0) {
     const instances = await listInstances(api, calendarId, eventId);
     affected = findOverriddenInstances(existing.raw, instances, changing);
+    if (!changing.includes("time")) {
+      untouched = findOverriddenInstances(existing.raw, instances, ["time"]).filter((i) =>
+        i.fields.some((f) => f !== "conference" && !changing.includes(f)),
+      );
+    }
     if (affected.length > 0) {
       exceptionAction = decideExceptionAction(opts, changing, affected);
     }
@@ -738,22 +741,21 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   // The series is already written; a failed restore is reported with the values
   // it was meant to write, so nothing is lost even then.
-  const failed: RestoreFailure[] = [];
-  if (exceptionAction === "preserve") {
-    for (const instance of affected) {
-      const body = buildRestoreBody(instance.raw, instance.fields);
-      try {
-        await patchInstance(api, calendarId, instance.id, body);
-      } catch (err) {
-        failed.push({
-          id: instance.id,
-          start: instance.start,
-          error: (err as Error).message,
-          values: body,
-        });
-      }
-    }
-  }
+  const failed: RestoreFailure[] =
+    exceptionAction === "preserve"
+      ? await restoreOccurrences(
+          api,
+          calendarId,
+          affected.map((instance) => ({ instance, fields: instance.fields })),
+        )
+      : [];
+  const settled = await restoreWhatChanged(
+    api,
+    calendarId,
+    eventId,
+    untouched,
+    (f) => !changing.includes(f),
+  );
 
   if (opts.meet && !opts.quiet) {
     const note = meetFollowUpNote(updated);
@@ -767,6 +769,15 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
         action: exceptionAction === "preserve" ? "preserved" : "overwritten",
         instances: affected.map(summarizeException),
         failed,
+      };
+    }
+    if (settled.restored.length + settled.failed.length > 0) {
+      data.restored = {
+        instances: settled.restored.map(({ instance, fields }) => ({
+          ...summarizeException(instance),
+          fields,
+        })),
+        failed: settled.failed,
       };
     }
     write(formatJsonSuccess(data));
@@ -794,7 +805,25 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     );
   }
 
-  return { exitCode: failed.length > 0 ? ExitCode.GENERAL : ExitCode.SUCCESS };
+  if (settled.restored.length > 0 && !opts.quiet) {
+    opts.writeStderr(
+      `Restored ${settled.restored.length} modified occurrence(s) whose own values Google cleared when the series was updated:\n` +
+        settled.restored
+          .map(
+            ({ instance, fields }) => `  ${instance.id}  ${instance.start}  (${fields.join(", ")})`,
+          )
+          .join("\n"),
+    );
+  }
+  for (const f of settled.failed) {
+    opts.writeStderr(
+      `\u26A0 Could not restore occurrence ${f.id} (${f.start}), whose own values Google cleared: ${f.error}\n` +
+        `  Its own values were: ${JSON.stringify(f.values)}`,
+    );
+  }
+
+  const ok = failed.length === 0 && settled.failed.length === 0;
+  return { exitCode: ok ? ExitCode.SUCCESS : ExitCode.GENERAL };
 }
 
 export function createUpdateCommand(): Command {
