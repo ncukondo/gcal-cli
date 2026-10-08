@@ -82,6 +82,8 @@ export interface SplitPlan {
   truncated: string[];
   /** The new series' rule. */
   continued: string[];
+  /** Occurrences before the split that were not deleted. */
+  preceding: GoogleEvent[];
   /** Occurrences from the split onwards, as they stand now. */
   following: GoogleEvent[];
   /** Occurrences from the split onwards that were deleted from the series. */
@@ -120,6 +122,7 @@ export function planSplit(
     occurrencesBefore: before.length,
     truncated: truncateRecurrence(recurrence, splitAt),
     continued: continueRecurrence(recurrence, before.length),
+    preceding: before.filter((i) => i.status !== "cancelled"),
     following: after.filter((i) => i.status !== "cancelled"),
     deleted: after.filter((i) => i.status === "cancelled"),
   };

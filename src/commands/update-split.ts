@@ -16,7 +16,11 @@ import {
   patchRecurrence,
   updateEvent,
 } from "../lib/api.ts";
-import { buildRestoreBody, findOverriddenInstances } from "../lib/recurring-exceptions.ts";
+import {
+  buildRestoreBody,
+  changedFields,
+  findOverriddenInstances,
+} from "../lib/recurring-exceptions.ts";
 import type { ExceptionField, OverriddenInstance } from "../lib/recurring-exceptions.ts";
 import { buildSplitSeriesBody, planSplit } from "../lib/recurring-split.ts";
 import type { SplitPlan } from "../lib/recurring-split.ts";
@@ -227,6 +231,37 @@ async function restoreOccurrences(
 }
 
 /**
+ * Puts back what a write to the original series cleared on the occurrences
+ * that stay with it. Seen on 2026-10-08: when the master has no description,
+ * any write to it -- the rule alone included -- clears the descriptions its
+ * occurrences have of their own. They are compared with a fresh read rather
+ * than written back blindly, so only what Google actually changed is written.
+ */
+async function settlePreceding(
+  api: GoogleCalendarApi,
+  calendarId: string,
+  split: SplitTarget,
+): Promise<{ restored: number; failed: RestoreFailure[] }> {
+  const own = findOverriddenInstances(split.master, split.plan.preceding, ["time"]);
+  if (own.length === 0) return { restored: 0, failed: [] };
+
+  let current: GoogleEvent[] | undefined;
+  try {
+    current = await listInstances(api, calendarId, split.master.id ?? "");
+  } catch {
+    // Without a fresh read, every value of their own is written back.
+  }
+  const restores = own.map((instance) => {
+    const now = current?.find((i) => i.id === instance.id);
+    const fields = now ? changedFields(instance.raw, now) : instance.fields;
+    return { instance, fields: fields.filter((f) => f !== "conference") };
+  });
+  const failed = await restoreOccurrences(api, calendarId, restores, []);
+  const restored = restores.filter((r) => r.fields.length > 0).length - failed.length;
+  return { restored, failed };
+}
+
+/**
  * Puts the original series back after the new one could not be added: the
  * rule first, then the occurrences the truncation reset. Returns the error to
  * throw, which says how far the rollback got.
@@ -259,7 +294,10 @@ async function rollBack(
     instance,
     fields: instance.fields.filter((f) => f !== "conference"),
   }));
-  const failed = await restoreOccurrences(api, calendarId, restores, plan.deleted);
+  const failed = [
+    ...(await settlePreceding(api, calendarId, split)).failed,
+    ...(await restoreOccurrences(api, calendarId, restores, plan.deleted)),
+  ];
   const unrestored = failed.map(
     (f) => `\n  ${f.id} (${f.start}): ${f.error}; its own values were ${JSON.stringify(f.values)}`,
   );
@@ -330,6 +368,7 @@ export async function runSplit(
 
   const sendUpdates: SendUpdates = input.sendUpdates ?? "none";
   await patchRecurrence(api, calendarId, master.id ?? "", plan.truncated, sendUpdates);
+  const earlier = await settlePreceding(api, calendarId, split);
 
   // The conference is settled after the import: an existing one is carried
   // over as is, and a new one is requested the way any update requests it.
@@ -351,12 +390,15 @@ export async function runSplit(
     instance,
     fields: fieldsToRestore(instance, decision, changing),
   }));
-  const failed = await restoreOccurrences(
-    api,
-    calendarId,
-    restores,
-    decision.timeChanges ? [] : plan.deleted,
-  );
+  const failed = [
+    ...earlier.failed,
+    ...(await restoreOccurrences(
+      api,
+      calendarId,
+      restores,
+      decision.timeChanges ? [] : plan.deleted,
+    )),
+  ];
 
   let event: CalendarEvent = normalizeEvent(created, calendarId, calendarName);
   if (input.meet) {
@@ -402,6 +444,11 @@ export async function runSplit(
     ).length;
     if (restoredOk > 0) {
       opts.writeStderr(`Carried ${restoredOk} modified occurrence(s) over with their own values.`);
+    }
+    if (earlier.restored > 0) {
+      opts.writeStderr(
+        `Restored ${earlier.restored} modified occurrence(s) before the split that Google reset when the series was cut short.`,
+      );
     }
     if (decision.action === "overwritten") {
       opts.writeStderr(
@@ -454,20 +501,33 @@ function writeDryRun(
     `  new series "${plan.newSeriesId}": ${plan.continued.join(" ")}`,
     ...changeLines,
   ];
-  if (decision.own.length > 0) {
-    const fate = {
-      carried: "would keep their own values for the fields not changed",
-      preserved: "would keep their own values (--preserve-exceptions)",
-      overwritten: "would have the changed fields overwritten (--overwrite-exceptions)",
-      abort:
-        "would lose their own values; the update will abort unless --preserve-exceptions or --overwrite-exceptions is given",
-    }[decision.action ?? "carried"];
-    const fateNow =
-      decision.timeChanges && decision.action !== "abort"
-        ? "would be reset (the time changes)"
-        : fate;
-    out.push(`  modified occurrences after the split (${decision.own.length}) ${fateNow}:`);
+  if (decision.timeChanges && decision.own.length > 0) {
+    const fate =
+      decision.action === "abort"
+        ? "would be reset; the update will abort unless --overwrite-exceptions is given"
+        : "would be reset (the time changes)";
+    out.push(`  modified occurrences after the split (${decision.own.length}) ${fate}:`);
     out.push(...lines(decision.own).map((l) => `  ${l}`));
+  } else {
+    const conflicts = new Set(decision.conflicts);
+    const kept = decision.own.filter((i) => !conflicts.has(i));
+    if (decision.conflicts.length > 0) {
+      const fate = {
+        carried: "",
+        preserved: "would keep their own values (--preserve-exceptions)",
+        overwritten: "would have the changed fields overwritten (--overwrite-exceptions)",
+        abort:
+          "would lose their own values; the update will abort unless --preserve-exceptions or --overwrite-exceptions is given",
+      }[decision.action ?? "carried"];
+      out.push(`  modified occurrences after the split (${decision.conflicts.length}) ${fate}:`);
+      out.push(...lines(decision.conflicts).map((l) => `  ${l}`));
+    }
+    if (kept.length > 0) {
+      out.push(
+        `  modified occurrences after the split (${kept.length}) would keep their own values for the fields not changed:`,
+      );
+      out.push(...lines(kept).map((l) => `  ${l}`));
+    }
   }
   if (plan.deleted.length > 0) {
     const fate = !decision.timeChanges

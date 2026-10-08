@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GoogleEvent } from "./api.ts";
 import {
   buildRestoreBody,
+  changedFields,
   findOverriddenInstances,
   isRecurringMaster,
 } from "./recurring-exceptions.ts";
@@ -197,5 +198,25 @@ describe("buildRestoreBody", () => {
       start: { date: "2026-08-14" },
       end: { date: "2026-08-15" },
     });
+  });
+});
+
+describe("changedFields", () => {
+  it("is empty for the same occurrence read twice", () => {
+    expect(changedFields(instance("13"), instance("13"))).toEqual([]);
+  });
+
+  it("names the fields whose value changed between two reads", () => {
+    const before = instance("13", { description: "Own", location: "Room 2" });
+    const after = instance("13", { description: null, location: "Room 2" });
+    expect(changedFields(before, after)).toEqual(["description"]);
+  });
+
+  it("notices a moved occurrence put back where the rule placed it", () => {
+    const before = instance("13", {
+      start: { dateTime: "2026-08-13T15:00:00+09:00" },
+      end: { dateTime: "2026-08-13T16:00:00+09:00" },
+    });
+    expect(changedFields(before, instance("13"))).toEqual(["time"]);
   });
 });

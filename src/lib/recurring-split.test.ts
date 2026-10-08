@@ -143,6 +143,7 @@ describe("planSplit", () => {
     expect(plan.truncated).toEqual(["RRULE:FREQ=DAILY;UNTIL=20261023T005959Z"]);
     expect(plan.continued).toEqual(["RRULE:FREQ=DAILY;COUNT=6"]);
     expect(plan.following.map((i) => i.id)).toEqual(instances.slice(4).map((i) => i.id));
+    expect(plan.preceding.map((i) => i.id)).toEqual(instances.slice(0, 4).map((i) => i.id));
     expect(plan.deleted).toEqual([]);
   });
 

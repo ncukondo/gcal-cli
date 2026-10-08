@@ -113,6 +113,24 @@ export function findOverriddenInstances(
   return result;
 }
 
+/**
+ * The fields whose value differs between two reads of the same occurrence,
+ * for noticing what a write to its series changed on it.
+ */
+export function changedFields(before: GoogleEvent, after: GoogleEvent): ExceptionField[] {
+  const was = normalizeEvent(before, "", "");
+  const now = normalizeEvent(after, "", "");
+  const fields: ExceptionField[] = ALL_VALUE_FIELDS.filter((f) => !COMPARATORS[f](was, now));
+  if ((before.location ?? "") !== (after.location ?? "")) fields.push("location");
+  if (
+    instant(before.start) !== instant(after.start) ||
+    instant(before.end) !== instant(after.end)
+  ) {
+    fields.push("time");
+  }
+  return fields;
+}
+
 /** Fields --preserve-exceptions can write back onto an occurrence. */
 export const RESTORABLE_FIELDS: readonly ExceptionField[] = [
   "title",

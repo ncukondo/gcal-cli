@@ -51,6 +51,8 @@ function series(replace: Record<number, Partial<GoogleEvent>> = {}): GoogleEvent
 interface World {
   master: GoogleEvent;
   instances: GoogleEvent[];
+  /** What Google does to the occurrences when the master is written. */
+  onMasterWrite?: (instances: GoogleEvent[]) => GoogleEvent[];
 }
 
 function makeApi(world: World): GoogleCalendarApi {
@@ -76,9 +78,12 @@ function makeApi(world: World): GoogleCalendarApi {
       import: vi.fn(async ({ requestBody }: { requestBody: GoogleEventImportBody }) => ({
         data: { ...requestBody, id: requestBody.iCalUID.replace("@google.com", "") },
       })),
-      patch: vi.fn(async ({ eventId, requestBody }: { eventId: string; requestBody: object }) => ({
-        data: { ...(byId(eventId) ?? { id: eventId }), ...requestBody } as GoogleEvent,
-      })),
+      patch: vi.fn(async ({ eventId, requestBody }: { eventId: string; requestBody: object }) => {
+        if (eventId === SERIES && world.onMasterWrite) {
+          world.instances = world.onMasterWrite(world.instances);
+        }
+        return { data: { ...(byId(eventId) ?? { id: eventId }), ...requestBody } as GoogleEvent };
+      }),
       delete: vi.fn(async () => {}),
     },
   };
@@ -292,6 +297,32 @@ describe("update --this-and-following (#72)", () => {
       ]);
     });
 
+    it("puts back what cutting the rule short cleared on occurrences before the split", async () => {
+      // Seen on 2026-10-08: when the master has no description, any write to it
+      // clears the descriptions occurrences have of their own.
+      const api = makeApi({
+        master: master({ description: null }),
+        instances: series({
+          20: { description: "Own agenda", location: "Room 2" },
+          21: { summary: "Own title" },
+        }).map((i) => (i.description === "Series agenda" ? { ...i, description: null } : i)),
+        onMasterWrite: (instances) => instances.map((i) => ({ ...i, description: null })),
+      });
+      const result = await run(api, { title: "New" });
+
+      expect(result.exitCode).toBe(0);
+      const earlier = patches(api).filter(
+        (p) => p.eventId === occurrenceId(20) || p.eventId === occurrenceId(21),
+      );
+      expect(earlier).toEqual([
+        expect.objectContaining({
+          eventId: occurrenceId(20),
+          requestBody: { description: "Own agenda" },
+          sendUpdates: "none",
+        }),
+      ]);
+    });
+
     it("puts a moved occurrence back where it was moved", async () => {
       const api = makeApi({
         master: master(),
@@ -466,6 +497,24 @@ describe("update --this-and-following (#72)", () => {
       expect(result.output).toContain(NEW_SERIES);
       expect(result.output).toContain(occurrenceId(25));
       expect(result.output).toContain(occurrenceId(26));
+    });
+
+    it("tells occurrences that keep their values from ones that would lose them", async () => {
+      const api = makeApi({
+        master: master(),
+        instances: series({ 25: { description: "Own agenda" }, 27: { summary: "Special" } }),
+      });
+      const result = await run(api, { title: "New", dryRun: true });
+      const out = result.output;
+      const keep = out.indexOf("(1) would keep their own values for the fields not changed");
+      const lose = out.indexOf("(1) would lose their own values");
+      expect(keep).toBeGreaterThan(-1);
+      expect(lose).toBeGreaterThan(-1);
+      // The ones that would lose values come first, then the ones that keep them.
+      expect(lose).toBeLessThan(keep);
+      expect(out.slice(lose, keep)).toContain(occurrenceId(27));
+      expect(out.slice(lose, keep)).not.toContain(occurrenceId(25));
+      expect(out.slice(keep)).toContain(occurrenceId(25));
     });
 
     it("describes the split in JSON", async () => {
