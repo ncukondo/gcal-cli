@@ -143,8 +143,13 @@ bun run src/index.ts
 ### Build (npm package)
 
 ```bash
-bun build src/index.ts --outdir dist --target node
+bun run build   # bun scripts/build.ts
 ```
+
+`scripts/build.ts` runs `Bun.build` (`target: "node"`) and then removes the `// @bun`
+pragma the bundler adds because of the `#!/usr/bin/env bun` shebang. Bun reads a file that
+has the pragma as Latin-1, but the bundler leaves some non-ASCII text raw, so the installed
+CLI printed it garbled (#77). `tests/integration/dist-encoding.test.ts` guards this.
 
 ### Build (single binary)
 
