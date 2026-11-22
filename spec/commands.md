@@ -145,6 +145,7 @@ Options:
   --duration <duration>         Duration instead of --end (e.g. 30m, 1h, 2d).
                                 Mutually exclusive with --end.
   --description, -d <text>      Event description
+  --location <text>             Event location (no short flag: -l is --list under tasks)
   --calendar, -c <id>           Target calendar (uses first enabled if omitted)
   --busy                        Mark as busy (default)
   --free                        Mark as free (transparent)
@@ -181,6 +182,7 @@ gcal add -t "Call" -s "2026-01-24T09:00" --tz America/New_York         # Timed, 
 gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite, no mail sent
 gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
 gcal add -t "Design review" -s "2026-01-24T10:00" --meet                # With a Meet link
+gcal add -t "Session" -s "2026-01-24T10:30" --location "A-2会議室"      # With a location
 ```
 
 Attendees:
@@ -248,6 +250,8 @@ Options:
                                 Mutually exclusive with --end.
                                 Can be specified alone (preserves existing start).
   --description, -d <text>      New description
+  --location <text>             New location
+  --clear-location              Remove the location (exclusive with --location)
   --busy                        Mark as busy
   --free                        Mark as free
   --attendee, -a <email>        Replace the guest list (repeatable)
@@ -296,6 +300,8 @@ gcal update abc123 -s "2026-01-24T10:00" --duration 30m                   # Star
 gcal update abc123 -s "2026-03-01" -e "2026-03-03"                        # All-day, 3 days (inclusive)
 gcal update abc123 -s "2026-03-01" --duration 2d                          # All-day, 2 days
 gcal update abc123 --free                                                  # Transparency only
+gcal update abc123 --location "E-2会議室"                                  # Location only
+gcal update abc123 --clear-location                                        # Remove the location
 gcal update abc123 --dry-run -t "Preview"                                  # Dry run
 gcal update abc123 -a alice@example.com                                    # Replace guest list
 gcal update abc123 --clear-attendees                                       # Remove all guests
@@ -381,15 +387,15 @@ Recurring series (#70):
 
 - 対象が本体（`recurrence` を持つ）のとき、CLI は `events.instances` で全回を取得し、
   **変更するフィールドについて本体と異なる値を持つ回**を検出する。
-  比較するのは title / description（null と空文字は同一視）/ free-busy /
+  比較するのは title / description（null と空文字は同一視）/ location（同）/ free-busy /
   出席者（アドレスの集合、大文字小文字と RSVP は無視）/ 会議 URL。
-  時刻を変える場合はこれら全部に加えて location と、移動・長さ変更された回を対象にする。
+  時刻を変える場合はこれら全部に加えて、移動・長さ変更された回を対象にする。
   cancelled の回は対象外。
 - 該当する回があると、どちらかのフラグが無い限り **`INVALID_ARGS` で中止し、
   何も書き込まない**。メッセージに回の ID・開始時刻・異なるフィールドを列挙する。
 - `--preserve-exceptions`: 本体を更新した後、該当する回それぞれに元の値を `patch` で書き戻す
   （`sendUpdates: "none"` 固定。元に戻すだけなので通知しない）。書き戻せるのは
-  title / description / free-busy / 出席者（生のオブジェクトをそのまま書き戻すので RSVP も残る）。
+  title / description / location / free-busy / 出席者（生のオブジェクトをそのまま書き戻すので RSVP も残る）。
   時刻変更や会議 URL の違いは書き戻せないため、その場合は `INVALID_ARGS` で中止する。
   書き戻しに失敗した回は、書き戻すはずだった値とともに stderr と JSON（`exceptions.failed`）に
   出し、終了コードは 1。本体の更新は済んでいる。

@@ -9,7 +9,7 @@ Human-readable format for terminal use.
 ```
 2026-01-24 (Fri)
   [All Day]     Company Holiday (Main Calendar) [busy]
-  10:00-11:00   Team Meeting (Main Calendar) [busy]
+  10:00-11:00   Team Meeting (Main Calendar) [busy]  @ A-2会議室
   14:00-15:00   Focus Time (Work Calendar) [free]
 
 2026-01-25 (Sat)
@@ -47,6 +47,7 @@ Notes:
 #### Availability Tags
 
 Every event row ends with `[busy]` or `[free]`, all-day events included.
+An event with a location gets `  @ <location>` after the tag.
 
 Google Calendar marks all-day events as **free** by default, so most of them
 show `[free]` even when the day is fully committed. The tag is what makes that
@@ -137,6 +138,7 @@ Time:         10:00 - 11:00
 Calendar:     Main Calendar
 Status:       confirmed
 Availability: busy
+Location:     A-2会議室
 Attendees:    3
   [accepted] alice@example.com (Alice) (organizer)
   [needsAction] bob@example.com
@@ -312,6 +314,7 @@ All datetime fields include timezone offset (ISO 8601).
   "status": "confirmed | tentative | cancelled",
   "transparency": "opaque | transparent",
   "description": "string | null",
+  "location": "string | null",
   "calendar_id": "string",
   "calendar_name": "string",
   "html_link": "string",

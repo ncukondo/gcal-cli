@@ -15,6 +15,8 @@ Tasks should be implemented in this order, respecting dependencies within each p
 
 ## In Progress
 
+53. [053-event-location](./053-event-location.md) — add・update で予定の場所（location）を設定する (#75)
+
 ## Completed
 
 ### Phase 19: Recurring Events
