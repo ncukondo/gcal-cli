@@ -22,7 +22,7 @@
 
 ## E2E Test
 
-- [ ] 実カレンダーで `gcal add --location` → `gcal update --location` → `--clear-location` を確認（要承認）
+- [x] 実カレンダーで `gcal add --location` → `gcal update --location` → `--clear-location` を確認（2026-11-22、ダミー予定で確認後削除）
 
 ## Acceptance Criteria
 
