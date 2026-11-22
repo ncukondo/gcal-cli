@@ -17,6 +17,7 @@ function makeEvent(id: string, calendar: CalendarConfig): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    location: null,
     meet_link: null,
     conference: null,
     created: "2026-01-01T00:00:00Z",

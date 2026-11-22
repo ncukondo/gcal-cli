@@ -79,6 +79,8 @@ export interface CalendarEvent {
   status: EventStatus;
   transparency: Transparency;
   attendees: EventAttendee[];
+  /** Free-text location, or null when the event has none. */
+  location: string | null;
   /** Google Meet video URL, or null when the event has no Meet conference. */
   meet_link: string | null;
   /** Whatever conference is attached, Meet or not. See EventConference. */
