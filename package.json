@@ -20,7 +20,7 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node",
+    "build": "bun scripts/build.ts",
     "build:bin": "bun build src/index.ts --compile --outfile gcal",
     "test": "vitest",
     "test:unit": "vitest run src",
