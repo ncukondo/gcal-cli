@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GoogleEvent } from "./api.ts";
 import {
+  RESTORABLE_FIELDS,
   buildRestoreBody,
   changedFields,
   findOverriddenInstances,
@@ -48,6 +49,16 @@ describe("isRecurringMaster", () => {
 });
 
 describe("findOverriddenInstances", () => {
+  it("finds occurrences whose location differs when the location is changing", () => {
+    const instances = [
+      instance("06", { location: "Room A" }),
+      instance("13", { location: "Room B" }),
+    ];
+    const found = findOverriddenInstances(master({ location: "Room A" }), instances, ["location"]);
+    expect(found.map((f) => [f.id, f.fields])).toEqual([["series_20260813T110000Z", ["location"]]]);
+    expect(findOverriddenInstances(master(), instances, ["description"])).toEqual([]);
+  });
+
   it("returns nothing when no occurrence differs in the fields being changed", () => {
     const instances = [instance("06"), instance("13"), instance("20")];
     expect(findOverriddenInstances(master(), instances, ["description"])).toEqual([]);
@@ -218,5 +229,12 @@ describe("changedFields", () => {
       end: { dateTime: "2026-08-13T16:00:00+09:00" },
     });
     expect(changedFields(before, instance("13"))).toEqual(["time"]);
+  });
+});
+
+describe("RESTORABLE_FIELDS", () => {
+  it("includes the location, which a patch of the series master leaves on the occurrence's ID", () => {
+    expect(RESTORABLE_FIELDS).toContain("location");
+    expect(RESTORABLE_FIELDS).not.toContain("time");
   });
 });
