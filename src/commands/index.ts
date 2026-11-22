@@ -450,6 +450,7 @@ export function registerCommands(program: Command): void {
         end: addOpts.end,
         duration: addOpts.duration,
         description: addOpts.description,
+        location: addOpts.location,
         busy: addOpts.busy,
         free: addOpts.free,
         dryRun: addOpts.dryRun,

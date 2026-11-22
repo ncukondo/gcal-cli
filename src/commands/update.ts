@@ -53,6 +53,9 @@ export interface UpdateHandlerOptions {
   end?: string;
   duration?: string;
   description?: string;
+  location?: string;
+  /** Empty the location. */
+  clearLocation?: boolean;
   busy?: boolean;
   free?: boolean;
   dryRun?: boolean;
@@ -396,6 +399,7 @@ function changingFields(
   const fields: ExceptionField[] = [];
   if (input.title !== undefined) fields.push("title");
   if (input.description !== undefined) fields.push("description");
+  if (input.location !== undefined) fields.push("location");
   if (input.transparency !== undefined) fields.push("transparency");
   const diffChanges =
     attendeeDiff !== undefined && attendeeDiff.added.length + attendeeDiff.removed.length > 0;
@@ -426,7 +430,7 @@ function decideExceptionAction(
     if (unrestorable) {
       const why = resetsAll
         ? "Changing the time of a series makes Google reset every modified occurrence"
-        : "--preserve-exceptions can only restore title, description, free/busy and guests";
+        : "--preserve-exceptions can only restore title, description, location, free/busy and guests";
       throw new ApiError(
         "INVALID_ARGS",
         `${why}, so these occurrences cannot be preserved:\n${list}\n` +
@@ -457,6 +461,7 @@ function describeChanges(
   const changes: Record<string, unknown> = {};
   if (input.title !== undefined) changes.title = input.title;
   if (input.description !== undefined) changes.description = input.description;
+  if (input.location !== undefined) changes.location = input.location;
   if (input.transparency !== undefined) changes.transparency = input.transparency;
   if (replacement) {
     changes.attendees = replacement.map((a) => a.email);
@@ -485,6 +490,9 @@ function formatChangeLines(
   if (changes.start !== undefined) lines.push(`  start: "${changes.start}"`);
   if (changes.end !== undefined) lines.push(`  end: "${changes.end}"`);
   if (changes.description !== undefined) lines.push(`  description: "${changes.description}"`);
+  if (changes.location !== undefined) {
+    lines.push(`  location: ${changes.location === null ? "(none)" : `"${changes.location}"`}`);
+  }
   if (changes.transparency !== undefined) lines.push(`  transparency: ${changes.transparency}`);
   if (changes.attendees !== undefined) {
     const list = changes.attendees as string[];
@@ -513,6 +521,8 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
     opts.end !== undefined ||
     opts.duration !== undefined ||
     opts.description !== undefined ||
+    opts.location !== undefined ||
+    opts.clearLocation === true ||
     opts.busy !== undefined ||
     opts.free !== undefined ||
     (opts.attendee !== undefined && opts.attendee.length > 0) ||
@@ -557,6 +567,10 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
       "INVALID_ARGS",
       "--attendee / --clear-attendees cannot be combined with --add-attendee / --remove-attendee",
     );
+  }
+
+  if (opts.location !== undefined && opts.clearLocation) {
+    throw new ApiError("INVALID_ARGS", "--location and --clear-location cannot be combined");
   }
 
   if (opts.preserveExceptions && opts.overwriteExceptions) {
@@ -627,6 +641,12 @@ export async function handleUpdate(opts: UpdateHandlerOptions): Promise<CommandR
 
   if (opts.description !== undefined) {
     input.description = opts.description;
+  }
+
+  if (opts.clearLocation) {
+    input.location = null;
+  } else if (opts.location !== undefined) {
+    input.location = opts.location;
   }
 
   if (opts.busy) {
@@ -846,6 +866,9 @@ export function createUpdateCommand(): Command {
     "Duration instead of --end (e.g. 30m, 1h, 2d, 1h30m). Mutually exclusive with --end. Can be specified alone (preserves existing start).",
   );
   cmd.option("-d, --description <text>", "New description");
+  // No -l: under `gcal tasks` it means --list.
+  cmd.option("--location <text>", "New location");
+  cmd.option("--clear-location", "Remove the location from the event");
   cmd.option("--busy", "Mark as busy");
   cmd.option("--free", "Mark as free");
   cmd.option(
@@ -912,6 +935,11 @@ export function createUpdateCommand(): Command {
   endOpt.conflicts(["duration"]);
   durationOpt.conflicts(["end"]);
 
+  const locationOpt = cmd.options.find((o) => o.long === "--location")!;
+  const clearLocationOpt = cmd.options.find((o) => o.long === "--clear-location")!;
+  locationOpt.conflicts(["clearLocation"]);
+  clearLocationOpt.conflicts(["location"]);
+
   const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
   const freeOpt = cmd.options.find((o) => o.long === "--free")!;
   busyOpt.conflicts(["free"]);
@@ -930,6 +958,8 @@ Examples:
   gcal update abc123 -s "2026-03-01" -e "2026-03-03"                        # All-day, 3 days (inclusive)
   gcal update abc123 -s "2026-03-01" --duration 2d                          # All-day, 2 days
   gcal update abc123 --free                                                  # Transparency only
+  gcal update abc123 --location "E-2会議室"                                  # Location only
+  gcal update abc123 --clear-location                                        # Remove the location
   gcal update abc123 --dry-run -t "Preview"                                  # Dry run
   gcal update abc123 -a alice@example.com                                    # Replace guest list
   gcal update abc123 --clear-attendees                                       # Remove all guests
