@@ -17,6 +17,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    location: null,
     meet_link: null,
     conference: null,
     created: "2026-02-24T00:00:00Z",
@@ -57,6 +58,33 @@ function baseOptions(overrides: Partial<AddOptions> = {}): AddOptions {
 }
 
 describe("handleAdd", () => {
+  it("--location sets the event location", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions({ start: "2026-11-22T10:30", location: "A-2会議室" }), deps);
+    const input = (deps.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(input.location).toBe("A-2会議室");
+  });
+
+  it("leaves the location out when --location is not given", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions(), deps);
+    const input = (deps.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+    expect(input).not.toHaveProperty("location");
+  });
+
+  it("shows the location in the dry-run preview", async () => {
+    const deps = makeDeps();
+    await handleAdd(baseOptions({ location: "A-2会議室", dryRun: true }), deps);
+    const text = (deps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(text).toContain('  location: "A-2会議室"');
+    expect(deps.createEvent).not.toHaveBeenCalled();
+
+    const jsonDeps = makeDeps();
+    await handleAdd(baseOptions({ location: "A-2会議室", dryRun: true, format: "json" }), jsonDeps);
+    const json = JSON.parse((jsonDeps.write as ReturnType<typeof vi.fn>).mock.calls[0]![0]);
+    expect(json.data.event.location).toBe("A-2会議室");
+  });
+
   it("validates --title is required", async () => {
     const deps = makeDeps();
     const result = await handleAdd(baseOptions({ title: undefined as unknown as string }), deps);
@@ -696,6 +724,12 @@ describe("handleAdd with --meet", () => {
 });
 
 describe("createAddCommand", () => {
+  it("has a --location option with no short flag (-l is --list under tasks)", () => {
+    const opt = createAddCommand().options.find((o) => o.long === "--location");
+    expect(opt).toBeDefined();
+    expect(opt!.short).toBeUndefined();
+  });
+
   it("creates a commander command named 'add'", () => {
     const cmd = createAddCommand();
     expect(cmd.name()).toBe("add");

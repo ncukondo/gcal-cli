@@ -82,7 +82,8 @@ export function formatEventListText(events: CalendarEvent[], range?: DayRange): 
     const day = days[i]!;
     const { event } = day;
     const time = labels[i]!.padEnd(width);
-    const line = `  ${time}   ${event.title} (${event.calendar_name}) ${transparencyTag(event)}`;
+    const where = event.location ? `  @ ${event.location}` : "";
+    const line = `  ${time}   ${event.title} (${event.calendar_name}) ${transparencyTag(event)}${where}`;
 
     const group = groups.get(day.date);
     if (group) {
@@ -245,6 +246,10 @@ export function formatEventDetailText(event: CalendarEvent): string {
   lines.push(detailLine("Calendar", event.calendar_name));
   lines.push(detailLine("Status", event.status));
   lines.push(detailLine("Availability", event.transparency === "transparent" ? "free" : "busy"));
+
+  if (event.location !== null) {
+    lines.push(detailLine("Location", event.location));
+  }
 
   if (event.description !== null) {
     lines.push(detailLine("Description", event.description));

@@ -7,6 +7,7 @@ import {
   getEvent,
   createEvent,
   updateEvent,
+  buildUpdateFields,
   deleteEvent,
   listInstances,
   patchInstance,
@@ -21,6 +22,13 @@ import {
 } from "./api.ts";
 
 describe("normalizeEvent", () => {
+  it("carries the location, and null when the event has none", () => {
+    const base = { id: "e", start: { date: "2024-03-15" }, end: { date: "2024-03-16" } };
+    expect(normalizeEvent({ ...base, location: "A-2会議室" }, "c", "C").location).toBe("A-2会議室");
+    expect(normalizeEvent(base, "c", "C").location).toBeNull();
+    expect(normalizeEvent({ ...base, location: "" }, "c", "C").location).toBeNull();
+  });
+
   it("handles all-day events (date field)", () => {
     const googleEvent = {
       id: "evt1",
@@ -50,6 +58,7 @@ describe("normalizeEvent", () => {
       status: "confirmed",
       transparency: "opaque",
       attendees: [],
+      location: null,
       meet_link: null,
       conference: null,
       created: "2024-03-01T10:00:00.000Z",
@@ -86,6 +95,7 @@ describe("normalizeEvent", () => {
       status: "tentative",
       transparency: "transparent",
       attendees: [],
+      location: null,
       meet_link: null,
       conference: null,
       created: "2024-03-01T10:00:00.000Z",
@@ -1113,6 +1123,21 @@ describe("API error mapping", () => {
 });
 
 describe("createEvent", () => {
+  it("sends the location when given", async () => {
+    const api = createMockApi({
+      inserted: { id: "n", start: { date: "2024-03-15" }, end: { date: "2024-03-16" } },
+    });
+    await createEvent(api, "cal1", "Cal", {
+      title: "Talk",
+      start: "2024-03-15",
+      end: "2024-03-16",
+      allDay: true,
+      location: "A-2会議室",
+    });
+    const call = (api.events.insert as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.requestBody.location).toBe("A-2会議室");
+  });
+
   it("sends correct payload for timed event and returns normalized event", async () => {
     const returnedEvent = {
       id: "new1",
@@ -1263,6 +1288,11 @@ describe("createEvent", () => {
 });
 
 describe("updateEvent", () => {
+  it("writes the location, and null to clear it", async () => {
+    expect(buildUpdateFields({ location: "E-2会議室" })).toEqual({ location: "E-2会議室" });
+    expect(buildUpdateFields({ location: null })).toEqual({ location: null });
+  });
+
   it("sends partial update and returns normalized updated event", async () => {
     const returnedEvent = {
       id: "evt1",

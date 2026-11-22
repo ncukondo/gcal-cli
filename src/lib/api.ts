@@ -159,6 +159,7 @@ export interface CreateEventInput {
   sendUpdates?: SendUpdates;
   /** Attach a freshly created Google Meet conference. */
   meet?: boolean;
+  location?: string;
 }
 
 /** An in-place edit of the guest list, resolved against the current attendees. */
@@ -177,6 +178,8 @@ interface UpdateEventBase {
   title?: string;
   timeZone?: string;
   description?: string | null;
+  /** null clears the location. */
+  location?: string | null;
   transparency?: Transparency;
   /** Replaces the whole guest list; an empty array clears it. */
   attendees?: AttendeeInput[];
@@ -347,6 +350,8 @@ export function normalizeEvent(
     status: EventStatusSchema.parse(event.status ?? undefined),
     transparency: TransparencySchema.parse(event.transparency ?? undefined),
     attendees: normalizeAttendees(event.attendees),
+    // Google returns "" for a cleared location as often as it omits the field.
+    location: event.location || null,
     meet_link: meetLink,
     conference,
     created: event.created ?? "",
@@ -752,6 +757,9 @@ export async function createEvent(
     if (input.description !== undefined) {
       requestBody.description = input.description;
     }
+    if (input.location !== undefined) {
+      requestBody.location = input.location;
+    }
     if (input.attendees !== undefined) {
       requestBody.attendees = buildAttendees(input.attendees);
     }
@@ -795,6 +803,9 @@ export function buildUpdateFields(
   }
   if (input.description !== undefined) {
     requestBody.description = input.description;
+  }
+  if (input.location !== undefined) {
+    requestBody.location = input.location;
   }
   if (input.transparency !== undefined) {
     requestBody.transparency = input.transparency;

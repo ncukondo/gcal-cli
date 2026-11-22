@@ -61,7 +61,7 @@ function isMoved(series: GoogleEvent, occurrence: GoogleEvent): boolean {
 }
 
 const COMPARATORS: Record<
-  Exclude<ExceptionField, "time" | "location">,
+  Exclude<ExceptionField, "time">,
   (series: CalendarEvent, occurrence: CalendarEvent) => boolean
 > = {
   title: (s, o) => s.title === o.title,
@@ -69,6 +69,7 @@ const COMPARATORS: Record<
   transparency: (s, o) => s.transparency === o.transparency,
   attendees: (s, o) => attendeeKey(s) === attendeeKey(o),
   conference: (s, o) => (s.conference?.uri ?? null) === (o.conference?.uri ?? null),
+  location: (s, o) => s.location === o.location,
 };
 
 const ALL_VALUE_FIELDS = Object.keys(COMPARATORS) as (keyof typeof COMPARATORS)[];
@@ -95,10 +96,7 @@ export function findOverriddenInstances(
       if (!resetsAll && !changing.includes(field)) continue;
       if (!COMPARATORS[field](series, occurrence)) fields.push(field);
     }
-    if (resetsAll) {
-      if ((master.location ?? "") !== (raw.location ?? "")) fields.push("location");
-      if (isMoved(master, raw)) fields.push("time");
-    }
+    if (resetsAll && isMoved(master, raw)) fields.push("time");
     if (fields.length === 0) continue;
 
     const original = raw.originalStartTime;
@@ -121,7 +119,6 @@ export function changedFields(before: GoogleEvent, after: GoogleEvent): Exceptio
   const was = normalizeEvent(before, "", "");
   const now = normalizeEvent(after, "", "");
   const fields: ExceptionField[] = ALL_VALUE_FIELDS.filter((f) => !COMPARATORS[f](was, now));
-  if ((before.location ?? "") !== (after.location ?? "")) fields.push("location");
   if (
     instant(before.start) !== instant(after.start) ||
     instant(before.end) !== instant(after.end)
@@ -137,6 +134,7 @@ export const RESTORABLE_FIELDS: readonly ExceptionField[] = [
   "description",
   "transparency",
   "attendees",
+  "location",
 ];
 
 type TimeField = NonNullable<GoogleEventWriteBody["start"]>;
@@ -152,9 +150,9 @@ function toTimeField(value: GoogleEvent["start"]): TimeField {
 
 /**
  * The patch that puts an occurrence's own values back for the given fields.
- * `location` and `time` only come back where the occurrence keeps its ID,
- * which a split series does and a series whose time changed does not, so
- * RESTORABLE_FIELDS leaves them out.
+ * `time` only comes back where the occurrence keeps its ID, which a split
+ * series does and a series whose time changed does not, so RESTORABLE_FIELDS
+ * leaves it out.
  */
 export function buildRestoreBody(
   occurrence: GoogleEvent,

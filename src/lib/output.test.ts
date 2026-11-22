@@ -27,6 +27,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    location: null,
     meet_link: null,
     conference: null,
     created: "2026-01-01T00:00:00Z",
@@ -74,6 +75,15 @@ describe("formatJsonError", () => {
 });
 
 describe("formatEventListText", () => {
+  it("appends the location after the free/busy tag", () => {
+    const result = formatEventListText([makeEvent({ location: "A-2会議室" })]);
+    expect(result).toContain("Test Event (Main Calendar) [busy]  @ A-2会議室");
+  });
+
+  it("adds nothing when the event has no location", () => {
+    expect(formatEventListText([makeEvent()])).not.toContain("@");
+  });
+
   it("groups events by date with YYYY-MM-DD (Day) header", () => {
     const events = [
       makeEvent({
@@ -535,6 +545,15 @@ describe("formatCalendarListText", () => {
 });
 
 describe("formatEventDetailText", () => {
+  it("shows the location when present", () => {
+    const result = formatEventDetailText(makeEvent({ location: "A-2会議室" }));
+    expect(result).toContain("Location:     A-2会議室");
+  });
+
+  it("omits the location line when null", () => {
+    expect(formatEventDetailText(makeEvent())).not.toContain("Location:");
+  });
+
   it("shows event title as header", () => {
     const event = makeEvent({ title: "Team Meeting" });
     const result = formatEventDetailText(event);

@@ -18,6 +18,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     status: "confirmed",
     transparency: "opaque",
     attendees: [],
+    location: null,
     meet_link: null,
     conference: null,
     created: "2026-01-01T00:00:00Z",
@@ -43,6 +44,7 @@ function toGoogleEvent(event: CalendarEvent): Record<string, unknown> {
     id: event.id,
     summary: event.title,
     description: event.description,
+    location: event.location ?? undefined,
     start: event.all_day ? { date: event.start } : { dateTime: event.start },
     end: event.all_day ? { date: event.end } : { dateTime: event.end },
     htmlLink: event.html_link,
@@ -77,6 +79,7 @@ function makeMockApi(
               id: opts.patchReturn.id,
               summary: opts.patchReturn.title,
               description: opts.patchReturn.description,
+              location: opts.patchReturn.location ?? undefined,
               start: opts.patchReturn.all_day
                 ? { date: opts.patchReturn.start }
                 : { dateTime: opts.patchReturn.start },
@@ -120,6 +123,8 @@ interface RunUpdateOpts {
   end?: string;
   duration?: string;
   description?: string;
+  location?: string;
+  clearLocation?: boolean;
   busy?: boolean;
   free?: boolean;
   quiet?: boolean;
@@ -166,6 +171,8 @@ function runUpdate(api: GoogleCalendarApi, opts: RunUpdateOpts) {
   if (opts.end !== undefined) handlerOpts.end = opts.end;
   if (opts.duration !== undefined) handlerOpts.duration = opts.duration;
   if (opts.description !== undefined) handlerOpts.description = opts.description;
+  if (opts.location !== undefined) handlerOpts.location = opts.location;
+  if (opts.clearLocation !== undefined) handlerOpts.clearLocation = opts.clearLocation;
   if (opts.busy !== undefined) handlerOpts.busy = opts.busy;
   if (opts.free !== undefined) handlerOpts.free = opts.free;
   if (opts.dryRun !== undefined) handlerOpts.dryRun = opts.dryRun;
@@ -359,6 +366,56 @@ describe("update command", () => {
           description: "New description",
         },
       });
+    });
+  });
+
+  describe("--location / --clear-location", () => {
+    it("sends only the location in the patch request", async () => {
+      const api = makeMockApi({ patchReturn: makeEvent({ location: "E-2会議室" }) });
+
+      const result = await runUpdate(api, { eventId: "evt1", location: "E-2会議室" });
+
+      expect(result.exitCode).toBe(0);
+      expect(api.events.patch).toHaveBeenCalledWith({
+        calendarId: "primary",
+        eventId: "evt1",
+        sendUpdates: "none",
+        requestBody: { location: "E-2会議室" },
+      });
+      expect(result.output.join("\n")).toContain("Location:     E-2会議室");
+    });
+
+    it("--clear-location writes null", async () => {
+      const api = makeMockApi({ patchReturn: makeEvent() });
+      await runUpdate(api, { eventId: "evt1", clearLocation: true });
+      const call = (api.events.patch as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(call.requestBody).toEqual({ location: null });
+    });
+
+    it("rejects --location combined with --clear-location", async () => {
+      const api = makeMockApi();
+      await expect(
+        runUpdate(api, { eventId: "evt1", location: "X", clearLocation: true }),
+      ).rejects.toThrow(/--location.*--clear-location/);
+      expect(api.events.patch).not.toHaveBeenCalled();
+    });
+
+    it("shows the location change in the dry run", async () => {
+      const api = makeMockApi();
+      const text = await runUpdate(api, { eventId: "evt1", location: "E-2会議室", dryRun: true });
+      expect(text.output.join("\n")).toContain('  location: "E-2会議室"');
+
+      const cleared = await runUpdate(api, { eventId: "evt1", clearLocation: true, dryRun: true });
+      expect(cleared.output.join("\n")).toContain("  location: (none)");
+
+      const json = await runUpdate(api, {
+        eventId: "evt1",
+        location: "E-2会議室",
+        dryRun: true,
+        format: "json",
+      });
+      expect(JSON.parse(json.output[0]!).data.changes.location).toBe("E-2会議室");
+      expect(api.events.patch).not.toHaveBeenCalled();
     });
   });
 

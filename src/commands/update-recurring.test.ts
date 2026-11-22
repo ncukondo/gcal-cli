@@ -280,6 +280,41 @@ describe("update on a recurring series with modified occurrences (#70)", () => {
   });
 });
 
+describe("location on a recurring series (#75)", () => {
+  function roomInstances(): GoogleEvent[] {
+    return [
+      instance("2026-08-13", { location: "Room B" }),
+      instance("2026-09-10", { location: "Room A" }),
+    ];
+  }
+
+  it("aborts when an occurrence holds its own location", async () => {
+    const api = makeApi(master({ location: "Room A" }), roomInstances());
+    const error = await run(api, { location: "Room C" }).catch((e: unknown) => e);
+    expect((error as ApiError).message).toContain(`${AUG}`);
+    expect((error as ApiError).message).toContain("location");
+    expect(api.events.patch).not.toHaveBeenCalled();
+  });
+
+  it("--preserve-exceptions writes the occurrence's own location back", async () => {
+    const api = makeApi(master({ location: "Room A" }), roomInstances());
+    const result = await run(api, { location: "Room C", preserveExceptions: true });
+    expect(result.exitCode).toBe(0);
+    expect(patchedIds(api)).toEqual([SERIES, AUG]);
+    const calls = vi.mocked(api.events.patch).mock.calls.map((c) => c[0]);
+    expect(calls[0]!.requestBody).toEqual({ location: "Room C" });
+    expect(calls[1]!.requestBody).toEqual({ location: "Room B" });
+  });
+
+  it("--overwrite-exceptions patches only the series", async () => {
+    const api = makeApi(master({ location: "Room A" }), roomInstances());
+    const result = await run(api, { clearLocation: true, overwriteExceptions: true });
+    expect(result.exitCode).toBe(0);
+    expect(patchedIds(api)).toEqual([SERIES]);
+    expect(vi.mocked(api.events.patch).mock.calls[0]![0].requestBody).toEqual({ location: null });
+  });
+});
+
 describe("update on a series whose master has no description", () => {
   // Seen on 2026-10-08: when the master has no description, any write to it --
   // a title-only patch included -- clears the descriptions occurrences hold.

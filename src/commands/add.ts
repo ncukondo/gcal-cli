@@ -16,6 +16,7 @@ export interface AddOptions {
   end?: string;
   duration?: string;
   description?: string;
+  location?: string;
   calendar?: string;
   busy?: boolean;
   free?: boolean;
@@ -178,6 +179,10 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
     input.description = options.description;
   }
 
+  if (options.location !== undefined) {
+    input.location = options.location;
+  }
+
   if (options.meet) {
     input.meet = true;
   }
@@ -198,6 +203,7 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
       end: input.end,
     };
     if (input.description !== undefined) preview.description = input.description;
+    if (input.location !== undefined) preview.location = input.location;
     if (input.transparency !== "opaque") preview.transparency = input.transparency;
     if (attendees.length > 0) preview.attendees = attendees.map((a) => a.email);
     if (input.sendUpdates !== undefined) preview.notify = options.notify;
@@ -212,6 +218,7 @@ export async function handleAdd(options: AddOptions, deps: AddHandlerDeps): Prom
       lines.push(`  start: "${preview.start}"`);
       lines.push(`  end: "${preview.end}"`);
       if (preview.description !== undefined) lines.push(`  description: "${preview.description}"`);
+      if (preview.location !== undefined) lines.push(`  location: "${preview.location}"`);
       if (preview.transparency !== undefined) lines.push(`  transparency: ${preview.transparency}`);
       if (preview.attendees !== undefined) {
         lines.push(`  attendees: ${(preview.attendees as string[]).join(", ")}`);
@@ -260,6 +267,8 @@ export function createAddCommand(): Command {
   );
   cmd.option("-c, --calendar <id>", "Target calendar ID");
   cmd.option("-d, --description <text>", "Event description");
+  // No -l: under `gcal tasks` it means --list.
+  cmd.option("--location <text>", "Event location (room, address, ...)");
   cmd.option("--busy", "Mark as busy (default)");
   cmd.option("--free", "Mark as free (transparent)");
   cmd.option(
@@ -299,6 +308,7 @@ Examples:
   gcal add -t "1on1" -s "2026-01-24T10:00" -a alice@example.com          # Invite (no email sent)
   gcal add -t "Review" -s "2026-01-24T14:00" -a a@x.com -a b@x.com --notify all
   gcal add -t "Design review" -s "2026-01-24T10:00" --meet                # With a Meet link
+  gcal add -t "Session" -s "2026-01-24T10:30" --location "A-2会議室"      # With a location
 `,
   );
 
