@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { CalendarEvent, AppConfig } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import { ApiError } from "../lib/api.ts";
+import { captureParseError } from "./parse-error-helper.ts";
 import {
   resolveDateRange,
   toDayRange,
@@ -971,5 +972,36 @@ describe("handleList partial calendar failures", () => {
 
     expect(write.mock.calls[0]![0] as string).not.toContain("could not be fetched");
     expect(writeErr).toHaveBeenCalled();
+  });
+});
+
+describe("gcal list conflicting options", () => {
+  it("rejects --confirmed with --include-tentative and hints which to use", () => {
+    const { thrown, stderr } = captureParseError(createListCommand(), [
+      "--confirmed",
+      "--include-tentative",
+    ]);
+    expect(thrown?.code).toBe("commander.conflictingOption");
+    expect(thrown?.exitCode).not.toBe(0);
+    expect(stderr).toMatch(/hint: use --confirmed .*--include-tentative/);
+  });
+
+  it("rejects --today with --to and hints which to use", () => {
+    const { thrown, stderr } = captureParseError(createListCommand(), [
+      "--today",
+      "--to",
+      "2026-12-01",
+    ]);
+    expect(thrown?.code).toBe("commander.conflictingOption");
+    expect(thrown?.exitCode).not.toBe(0);
+    expect(stderr).toMatch(/hint: use --today .*--to/);
+    expect(stderr).not.toMatch(/tentative/);
+  });
+
+  it("still accepts --from with --to", () => {
+    const cmd = createListCommand();
+    cmd.action(() => {});
+    const { thrown } = captureParseError(cmd, ["--from", "2026-12-01", "--to", "2026-12-02"]);
+    expect(thrown).toBeUndefined();
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { AuthFsAdapter, TokenData, PromptFn } from "../lib/auth.ts";
 import { ExitCode } from "../types/index.ts";
 import { handleAuth, handleAuthStatus, handleAuthLogout, createAuthCommand } from "./auth.ts";
+import { captureParseError } from "./parse-error-helper.ts";
 
 function makeFsAdapter(overrides: Partial<AuthFsAdapter> = {}): AuthFsAdapter {
   return {
@@ -750,5 +751,20 @@ describe("createAuthCommand", () => {
     const cmd = createAuthCommand();
     const logoutOpt = cmd.options.find((o) => o.long === "--logout");
     expect(logoutOpt).toBeDefined();
+  });
+});
+
+describe("gcal auth conflicting options", () => {
+  it("rejects --status with --logout so credentials are not removed silently", () => {
+    const cmd = createAuthCommand();
+    let ran = false;
+    cmd.action(() => {
+      ran = true;
+    });
+    const { thrown, stderr } = captureParseError(cmd, ["--status", "--logout"]);
+    expect(ran).toBe(false);
+    expect(thrown?.code).toBe("commander.conflictingOption");
+    expect(thrown?.exitCode).not.toBe(0);
+    expect(stderr).toMatch(/hint: .*--status.*--logout/);
   });
 });

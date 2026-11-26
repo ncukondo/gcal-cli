@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { addConflictRules } from "./conflict-hints.ts";
 import type { CalendarEvent, AppConfig, OutputFormat } from "../types/index.ts";
 import { ExitCode } from "../types/index.ts";
 import type { ListEventsOptions } from "../lib/api.ts";
@@ -216,8 +217,14 @@ export function createListCommand(): Command {
   cmd.option("--to <date>", "End date (ISO 8601 or YYYY-MM-DD)");
   cmd.option("--busy", "Show only busy (opaque) events");
   cmd.option("--free", "Show only free (transparent) events");
-  cmd.option("--confirmed", "Show only confirmed events");
-  cmd.option("--include-tentative", "Include tentative events (excluded by default)");
+  cmd.option(
+    "--confirmed",
+    "Show only confirmed events (cannot be combined with --include-tentative)",
+  );
+  cmd.option(
+    "--include-tentative",
+    "Include tentative events (excluded by default; cannot be combined with --confirmed)",
+  );
 
   // Mutual exclusivity
   const todayOpt = cmd.options.find((o) => o.long === "--today")!;
@@ -234,6 +241,18 @@ export function createListCommand(): Command {
   toOpt.conflicts(["days"]);
   busyOpt.conflicts(["free"]);
   freeOpt.conflicts(["busy"]);
+
+  // Pairs that used to be accepted while one side was silently ignored.
+  addConflictRules(cmd, [
+    {
+      options: ["--confirmed", "--include-tentative"],
+      hint: "hint: use --confirmed for confirmed events only (the default), or --include-tentative for confirmed and tentative events.",
+    },
+    {
+      options: ["--today", "--to"],
+      hint: "hint: use --today for today only, or --from <date> --to <date> for a custom range.",
+    },
+  ]);
 
   return cmd;
 }

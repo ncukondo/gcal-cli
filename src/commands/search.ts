@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { addConflictRules } from "./conflict-hints.ts";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import { listEvents } from "../lib/api.ts";
 import { applyFilters, findHiddenAllDayEvents } from "../lib/filter.ts";
@@ -151,13 +152,27 @@ export function createSearchCommand(): Command {
 
   cmd.option("--busy", "Show only busy (opaque) events");
   cmd.option("--free", "Show only free (transparent) events");
-  cmd.option("--confirmed", "Show only confirmed events");
-  cmd.option("--include-tentative", "Include tentative events (excluded by default)");
+  cmd.option(
+    "--confirmed",
+    "Show only confirmed events (cannot be combined with --include-tentative)",
+  );
+  cmd.option(
+    "--include-tentative",
+    "Include tentative events (excluded by default; cannot be combined with --confirmed)",
+  );
 
   const busyOpt = cmd.options.find((o) => o.long === "--busy")!;
   const freeOpt = cmd.options.find((o) => o.long === "--free")!;
   busyOpt.conflicts(["free"]);
   freeOpt.conflicts(["busy"]);
+
+  // --confirmed used to win silently, dropping tentative events.
+  addConflictRules(cmd, [
+    {
+      options: ["--confirmed", "--include-tentative"],
+      hint: "hint: use --confirmed for confirmed events only (the default), or --include-tentative for confirmed and tentative events.",
+    },
+  ]);
 
   return cmd;
 }

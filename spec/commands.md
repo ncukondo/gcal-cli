@@ -37,7 +37,9 @@ Options:
   Mutual exclusivity:
     --today, --days, --from are mutually exclusive
     --days and --to are mutually exclusive
+    --today and --to are mutually exclusive (use --from <date> --to <date> for a range)
     --busy and --free are mutually exclusive
+    --confirmed and --include-tentative are mutually exclusive
 
 Filtering:
   --busy            Show only busy (opaque) events
@@ -91,6 +93,7 @@ Options:
     --days and --from are mutually exclusive
     --days and --to are mutually exclusive
     --busy and --free are mutually exclusive
+    --confirmed and --include-tentative are mutually exclusive
 
 Filtering:
   --busy            Show only busy (opaque) events
@@ -693,6 +696,18 @@ gcal auth              # Start OAuth flow
 gcal auth --status     # Check authentication status
 gcal auth --logout     # Remove stored credentials
 ```
+
+`--status` and `--logout` are mutually exclusive (previously `--logout` silently won).
+
+Conflicting options fail at parse time with commander's error and exit code 1,
+followed by a `hint:` line naming the option to use instead, e.g.:
+
+```
+error: option '--confirmed' cannot be used with option '--include-tentative'
+hint: use --confirmed for confirmed events only (the default), or --include-tentative for confirmed and tentative events.
+```
+
+The hinted pairs are defined with `addConflictRules` (`src/commands/conflict-hints.ts`).
 
 ### `gcal init`
 

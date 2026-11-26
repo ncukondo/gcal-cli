@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { addConflictRules } from "./conflict-hints.ts";
 import * as z from "zod";
 import type { AuthFsAdapter, TokenData, PromptFn } from "../lib/auth.ts";
 import {
@@ -187,6 +188,14 @@ export function createAuthCommand(): Command {
 
   cmd.option("--status", "Check authentication status");
   cmd.option("--logout", "Remove stored credentials");
+
+  // --logout used to win silently and remove credentials when --status was meant.
+  addConflictRules(cmd, [
+    {
+      options: ["--status", "--logout"],
+      hint: "hint: run gcal auth --status to check authentication, or gcal auth --logout to remove credentials (one at a time).",
+    },
+  ]);
 
   return cmd;
 }
