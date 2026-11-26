@@ -78,6 +78,11 @@ Options:
 
 デフォルトでは未完了タスク (`needsAction`) のみ表示する。
 
+`--all`（未完了 + 完了済み）と `--completed`（完了済みのみ）は排他。併用すると何も出力せず
+commander のオプション競合エラーになり、「完了済みだけなら `--completed`、全部なら `--all`」
+という hint を stderr に出す（終了コード 1）。以前は黙って `--completed` が優先され、
+未完了タスクが結果から漏れていた。
+
 `--today` / `--overdue` / `--days` は `--due-after` / `--due-before` の糖衣で、
 互いに排他、かつ `--due-before` / `--due-after` とも排他（併用は commander の
 オプション競合エラー）。「今日」を `T` とすると:

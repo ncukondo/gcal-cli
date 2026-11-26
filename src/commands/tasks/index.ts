@@ -28,8 +28,11 @@ export function createTasksCommand(): {
   const listCmd = new Command("list")
     .description("List tasks")
     .option("-l, --list <name-or-id>", "Task list name or ID")
-    .option("--all", "Include completed tasks")
-    .option("--completed", "Show only completed tasks")
+    .option(
+      "--all",
+      "Include completed tasks (incomplete + completed; cannot be combined with --completed)",
+    )
+    .option("--completed", "Show only completed tasks (cannot be combined with --all)")
     .option("--due-before <date>", "Tasks due on or before date (YYYY-MM-DD)")
     .option("--due-after <date>", "Tasks due on or after date (YYYY-MM-DD)")
     .option("--today", "Tasks due today")
@@ -43,6 +46,20 @@ export function createTasksCommand(): {
   findOpt("--days").conflicts(["today", "overdue", "dueBefore", "dueAfter"]);
   findOpt("--due-before").conflicts(["today", "overdue", "days"]);
   findOpt("--due-after").conflicts(["today", "overdue", "days"]);
+  // --completed narrows to completed tasks only, so combining it with --all
+  // silently dropped incomplete tasks. Reject the combination instead.
+  findOpt("--all").conflicts(["completed"]);
+  findOpt("--completed").conflicts(["all"]);
+  listCmd.configureOutput({
+    outputError: (str, write) => {
+      write(str);
+      if (/'--all'/.test(str) && /'--completed'/.test(str)) {
+        write(
+          "hint: use --completed for completed tasks only, or --all for both incomplete and completed tasks.\n",
+        );
+      }
+    },
+  });
   tasksCmd.addCommand(listCmd);
 
   const showCmd = new Command("show")

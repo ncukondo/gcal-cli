@@ -68,4 +68,42 @@ describe("tasks list command options", () => {
       tasksCmd.parse(["list", "--today", "--due-before", "2026-01-01"], { from: "user" }),
     ).toThrow(/cannot be used with/);
   });
+  it("--all and --completed conflict with each other", () => {
+    expect(optionOf("--all").conflictsWith).toEqual(expect.arrayContaining(["completed"]));
+    expect(optionOf("--completed").conflictsWith).toEqual(expect.arrayContaining(["all"]));
+  });
+
+  it("rejects --all together with --completed and points to the right flag", () => {
+    const { tasksCmd } = createTasksCommand();
+    tasksCmd.exitOverride();
+    for (const sub of tasksCmd.commands) sub.exitOverride();
+    let stderr = "";
+    for (const cmd of [tasksCmd, ...tasksCmd.commands]) {
+      cmd.configureOutput({ writeErr: (s) => (stderr += s) });
+    }
+    let thrown: unknown;
+    try {
+      tasksCmd.parse(["list", "--all", "--completed"], { from: "user" });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeDefined();
+    expect((thrown as { exitCode: number }).exitCode).not.toBe(0);
+    expect(stderr).toMatch(/cannot be used with/);
+    expect(stderr).toMatch(/--completed/);
+    expect(stderr).toMatch(/completed tasks only/i);
+    expect(stderr).toMatch(/--all/);
+  });
+
+  it("does not add the --all/--completed hint to unrelated errors", () => {
+    const { tasksCmd } = createTasksCommand();
+    tasksCmd.exitOverride();
+    for (const sub of tasksCmd.commands) sub.exitOverride();
+    let stderr = "";
+    for (const cmd of [tasksCmd, ...tasksCmd.commands]) {
+      cmd.configureOutput({ writeErr: (s) => (stderr += s) });
+    }
+    expect(() => tasksCmd.parse(["list", "--today", "--overdue"], { from: "user" })).toThrow();
+    expect(stderr).not.toMatch(/completed tasks only/i);
+  });
 });

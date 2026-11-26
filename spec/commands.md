@@ -547,7 +547,7 @@ gcal tasks list [options]
 
 Options:
   --list, -l <name|id>    Task list name or ID (default: first enabled or @default)
-  --all                   Include completed tasks
+  --all                   Include completed tasks (incomplete + completed)
   --completed             Show completed tasks only
   --due-before <date>     Tasks due on or before date (YYYY-MM-DD)
   --due-after <date>      Tasks due on or after date (YYYY-MM-DD)
@@ -556,6 +556,8 @@ Options:
   --days <n>              Tasks due within the next n days, today included (n >= 1)
 
   Constraints:
+    --all and --completed are mutually exclusive (use --completed for completed
+      tasks only, --all for incomplete + completed)
     --today, --overdue, --days are mutually exclusive
     --today, --overdue, --days cannot be combined with --due-before / --due-after
     --days must be a positive integer; --days 1 is the same as --today
