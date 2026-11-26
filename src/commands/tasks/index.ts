@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { addConflictRules } from "../conflict-hints.ts";
 
 /**
  * Parse the --days value strictly: only unsigned decimal integers are accepted.
@@ -28,8 +29,11 @@ export function createTasksCommand(): {
   const listCmd = new Command("list")
     .description("List tasks")
     .option("-l, --list <name-or-id>", "Task list name or ID")
-    .option("--all", "Include completed tasks")
-    .option("--completed", "Show only completed tasks")
+    .option(
+      "--all",
+      "Include completed tasks (incomplete + completed; cannot be combined with --completed)",
+    )
+    .option("--completed", "Show only completed tasks (cannot be combined with --all)")
     .option("--due-before <date>", "Tasks due on or before date (YYYY-MM-DD)")
     .option("--due-after <date>", "Tasks due on or after date (YYYY-MM-DD)")
     .option("--today", "Tasks due today")
@@ -43,6 +47,14 @@ export function createTasksCommand(): {
   findOpt("--days").conflicts(["today", "overdue", "dueBefore", "dueAfter"]);
   findOpt("--due-before").conflicts(["today", "overdue", "days"]);
   findOpt("--due-after").conflicts(["today", "overdue", "days"]);
+  // --completed narrows to completed tasks only, so combining it with --all
+  // silently dropped incomplete tasks. Reject the combination instead.
+  addConflictRules(listCmd, [
+    {
+      options: ["--all", "--completed"],
+      hint: "hint: use --completed for completed tasks only, or --all for both incomplete and completed tasks.",
+    },
+  ]);
   tasksCmd.addCommand(listCmd);
 
   const showCmd = new Command("show")

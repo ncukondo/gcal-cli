@@ -37,7 +37,9 @@ Options:
   Mutual exclusivity:
     --today, --days, --from are mutually exclusive
     --days and --to are mutually exclusive
+    --today and --to are mutually exclusive (use --from <date> --to <date> for a range)
     --busy and --free are mutually exclusive
+    --confirmed and --include-tentative are mutually exclusive
 
 Filtering:
   --busy            Show only busy (opaque) events
@@ -91,6 +93,7 @@ Options:
     --days and --from are mutually exclusive
     --days and --to are mutually exclusive
     --busy and --free are mutually exclusive
+    --confirmed and --include-tentative are mutually exclusive
 
 Filtering:
   --busy            Show only busy (opaque) events
@@ -547,7 +550,7 @@ gcal tasks list [options]
 
 Options:
   --list, -l <name|id>    Task list name or ID (default: first enabled or @default)
-  --all                   Include completed tasks
+  --all                   Include completed tasks (incomplete + completed)
   --completed             Show completed tasks only
   --due-before <date>     Tasks due on or before date (YYYY-MM-DD)
   --due-after <date>      Tasks due on or after date (YYYY-MM-DD)
@@ -556,6 +559,8 @@ Options:
   --days <n>              Tasks due within the next n days, today included (n >= 1)
 
   Constraints:
+    --all and --completed are mutually exclusive (use --completed for completed
+      tasks only, --all for incomplete + completed)
     --today, --overdue, --days are mutually exclusive
     --today, --overdue, --days cannot be combined with --due-before / --due-after
     --days must be a positive integer; --days 1 is the same as --today
@@ -691,6 +696,18 @@ gcal auth              # Start OAuth flow
 gcal auth --status     # Check authentication status
 gcal auth --logout     # Remove stored credentials
 ```
+
+`--status` and `--logout` are mutually exclusive (previously `--logout` silently won).
+
+Conflicting options fail at parse time with commander's error and exit code 1,
+followed by a `hint:` line naming the option to use instead, e.g.:
+
+```
+error: option '--confirmed' cannot be used with option '--include-tentative'
+hint: use --confirmed for confirmed events only (the default), or --include-tentative for confirmed and tentative events.
+```
+
+The hinted pairs are defined with `addConflictRules` (`src/commands/conflict-hints.ts`).
 
 ### `gcal init`
 

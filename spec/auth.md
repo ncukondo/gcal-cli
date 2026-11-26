@@ -73,6 +73,9 @@ Client ID and Client Secret (text format only).
 
 ### `gcal auth --status`
 
+`--status` と `--logout` は排他。併用すると何もせずに競合エラー（終了コード 1）と
+hint を出す（以前は黙って `--logout` が優先され、資格情報が消えていた）。
+
 Text output:
 ```
 Authenticated as: user@example.com

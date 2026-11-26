@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { GoogleCalendarApi } from "../lib/api.ts";
 import type { CalendarEvent } from "../types/index.ts";
 import { createSearchCommand, handleSearch } from "./search.ts";
+import { createListCommand } from "./list.ts";
 import type { SearchHandlerOptions } from "./search.ts";
+import { captureParseError } from "./parse-error-helper.ts";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -460,7 +462,9 @@ describe("search command", () => {
       const searchCmd = createSearchCommand();
       const searchOpt = searchCmd.options.find((o) => o.long === "--include-tentative");
       expect(searchOpt).toBeDefined();
-      expect(searchOpt!.description).toBe("Include tentative events (excluded by default)");
+      const listOpt = createListCommand().options.find((o) => o.long === "--include-tentative");
+      expect(searchOpt!.description).toBe(listOpt!.description);
+      expect(searchOpt!.description).toMatch(/^Include tentative events \(excluded by default/);
     });
   });
 
@@ -776,5 +780,18 @@ describe("search partial calendar failures", () => {
 
     const quiet = await runSearch(api, { query: "meeting", quiet: true, calendars });
     expect(quiet.output.join("\n")).not.toContain("could not be fetched");
+  });
+});
+
+describe("gcal search conflicting options", () => {
+  it("rejects --confirmed with --include-tentative and hints which to use", () => {
+    const { thrown, stderr } = captureParseError(createSearchCommand(), [
+      "meeting",
+      "--confirmed",
+      "--include-tentative",
+    ]);
+    expect(thrown?.code).toBe("commander.conflictingOption");
+    expect(thrown?.exitCode).not.toBe(0);
+    expect(stderr).toMatch(/hint: use --confirmed .*--include-tentative/);
   });
 });
